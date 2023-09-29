@@ -33,7 +33,7 @@ namespace QuantConnect.Polygon
         private readonly IDataAggregator _dataAggregator = Composer.Instance.GetExportedValueByTypeName<IDataAggregator>(
             Config.Get("data-aggregator", "QuantConnect.Lean.Engine.DataFeeds.AggregationManager"));
 
-        private readonly EventBasedDataQueueHandlerSubscriptionManager _subscriptionManager;
+        private readonly DataQueueHandlerSubscriptionManager _subscriptionManager;
         private readonly Dictionary<SecurityType, PolygonWebSocketClientWrapper> _webSocketClients = new();
         private readonly PolygonSymbolMapper _symbolMapper = new();
         private readonly MarketHoursDatabase _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
@@ -89,9 +89,10 @@ namespace QuantConnect.Polygon
                     "Please confirm whether the subscription plan associated with your API keys includes support to websockets.");
             }
 
-            _subscriptionManager = new EventBasedDataQueueHandlerSubscriptionManager(t => t.ToString());
-            _subscriptionManager.SubscribeImpl += Subscribe;
-            _subscriptionManager.UnsubscribeImpl += Unsubscribe;
+            var subscriptionManager = new EventBasedDataQueueHandlerSubscriptionManager(t => t.ToString());
+            subscriptionManager.SubscribeImpl += Subscribe;
+            subscriptionManager.UnsubscribeImpl += Unsubscribe;
+            _subscriptionManager = subscriptionManager;
         }
 
         #region IDataQueueHandler implementation
@@ -228,6 +229,9 @@ namespace QuantConnect.Polygon
             _webSocketClients.Clear();
         }
 
+        public List<double> StartTimeLatencies { get; } = new List<double>();
+        public List<double> EndTimeLatencies { get; } = new List<double>();
+
         private void OnMessage(string message)
         {
             foreach (var parsedMessage in JArray.Parse(message))
@@ -237,6 +241,13 @@ namespace QuantConnect.Polygon
                 switch (eventType)
                 {
                     case "AM":
+                        var utcNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                        var startTimeUtc = Int64.Parse(parsedMessage["s"].ToString());
+                        var endTimeUtc = Int64.Parse(parsedMessage["e"].ToString());
+
+                        StartTimeLatencies.Add(utcNow - startTimeUtc);
+                        EndTimeLatencies.Add(utcNow - endTimeUtc);
+
                         ProcessOptionAggregate(parsedMessage.ToObject<AggregateMessage>());
                         break;
 
@@ -253,6 +264,7 @@ namespace QuantConnect.Polygon
         private void ProcessOptionAggregate(AggregateMessage aggregate)
         {
             var symbol = _symbolMapper.GetLeanSymbol(aggregate.Symbol, SecurityType.Equity, Market.USA);
+
             var time = GetTickTime(symbol, aggregate.StartingTickTimestamp);
             var period = TimeSpan.FromMilliseconds(aggregate.EndingTickTimestamp - aggregate.StartingTickTimestamp);
 
