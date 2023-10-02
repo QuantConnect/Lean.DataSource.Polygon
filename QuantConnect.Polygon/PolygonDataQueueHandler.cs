@@ -15,6 +15,7 @@
 
 using Newtonsoft.Json.Linq;
 using NodaTime;
+using QuantConnect.Brokerages;
 using QuantConnect.Configuration;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
@@ -23,6 +24,7 @@ using QuantConnect.Logging;
 using QuantConnect.Packets;
 using QuantConnect.Securities;
 using QuantConnect.Util;
+using static QuantConnect.Brokerages.WebSocketClientWrapper;
 
 namespace QuantConnect.Polygon
 {
@@ -33,10 +35,9 @@ namespace QuantConnect.Polygon
 
         private readonly string _apiKey = Config.Get("polygon-api-key");
 
-        private readonly IDataAggregator _dataAggregator = Composer.Instance.GetExportedValueByTypeName<IDataAggregator>(
-            Config.Get("data-aggregator", "QuantConnect.Lean.Engine.DataFeeds.AggregationManager"));
+        private readonly PolygonAggregationManager _dataAggregator = new();
 
-        private readonly PolygonMultiWebSocketSubscriptionManager _subscriptionManager;
+        private readonly Dictionary<SecurityType, BrokerageMultiWebSocketSubscriptionManager> _subscriptionManagers;
         private readonly PolygonSymbolMapper _symbolMapper = new();
         private readonly MarketHoursDatabase _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
         private readonly Dictionary<Symbol, DateTimeZone> _symbolExchangeTimeZones = new();
@@ -46,9 +47,9 @@ namespace QuantConnect.Polygon
 
         private bool _disposed;
 
-        public int WebSocketCount => _subscriptionManager.WebSocketsCount;
+        //public int WebSocketCount => _subscriptionManager.WebSocketsCount;
 
-        public int SubscriptionCount => _subscriptionManager.SubscriptionsCount;
+        //public int SubscriptionCount => _subscriptionManager.SubscriptionsCount;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
@@ -57,13 +58,29 @@ namespace QuantConnect.Polygon
         {
             var securityTypes = new List<SecurityType> { SecurityType.Option };
 
-            _subscriptionManager = new PolygonMultiWebSocketSubscriptionManager(
-                securityTypes,
-                (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, null),
-                OnMessage,
+            _subscriptionManagers = securityTypes.ToDictionary(securityType => securityType,
+                securityType => new BrokerageMultiWebSocketSubscriptionManager(
+                    PolygonWebSocketClientWrapper.GetWebSocketUrl(securityType),
                 _maximumSubscriptionsPerWebSocket,
                 _maximumWebSocketConnections,
-                TimeSpan.Zero);
+                    new Dictionary<Symbol, int>(),
+                    () => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, null),
+                    (webSocket, symbol) =>
+                    {
+                        ((PolygonWebSocketClientWrapper)webSocket).Subscribe(symbol, TickType.Trade);
+                        return true;
+                    },
+                    (webSocket, symbol) =>
+                    {
+                        ((PolygonWebSocketClientWrapper)webSocket).Unsubscribe(symbol, TickType.Trade);
+                        return true;
+                    },
+                    (webSocketMessage) =>
+                    {
+                        var e = (TextMessage)webSocketMessage.Data;
+                        OnMessage(e.Message);
+                    },
+                    TimeSpan.Zero));
 
             // TODO: Find another way to detect authentication failure and timeout
             //foreach (var securityType in securityTypes)
@@ -111,7 +128,7 @@ namespace QuantConnect.Polygon
         /// Returns whether the data provider is connected
         /// </summary>
         /// <returns>True if the data provider is connected</returns>
-        public bool IsConnected => _subscriptionManager.IsConnected;
+        public bool IsConnected => true;    // TODO: Implement this
 
         /// <summary>
         /// Sets the job we're subscribing for
@@ -141,7 +158,7 @@ namespace QuantConnect.Polygon
             }
 
             var enumerator = _dataAggregator.Add(dataConfig, newDataAvailableHandler);
-            _subscriptionManager.Subscribe(dataConfig);
+            _subscriptionManagers[dataConfig.SecurityType].Subscribe(dataConfig);
 
             return enumerator;
         }
@@ -152,7 +169,7 @@ namespace QuantConnect.Polygon
         /// <param name="dataConfig">Subscription config to be removed</param>
         public void Unsubscribe(SubscriptionDataConfig dataConfig)
         {
-            _subscriptionManager.Unsubscribe(dataConfig);
+            _subscriptionManagers[dataConfig.SecurityType].Unsubscribe(dataConfig);
             _dataAggregator.Remove(dataConfig);
         }
 
@@ -164,13 +181,14 @@ namespace QuantConnect.Polygon
         {
             if (!_disposed)
             {
-                if (disposing)
+                foreach (var kvp in _subscriptionManagers)
                 {
-                    // TODO: dispose managed state (managed objects)
+                    kvp.Value.Dispose();
                 }
+                _dataAggregator.DisposeSafely();
+                _successfulAuthentication.DisposeSafely();
+                _failedAuthentication.DisposeSafely();
 
-                // TODO: free unmanaged resources (unmanaged objects) and override finalizer
-                // TODO: set large fields to null
                 _disposed = true;
             }
         }
@@ -212,13 +230,14 @@ namespace QuantConnect.Polygon
 
         private void ProcessOptionAggregate(AggregateMessage aggregate)
         {
-            var symbol = _symbolMapper.GetLeanSymbol(aggregate.Symbol, SecurityType.Equity, Market.USA);
+            var symbol = _symbolMapper.GetLeanOptionSymbol(aggregate.Symbol);
 
             var time = GetTickTime(symbol, aggregate.StartingTickTimestamp);
             var period = TimeSpan.FromMilliseconds(aggregate.EndingTickTimestamp - aggregate.StartingTickTimestamp);
 
-            var tradeBar = new TradeBar(time, symbol, aggregate.Open, aggregate.High, aggregate.Low, aggregate.Close, aggregate.Volume, period);
-            _dataAggregator.Update(tradeBar);
+            var bar = new TradeBar(time, symbol, aggregate.Open, aggregate.High, aggregate.Low, aggregate.Close, aggregate.Volume, period);
+            //Log.Trace($"TRADE BAR RECEIVED  -->  Time: {tradeBar.EndTime} | {tradeBar}");
+            _dataAggregator.Update(bar);
         }
 
         private void ProcessStatusMessage(JToken jStatusMessage)

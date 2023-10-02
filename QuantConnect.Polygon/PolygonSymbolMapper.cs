@@ -14,6 +14,7 @@
 */
 
 using QuantConnect.Brokerages;
+using System.Globalization;
 
 namespace QuantConnect.Polygon
 {
@@ -96,6 +97,17 @@ namespace QuantConnect.Polygon
                 default:
                     throw new Exception($"PolygonSymbolMapper.GetLeanSymbol(): unsupported security type: {securityType}");
             }
+        }
+
+        public Symbol GetLeanOptionSymbol(string polygonSymbol)
+        {
+            var strike = Int64.Parse(polygonSymbol.Substring(polygonSymbol.Length - 8)) / 1000m;
+            var optionRight= polygonSymbol.Substring(polygonSymbol.Length - 9, 1) == "C" ? OptionRight.Call : OptionRight.Put;
+            var expirationDate = DateTime.ParseExact(polygonSymbol.Substring(polygonSymbol.Length - 15, 6), "yyMMdd", CultureInfo.InvariantCulture);
+            var underlyingTicker = polygonSymbol.Substring(2, polygonSymbol.Length - 15 - 2);
+
+            return Symbol.CreateOption(Symbol.Create(underlyingTicker, SecurityType.Equity, Market.USA), Market.USA, OptionStyle.American,
+                optionRight, strike, expirationDate);
         }
     }
 }

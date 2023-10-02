@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Threading;
 using System;
+using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 
 namespace QuantConnect.Polygon.App
 {
@@ -39,7 +40,11 @@ namespace QuantConnect.Polygon.App
 
             foreach (var config in configs)
             {
-                ProcessFeed(polygon.Subscribe(config, (sender, args) => { }), callback);
+                ProcessFeed(polygon.Subscribe(config, (sender, args) =>
+                {
+                    var dataPoint = ((NewDataAvailableEventArgs)args).DataPoint;
+                    Console.WriteLine($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
+                }), callback);
             }
 
             Thread.Sleep(3 * 60 * 1000);
