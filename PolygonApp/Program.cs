@@ -55,8 +55,8 @@ namespace QuantConnect.Polygon.App
             //Thread.Sleep(3 * 60 * 1000);
             polygon.Dispose();
 
-            Console.WriteLine($"Start Time Latencies: {string.Join(", ", polygon.StartTimeLatencies)}");
-            Console.WriteLine($"End Time Latencies: {string.Join(", ", polygon.EndTimeLatencies)}");
+            //Console.WriteLine($"Start Time Latencies: {string.Join(", ", polygon.StartTimeLatencies)}");
+            //Console.WriteLine($"End Time Latencies: {string.Join(", ", polygon.EndTimeLatencies)}");
         }
 
         private static SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)

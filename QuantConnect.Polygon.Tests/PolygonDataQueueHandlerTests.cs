@@ -24,7 +24,7 @@ using QuantConnect.Polygon;
 namespace QuantConnect.Tests.Polygon
 {
     [TestFixture]
-    [Explicit("Tests are dependent on network and are long")]
+    [Explicit("Tests are dependent on network and take long")]
     public class PolygonDataQueueHandlerTests
     {
         [SetUp]
@@ -36,16 +36,10 @@ namespace QuantConnect.Tests.Polygon
         [Test]
         public void CanSubscribeAndUnsubscribe()
         {
-            var polygon = new PolygonDataQueueHandler();
+            using var polygon = new PolygonDataQueueHandler();
             var unsubscribed = false;
 
-            var configs = new[]
-            {
-                GetSubscriptionDataConfig<TradeBar>(Symbol.CreateOption(Symbol.Create("SPY", SecurityType.Equity, Market.USA), Market.USA,
-                    OptionStyle.American, OptionRight.Call, 150m, new DateTime(2023, 10, 20)), Resolution.Minute),
-                GetSubscriptionDataConfig<TradeBar>(Symbol.CreateOption(Symbol.Create("AAPL", SecurityType.Equity, Market.USA), Market.USA,
-                    OptionStyle.American, OptionRight.Call, 55m, new DateTime(2023, 10, 20)), Resolution.Minute)
-            };
+            var configs = GetConfigs().GroupBy(x => x.Symbol.Underlying, (key, group) => group.First());
 
             Action<BaseData> callback = (dataPoint) =>
             {
@@ -61,7 +55,7 @@ namespace QuantConnect.Tests.Polygon
 
             foreach (var config in configs)
             {
-                ProcessFeed(polygon.Subscribe(config, (sender, args) =>{}), callback);
+                ProcessFeed(polygon.Subscribe(config, (sender, args) => {}), callback);
             }
 
             Thread.Sleep(3 * 60 * 1000);
@@ -74,7 +68,45 @@ namespace QuantConnect.Tests.Polygon
             unsubscribed = true;
 
             Thread.Sleep(3 * 60 * 1000);
+
             polygon.Dispose();
+        }
+
+        [TestCase(1, 8)]
+        [TestCase(8, 1)]
+        [TestCase(2, 4)]
+        [TestCase(4, 2)]
+        [TestCase(2, 3)]
+        [TestCase(3, 2)]
+        [TestCase(1, 1)]
+        [TestCase(2, 2)]
+        [TestCase(3, 3)]
+        public void RespectsMaximumWebSocketConnectionsAndSubscriptions(int MaxWebSocketConnections, int MaxSubscriptionsPerWebSocket)
+        {
+            Config.Set("polygon-max-websocket-connections", MaxWebSocketConnections);
+            Config.Set("polygon-max-subscriptions-per-websocket", MaxSubscriptionsPerWebSocket);
+
+            using var polygon = new PolygonDataQueueHandler();
+
+            var configs = GetConfigs();
+
+            for (var i = 0; i < MaxWebSocketConnections * MaxSubscriptionsPerWebSocket; i++)
+            {
+                var config = configs[i];
+                Assert.DoesNotThrow(() => polygon.Subscribe(config, (sender, args) => { }),
+                    $"Could not subscribe symbol #{i + 1}. WebSocket count: {polygon.WebSocketCount}. Subscription count: {polygon.SubscriptionCount}");
+
+                var expectedSubscriptionCount = i + 1;
+                Assert.That(polygon.SubscriptionCount, Is.EqualTo(expectedSubscriptionCount));
+
+                var expectedWebSocketCount = i / MaxSubscriptionsPerWebSocket + 1;
+                Assert.That(polygon.WebSocketCount, Is.EqualTo(expectedWebSocketCount));
+            }
+
+            Assert.That(polygon.WebSocketCount, Is.EqualTo(MaxWebSocketConnections));
+            Assert.That(polygon.SubscriptionCount, Is.EqualTo(MaxWebSocketConnections * MaxSubscriptionsPerWebSocket));
+
+            Assert.Throws<NotSupportedException>(() => polygon.Subscribe(configs.Last(), (sender, args) => { }));
         }
 
         private SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)
@@ -111,6 +143,31 @@ namespace QuantConnect.Tests.Polygon
                     Log.Error(err.Message);
                 }
             });
+        }
+
+        private SubscriptionDataConfig[] GetConfigs()
+        {
+            var spyOptions = new[] { 220m, 260m, 300m, 340m, 380m }.Select(strike => GetSubscriptionDataConfig<TradeBar>(
+                Symbol.CreateOption(
+                    Symbols.SPY,
+                    Market.USA,
+                    OptionStyle.American,
+                    OptionRight.Call,
+                    strike,
+                    new DateTime(2023, 10, 20)),
+                Resolution.Minute));
+
+            var aaplOptions = new[] { 80m, 100m, 130m, 150m, 170m }.Select(strike => GetSubscriptionDataConfig<TradeBar>(
+                Symbol.CreateOption(
+                    Symbols.AAPL,
+                    Market.USA,
+                    OptionStyle.American,
+                    OptionRight.Call,
+                    strike,
+                    new DateTime(2023, 10, 27)),
+                Resolution.Minute));
+
+            return spyOptions.Concat(aaplOptions).ToArray();
         }
     }
 }

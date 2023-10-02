@@ -28,13 +28,15 @@ namespace QuantConnect.Polygon
 {
     public class PolygonDataQueueHandler : IDataQueueHandler
     {
+        private readonly int _maximumWebSocketConnections = Config.GetInt("polygon-max-websocket-connections", 7);
+        private readonly int _maximumSubscriptionsPerWebSocket = Config.GetInt("polygon-max-subscriptions-per-websocket", 1000);
+
         private readonly string _apiKey = Config.Get("polygon-api-key");
 
         private readonly IDataAggregator _dataAggregator = Composer.Instance.GetExportedValueByTypeName<IDataAggregator>(
             Config.Get("data-aggregator", "QuantConnect.Lean.Engine.DataFeeds.AggregationManager"));
 
-        private readonly DataQueueHandlerSubscriptionManager _subscriptionManager;
-        private readonly Dictionary<SecurityType, PolygonWebSocketClientWrapper> _webSocketClients = new();
+        private readonly PolygonMultiWebSocketSubscriptionManager _subscriptionManager;
         private readonly PolygonSymbolMapper _symbolMapper = new();
         private readonly MarketHoursDatabase _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
         private readonly Dictionary<Symbol, DateTimeZone> _symbolExchangeTimeZones = new();
@@ -44,55 +46,63 @@ namespace QuantConnect.Polygon
 
         private bool _disposed;
 
+        public int WebSocketCount => _subscriptionManager.WebSocketsCount;
+
+        public int SubscriptionCount => _subscriptionManager.SubscriptionsCount;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
         /// </summary>
         public PolygonDataQueueHandler()
         {
-            var securityTypes = new[] { SecurityType.Option };
+            var securityTypes = new List<SecurityType> { SecurityType.Option };
 
-            foreach (var securityType in securityTypes)
-            {
-                _failedAuthentication.Reset();
-                _successfulAuthentication.Reset();
+            _subscriptionManager = new PolygonMultiWebSocketSubscriptionManager(
+                securityTypes,
+                (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, null),
+                OnMessage,
+                _maximumSubscriptionsPerWebSocket,
+                _maximumWebSocketConnections,
+                TimeSpan.Zero);
 
-                var websocket = new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage);
+            // TODO: Find another way to detect authentication failure and timeout
+            //foreach (var securityType in securityTypes)
+            //{
+            //    _failedAuthentication.Reset();
+            //    _successfulAuthentication.Reset();
 
-                var timedout = WaitHandle.WaitAny(new WaitHandle[] { _failedAuthentication, _successfulAuthentication }, TimeSpan.FromMinutes(2));
-                if (timedout == WaitHandle.WaitTimeout)
-                {
-                    // Close current websocket connection
-                    websocket.Close();
-                    // Close all connections that have been successful so far
-                    ShutdownWebSockets();
-                    throw new TimeoutException($"Timeout waiting for websocket to connect for {securityType}");
-                }
+            //    var websocket = new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage);
 
-                // If it hasn't timed out, it could still have failed.
-                // For example, the API keys do not have rights to subscribe to the current security type
-                // In this case, we close this connect and move on
-                if (_failedAuthentication.WaitOne(0))
-                {
-                    websocket.Close();
-                    continue;
-                }
+            //    var timedout = WaitHandle.WaitAny(new WaitHandle[] { _failedAuthentication, _successfulAuthentication }, TimeSpan.FromMinutes(2));
+            //    if (timedout == WaitHandle.WaitTimeout)
+            //    {
+            //        // Close current websocket connection
+            //        websocket.Close();
+            //        // Close all connections that have been successful so far
+            //        ShutdownWebSockets();
+            //        throw new TimeoutException($"Timeout waiting for websocket to connect for {securityType}");
+            //    }
 
-                _webSocketClients[securityType] = websocket;
-            }
+            //    // If it hasn't timed out, it could still have failed.
+            //    // For example, the API keys do not have rights to subscribe to the current security type
+            //    // In this case, we close this connect and move on
+            //    if (_failedAuthentication.WaitOne(0))
+            //    {
+            //        websocket.Close();
+            //        continue;
+            //    }
 
-            // If we could not connect to any websocket because of the API rights,
-            // we exit this data queue handler
-            if (_webSocketClients.Count == 0)
-            {
-                throw new InvalidOperationException(
-                    $"Websocket authentication failed for all security types: {string.Join(", ", securityTypes)}." +
-                    "Please confirm whether the subscription plan associated with your API keys includes support to websockets.");
-            }
+            //    _webSocketClients[securityType] = websocket;
+            //}
 
-            var subscriptionManager = new EventBasedDataQueueHandlerSubscriptionManager(t => t.ToString());
-            subscriptionManager.SubscribeImpl += Subscribe;
-            subscriptionManager.UnsubscribeImpl += Unsubscribe;
-            _subscriptionManager = subscriptionManager;
+            //// If we could not connect to any websocket because of the API rights,
+            //// we exit this data queue handler
+            //if (_webSocketClients.Count == 0)
+            //{
+            //    throw new InvalidOperationException(
+            //        $"Websocket authentication failed for all security types: {string.Join(", ", securityTypes)}." +
+            //        "Please confirm whether the subscription plan associated with your API keys includes support to websockets.");
+            //}
         }
 
         #region IDataQueueHandler implementation
@@ -101,7 +111,7 @@ namespace QuantConnect.Polygon
         /// Returns whether the data provider is connected
         /// </summary>
         /// <returns>True if the data provider is connected</returns>
-        public bool IsConnected => _webSocketClients.Count > 0 && _webSocketClients.Values.All(client => client.IsOpen);
+        public bool IsConnected => _subscriptionManager.IsConnected;
 
         /// <summary>
         /// Sets the job we're subscribing for
@@ -178,60 +188,6 @@ namespace QuantConnect.Polygon
 
         #endregion
 
-        /// <summary>
-        /// Adds the specified symbols to the subscription
-        /// </summary>
-        /// <param name="symbols">The symbols to be added</param>
-        /// <param name="tickType">Type of tick data</param>
-        private bool Subscribe(IEnumerable<Symbol> symbols, TickType tickType)
-        {
-            foreach (var symbol in symbols)
-            {
-                var webSocket = GetWebSocket(symbol.SecurityType);
-                webSocket.Subscribe(symbol, tickType);
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Removes the specified symbols from the subscription
-        /// </summary>
-        /// <param name="symbols">The symbols to be removed</param>
-        /// <param name="tickType">Type of tick data</param>
-        private bool Unsubscribe(IEnumerable<Symbol> symbols, TickType tickType)
-        {
-            foreach (var symbol in symbols)
-            {
-                var webSocket = GetWebSocket(symbol.SecurityType);
-                webSocket.Unsubscribe(symbol, tickType);
-            }
-
-            return true;
-        }
-
-        private PolygonWebSocketClientWrapper GetWebSocket(SecurityType securityType)
-        {
-            if (!_webSocketClients.TryGetValue(securityType, out var client))
-            {
-                throw new InvalidOperationException($"Unsupported security type: {securityType}");
-            }
-
-            return client;
-        }
-
-        private void ShutdownWebSockets()
-        {
-            foreach (var websocket in _webSocketClients)
-            {
-                websocket.Value.Close();
-            }
-            _webSocketClients.Clear();
-        }
-
-        public List<double> StartTimeLatencies { get; } = new List<double>();
-        public List<double> EndTimeLatencies { get; } = new List<double>();
-
         private void OnMessage(string message)
         {
             foreach (var parsedMessage in JArray.Parse(message))
@@ -241,13 +197,6 @@ namespace QuantConnect.Polygon
                 switch (eventType)
                 {
                     case "AM":
-                        var utcNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                        var startTimeUtc = Int64.Parse(parsedMessage["s"].ToString());
-                        var endTimeUtc = Int64.Parse(parsedMessage["e"].ToString());
-
-                        StartTimeLatencies.Add(utcNow - startTimeUtc);
-                        EndTimeLatencies.Add(utcNow - endTimeUtc);
-
                         ProcessOptionAggregate(parsedMessage.ToObject<AggregateMessage>());
                         break;
 

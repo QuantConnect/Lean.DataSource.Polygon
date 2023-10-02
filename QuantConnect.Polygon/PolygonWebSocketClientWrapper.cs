@@ -52,8 +52,6 @@ namespace QuantConnect.Polygon
             Closed += OnClosed;
             Message += OnMessage;
             Error += OnError;
-
-            Connect();
         }
 
         /// <summary>
@@ -99,7 +97,7 @@ namespace QuantConnect.Polygon
         private void OnMessage(object? sender, WebSocketMessage webSocketMessage)
         {
             var e = (TextMessage)webSocketMessage.Data;
-            _messageHandler(e.Message);
+            _messageHandler?.Invoke(e.Message);
         }
 
         private void OnClosed(object? sender, WebSocketCloseData e)
@@ -131,7 +129,7 @@ namespace QuantConnect.Polygon
             }
         }
 
-        private string GetWebSocketUrl(SecurityType securityType)
+        public static string GetWebSocketUrl(SecurityType securityType)
         {
             switch (securityType)
             {
