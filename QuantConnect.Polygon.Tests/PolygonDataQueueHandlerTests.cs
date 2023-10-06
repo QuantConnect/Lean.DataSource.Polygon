@@ -21,6 +21,7 @@ using QuantConnect.Data.Market;
 using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 using QuantConnect.Logging;
 using QuantConnect.Polygon;
+using QuantConnect.Util;
 
 namespace QuantConnect.Tests.Polygon
 {
@@ -79,7 +80,7 @@ namespace QuantConnect.Tests.Polygon
 
             Thread.Sleep(3 * 60 * 1000);
 
-            polygon.Dispose();
+            polygon.DisposeSafely();
 
             Assert.That(dataFromEnumerator, Has.Count.GreaterThan(0));
             Assert.That(dataFromEventHandler, Has.Count.EqualTo(dataFromEnumerator.Count));
@@ -100,6 +101,25 @@ namespace QuantConnect.Tests.Polygon
                 Assert.That(enumeratorDataPoint.Close, Is.EqualTo(eventHandlerDataPoint.Close));
                 Assert.That(enumeratorDataPoint.Volume, Is.EqualTo(eventHandlerDataPoint.Volume));
             }
+        }
+
+        [Test]
+        public void IsConnectedReturnsTrueOnlyAfterAWebSocketConnectionIsOpen()
+        {
+            using var polygon = new PolygonDataQueueHandler();
+
+            Assert.IsFalse(polygon.IsConnected);
+
+            var config = GetConfigs()[0];
+            polygon.Subscribe(config, (sender, args) => { });
+            Thread.Sleep(1000);
+
+            Assert.IsTrue(polygon.IsConnected);
+
+            polygon.Unsubscribe(config);
+            Thread.Sleep(1000);
+
+            Assert.IsTrue(polygon.IsConnected);
         }
 
         private SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)

@@ -41,6 +41,8 @@ namespace QuantConnect.Polygon
         private readonly PolygonAggregationManager _dataAggregator = new();
 
         private readonly Dictionary<SecurityType, BrokerageMultiWebSocketSubscriptionManager> _subscriptionManagers;
+        private readonly List<PolygonWebSocketClientWrapper> _webSockets = new();
+
         private readonly PolygonSymbolMapper _symbolMapper = new();
         private readonly MarketHoursDatabase _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
         private readonly Dictionary<Symbol, DateTimeZone> _symbolExchangeTimeZones = new();
@@ -58,7 +60,21 @@ namespace QuantConnect.Polygon
                     MaximumSubscriptionsPerWebSocket,
                     MaximumWebSocketConnections,
                     new Dictionary<Symbol, int>(),
-                    () => new PolygonWebSocketClientWrapper(ApiKey, _symbolMapper, securityType, null),
+                    () =>
+                    {
+                        var webSocket = new PolygonWebSocketClientWrapper(ApiKey, _symbolMapper, securityType, null);
+
+                        webSocket.Open += (_, _) =>
+                        {
+                            _webSockets.Add(webSocket);
+                        };
+                        webSocket.Closed += (_, _) =>
+                        {
+                            _webSockets.Remove(webSocket);
+                        };
+
+                        return webSocket;
+                    },
                     (webSocket, symbol) =>
                     {
                         ((PolygonWebSocketClientWrapper)webSocket).Subscribe(symbol, TickType.Trade);
@@ -83,7 +99,7 @@ namespace QuantConnect.Polygon
         /// Returns whether the data provider is connected
         /// </summary>
         /// <returns>True if the data provider is connected</returns>
-        public bool IsConnected => true;    // TODO: Implement this
+        public bool IsConnected => _webSockets.Count > 0 && _webSockets.All(webSocket => webSocket.IsOpen);
 
         /// <summary>
         /// Sets the job we're subscribing for
