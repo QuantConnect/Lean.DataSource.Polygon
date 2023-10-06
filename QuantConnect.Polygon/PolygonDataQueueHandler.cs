@@ -29,14 +29,14 @@ using static QuantConnect.Brokerages.WebSocketClientWrapper;
 
 namespace QuantConnect.Polygon
 {
-    public class PolygonDataQueueHandler : IDataQueueHandler
+    public partial class PolygonDataQueueHandler : IDataQueueHandler
     {
-        private readonly int MaximumWebSocketConnections = Config.GetInt("polygon-max-websocket-connections", 7);
-        private readonly int MaximumSubscriptionsPerWebSocket = Config.GetInt("polygon-max-subscriptions-per-websocket", 1000);
+        private readonly int _maximumWebSocketConnections = Config.GetInt("polygon-max-websocket-connections", 7);
+        private readonly int _maximumSubscriptionsPerWebSocket = Config.GetInt("polygon-max-subscriptions-per-websocket", 1000);
 
-        private readonly string ApiKey = Config.Get("polygon-api-key");
+        private readonly string _apiKey = Config.Get("polygon-api-key");
 
-        private readonly ReadOnlyCollection<SecurityType> SupportedSecurityTypes = new List<SecurityType>() { SecurityType.Option }.AsReadOnly();
+        private readonly ReadOnlyCollection<SecurityType> _supportedSecurityTypes = new List<SecurityType>() { SecurityType.Option }.AsReadOnly();
 
         private readonly PolygonAggregationManager _dataAggregator = new();
 
@@ -54,15 +54,15 @@ namespace QuantConnect.Polygon
         /// </summary>
         public PolygonDataQueueHandler()
         {
-            _subscriptionManagers = SupportedSecurityTypes.ToDictionary(securityType => securityType,
+            _subscriptionManagers = _supportedSecurityTypes.ToDictionary(securityType => securityType,
                 securityType => new BrokerageMultiWebSocketSubscriptionManager(
                     PolygonWebSocketClientWrapper.GetWebSocketUrl(securityType),
-                    MaximumSubscriptionsPerWebSocket,
-                    MaximumWebSocketConnections,
+                    _maximumSubscriptionsPerWebSocket,
+                    _maximumWebSocketConnections,
                     new Dictionary<Symbol, int>(),
                     () =>
                     {
-                        var webSocket = new PolygonWebSocketClientWrapper(ApiKey, _symbolMapper, securityType, null);
+                        var webSocket = new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, null);
 
                         webSocket.Open += (_, _) =>
                         {
