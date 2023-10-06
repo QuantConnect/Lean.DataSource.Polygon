@@ -47,10 +47,6 @@ namespace QuantConnect.Polygon
 
         private bool _disposed;
 
-        //public int WebSocketCount => _subscriptionManager.WebSocketsCount;
-
-        //public int SubscriptionCount => _subscriptionManager.SubscriptionsCount;
-
         /// <summary>
         /// Initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
         /// </summary>
@@ -231,12 +227,10 @@ namespace QuantConnect.Polygon
         private void ProcessOptionAggregate(AggregateMessage aggregate)
         {
             var symbol = _symbolMapper.GetLeanOptionSymbol(aggregate.Symbol);
-
             var time = GetTickTime(symbol, aggregate.StartingTickTimestamp);
             var period = TimeSpan.FromMilliseconds(aggregate.EndingTickTimestamp - aggregate.StartingTickTimestamp);
-
             var bar = new TradeBar(time, symbol, aggregate.Open, aggregate.High, aggregate.Low, aggregate.Close, aggregate.Volume, period);
-            //Log.Trace($"TRADE BAR RECEIVED  -->  Time: {tradeBar.EndTime} | {tradeBar}");
+
             _dataAggregator.Update(bar);
         }
 

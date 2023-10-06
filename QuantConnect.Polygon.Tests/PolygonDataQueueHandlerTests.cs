@@ -18,6 +18,7 @@ using NUnit.Framework;
 using QuantConnect.Configuration;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
+using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 using QuantConnect.Logging;
 using QuantConnect.Polygon;
 
@@ -41,12 +42,16 @@ namespace QuantConnect.Tests.Polygon
 
             var configs = GetConfigs().GroupBy(x => x.Symbol.Underlying, (key, group) => group.First());
 
+            var dataFromEnumerator = new List<TradeBar>();
+            var dataFromEventHandler = new List<TradeBar>();
+
             Action<BaseData> callback = (dataPoint) =>
             {
                 if (dataPoint == null)
                     return;
 
-                Log.Trace($"{dataPoint} Time span: {dataPoint.Time} - {dataPoint.EndTime}");
+                dataFromEnumerator.Add((TradeBar)dataPoint);
+
                 if (unsubscribed && dataPoint.Symbol.Value == "AAPL")
                 {
                     Assert.Fail("Should not receive data for unsubscribed symbol");
@@ -55,58 +60,46 @@ namespace QuantConnect.Tests.Polygon
 
             foreach (var config in configs)
             {
-                ProcessFeed(polygon.Subscribe(config, (sender, args) => {}), callback);
+                ProcessFeed(polygon.Subscribe(config, (sender, args) =>
+                {
+                    var dataPoint = ((NewDataAvailableEventArgs)args).DataPoint;
+                    dataFromEventHandler.Add((TradeBar)dataPoint);
+                    Console.WriteLine($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
+                }), callback);
             }
 
             Thread.Sleep(3 * 60 * 1000);
 
             polygon.Unsubscribe(configs.First(config => config.Symbol.Underlying.Value == "AAPL"));
 
-            Log.Trace("Unsubscribing");
+            Console.WriteLine("Unsubscribing AAPL");
             Thread.Sleep(2000);
-            // some messages could be inflight, but after a pause all MBLY messages must have beed consumed by ProcessFeed
+            // some messages could be inflight, but after a pause all APPL messages must have been consumed
             unsubscribed = true;
 
             Thread.Sleep(3 * 60 * 1000);
 
             polygon.Dispose();
-        }
 
-        [TestCase(1, 8)]
-        [TestCase(8, 1)]
-        [TestCase(2, 4)]
-        [TestCase(4, 2)]
-        [TestCase(2, 3)]
-        [TestCase(3, 2)]
-        [TestCase(1, 1)]
-        [TestCase(2, 2)]
-        [TestCase(3, 3)]
-        public void RespectsMaximumWebSocketConnectionsAndSubscriptions(int MaxWebSocketConnections, int MaxSubscriptionsPerWebSocket)
-        {
-            //Config.Set("polygon-max-websocket-connections", MaxWebSocketConnections);
-            //Config.Set("polygon-max-subscriptions-per-websocket", MaxSubscriptionsPerWebSocket);
+            Assert.That(dataFromEnumerator, Has.Count.GreaterThan(0));
+            Assert.That(dataFromEventHandler, Has.Count.EqualTo(dataFromEnumerator.Count));
 
-            //using var polygon = new PolygonDataQueueHandler();
-
-            //var configs = GetConfigs();
-
-            //for (var i = 0; i < MaxWebSocketConnections * MaxSubscriptionsPerWebSocket; i++)
-            //{
-            //    var config = configs[i];
-            //    Assert.DoesNotThrow(() => polygon.Subscribe(config, (sender, args) => { }),
-            //        $"Could not subscribe symbol #{i + 1}. WebSocket count: {polygon.WebSocketCount}. Subscription count: {polygon.SubscriptionCount}");
-
-            //    var expectedSubscriptionCount = i + 1;
-            //    Assert.That(polygon.SubscriptionCount, Is.EqualTo(expectedSubscriptionCount));
-
-            //    var expectedWebSocketCount = i / MaxSubscriptionsPerWebSocket + 1;
-            //    Assert.That(polygon.WebSocketCount, Is.EqualTo(expectedWebSocketCount));
-            //}
-
-            //Assert.That(polygon.WebSocketCount, Is.EqualTo(MaxWebSocketConnections));
-            //Assert.That(polygon.SubscriptionCount, Is.EqualTo(MaxWebSocketConnections * MaxSubscriptionsPerWebSocket));
-
-            //Assert.Throws<NotSupportedException>(() => polygon.Subscribe(configs.Last(), (sender, args) => { }));
+            dataFromEnumerator = dataFromEnumerator.OrderBy(x => x.Symbol.Value).ThenBy(x => x.Time).ToList();
+            dataFromEventHandler = dataFromEventHandler.OrderBy(x => x.Symbol.Value).ThenBy(x => x.Time).ToList();
+            for (var i = 0; i < dataFromEnumerator.Count; i++)
+            {
+                var enumeratorDataPoint = dataFromEnumerator[i];
+                var eventHandlerDataPoint = dataFromEventHandler[i];
+                Assert.That(enumeratorDataPoint.Symbol, Is.EqualTo(eventHandlerDataPoint.Symbol));
+                Assert.That(enumeratorDataPoint.Time, Is.EqualTo(eventHandlerDataPoint.Time));
+                Assert.That(enumeratorDataPoint.EndTime, Is.EqualTo(eventHandlerDataPoint.EndTime));
+                Assert.That(enumeratorDataPoint.Value, Is.EqualTo(eventHandlerDataPoint.Value));
+                Assert.That(enumeratorDataPoint.Open, Is.EqualTo(eventHandlerDataPoint.Open));
+                Assert.That(enumeratorDataPoint.High, Is.EqualTo(eventHandlerDataPoint.High));
+                Assert.That(enumeratorDataPoint.Low, Is.EqualTo(eventHandlerDataPoint.Low));
+                Assert.That(enumeratorDataPoint.Close, Is.EqualTo(eventHandlerDataPoint.Close));
+                Assert.That(enumeratorDataPoint.Volume, Is.EqualTo(eventHandlerDataPoint.Volume));
+            }
         }
 
         private SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)
