@@ -2,7 +2,6 @@
 using QuantConnect.Data.Market;
 using QuantConnect.Logging;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using System.Threading;
 using System;
@@ -15,7 +14,6 @@ namespace QuantConnect.Polygon.App
         static void Main(string[] args)
         {
             var polygon = new PolygonDataQueueHandler();
-            var unsubscribed = false;
 
             var configs = new[]
             {
@@ -27,15 +25,10 @@ namespace QuantConnect.Polygon.App
 
             Action<BaseData> callback = (dataPoint) =>
             {
-                //if (dataPoint == null)
-                //    return;
-
-                //Console.WriteLine($"{dataPoint} Time span: {dataPoint.Time} - {dataPoint.EndTime}");
-
-                //if (unsubscribed && dataPoint.Symbol.Value == "AAPL")
-                //{
-                //    throw new Exception("Should not receive data for unsubscribed symbol");
-                //}
+                if (dataPoint != null)
+                {
+                    Log.Trace($"\n\n{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}\n");
+                }
             };
 
             foreach (var config in configs)
@@ -43,25 +36,15 @@ namespace QuantConnect.Polygon.App
                 ProcessFeed(polygon.Subscribe(config, (sender, args) =>
                 {
                     var dataPoint = ((NewDataAvailableEventArgs)args).DataPoint;
-                    Console.WriteLine($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
+                    Log.Trace($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
                 }), callback);
             }
 
-            Thread.Sleep(3 * 60 * 1000);
+            Console.ReadKey();
 
-            //polygon.Unsubscribe(configs.First(config => config.Symbol.Underlying.Value == "AAPL"));
-
-            //Console.WriteLine("Unsubscribing");
-
-            //Thread.Sleep(2000);
-            // some messages could be inflight, but after a pause all MBLY messages must have beed consumed by ProcessFeed
-            unsubscribed = true;
-
-            //Thread.Sleep(3 * 60 * 1000);
             polygon.Dispose();
 
-            //Console.WriteLine($"Start Time Latencies: {string.Join(", ", polygon.StartTimeLatencies)}");
-            //Console.WriteLine($"End Time Latencies: {string.Join(", ", polygon.EndTimeLatencies)}");
+            Log.Trace($"End Time Latencies: {string.Join(", ", polygon.Latencies)}");
         }
 
         private static SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)
@@ -77,10 +60,9 @@ namespace QuantConnect.Polygon.App
                 false);
         }
 
-        private static void ProcessFeed(IEnumerator<BaseData> enumerator, Action<BaseData> callback = null)
+        private static Task ProcessFeed(IEnumerator<BaseData> enumerator, Action<BaseData> callback = null)
         {
-            return;
-            Task.Run(() =>
+            return Task.Run(() =>
             {
                 try
                 {
@@ -92,8 +74,10 @@ namespace QuantConnect.Polygon.App
                 }
                 catch (Exception err)
                 {
-                    Log.Error(err.Message);
+                    Log.Error(err.ToString());
                 }
+
+                Log.Trace("Exiting process feed thread");
             });
         }
     }

@@ -24,16 +24,19 @@ using QuantConnect.Logging;
 using QuantConnect.Packets;
 using QuantConnect.Securities;
 using QuantConnect.Util;
+using System.Collections.ObjectModel;
 using static QuantConnect.Brokerages.WebSocketClientWrapper;
 
 namespace QuantConnect.Polygon
 {
     public class PolygonDataQueueHandler : IDataQueueHandler
     {
-        private readonly int _maximumWebSocketConnections = Config.GetInt("polygon-max-websocket-connections", 7);
-        private readonly int _maximumSubscriptionsPerWebSocket = Config.GetInt("polygon-max-subscriptions-per-websocket", 1000);
+        private readonly int MaximumWebSocketConnections = Config.GetInt("polygon-max-websocket-connections", 7);
+        private readonly int MaximumSubscriptionsPerWebSocket = Config.GetInt("polygon-max-subscriptions-per-websocket", 1000);
 
-        private readonly string _apiKey = Config.Get("polygon-api-key");
+        private readonly string ApiKey = Config.Get("polygon-api-key");
+
+        private readonly ReadOnlyCollection<SecurityType> SupportedSecurityTypes = new List<SecurityType>() { SecurityType.Option }.AsReadOnly();
 
         private readonly PolygonAggregationManager _dataAggregator = new();
 
@@ -42,9 +45,6 @@ namespace QuantConnect.Polygon
         private readonly MarketHoursDatabase _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
         private readonly Dictionary<Symbol, DateTimeZone> _symbolExchangeTimeZones = new();
 
-        private readonly ManualResetEvent _successfulAuthentication = new(false);
-        private readonly ManualResetEvent _failedAuthentication = new(false);
-
         private bool _disposed;
 
         /// <summary>
@@ -52,15 +52,13 @@ namespace QuantConnect.Polygon
         /// </summary>
         public PolygonDataQueueHandler()
         {
-            var securityTypes = new List<SecurityType> { SecurityType.Option };
-
-            _subscriptionManagers = securityTypes.ToDictionary(securityType => securityType,
+            _subscriptionManagers = SupportedSecurityTypes.ToDictionary(securityType => securityType,
                 securityType => new BrokerageMultiWebSocketSubscriptionManager(
                     PolygonWebSocketClientWrapper.GetWebSocketUrl(securityType),
-                _maximumSubscriptionsPerWebSocket,
-                _maximumWebSocketConnections,
+                    MaximumSubscriptionsPerWebSocket,
+                    MaximumWebSocketConnections,
                     new Dictionary<Symbol, int>(),
-                    () => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, null),
+                    () => new PolygonWebSocketClientWrapper(ApiKey, _symbolMapper, securityType, null),
                     (webSocket, symbol) =>
                     {
                         ((PolygonWebSocketClientWrapper)webSocket).Subscribe(symbol, TickType.Trade);
@@ -77,45 +75,6 @@ namespace QuantConnect.Polygon
                         OnMessage(e.Message);
                     },
                     TimeSpan.Zero));
-
-            // TODO: Find another way to detect authentication failure and timeout
-            //foreach (var securityType in securityTypes)
-            //{
-            //    _failedAuthentication.Reset();
-            //    _successfulAuthentication.Reset();
-
-            //    var websocket = new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage);
-
-            //    var timedout = WaitHandle.WaitAny(new WaitHandle[] { _failedAuthentication, _successfulAuthentication }, TimeSpan.FromMinutes(2));
-            //    if (timedout == WaitHandle.WaitTimeout)
-            //    {
-            //        // Close current websocket connection
-            //        websocket.Close();
-            //        // Close all connections that have been successful so far
-            //        ShutdownWebSockets();
-            //        throw new TimeoutException($"Timeout waiting for websocket to connect for {securityType}");
-            //    }
-
-            //    // If it hasn't timed out, it could still have failed.
-            //    // For example, the API keys do not have rights to subscribe to the current security type
-            //    // In this case, we close this connect and move on
-            //    if (_failedAuthentication.WaitOne(0))
-            //    {
-            //        websocket.Close();
-            //        continue;
-            //    }
-
-            //    _webSocketClients[securityType] = websocket;
-            //}
-
-            //// If we could not connect to any websocket because of the API rights,
-            //// we exit this data queue handler
-            //if (_webSocketClients.Count == 0)
-            //{
-            //    throw new InvalidOperationException(
-            //        $"Websocket authentication failed for all security types: {string.Join(", ", securityTypes)}." +
-            //        "Please confirm whether the subscription plan associated with your API keys includes support to websockets.");
-            //}
         }
 
         #region IDataQueueHandler implementation
@@ -182,8 +141,6 @@ namespace QuantConnect.Polygon
                     kvp.Value.Dispose();
                 }
                 _dataAggregator.DisposeSafely();
-                _successfulAuthentication.DisposeSafely();
-                _failedAuthentication.DisposeSafely();
 
                 _disposed = true;
             }
@@ -249,12 +206,10 @@ namespace QuantConnect.Polygon
                         errorMessage = jmessage.ToString();
                     }
                     Log.Error($"PolygonDataQueueHandler(): authentication failed: '{errorMessage}'.");
-                    _failedAuthentication.Set();
                 }
                 else if (status.Contains("auth_success", StringComparison.InvariantCultureIgnoreCase))
                 {
                     Log.Trace($"PolygonDataQueueHandler(): successful authentication.");
-                    _successfulAuthentication.Set();
                 }
             }
         }
