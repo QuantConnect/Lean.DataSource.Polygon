@@ -136,25 +136,7 @@ namespace QuantConnect.Polygon
             }
         }
 
-        private static string GetHistoryTimespan(Resolution resolution)
-        {
-            switch (resolution)
-            {
-                case Resolution.Daily:
-                    return "day";
-
-                case Resolution.Hour:
-                    return "hour";
-
-                case Resolution.Minute:
-                    return "minute";
-
-                default:
-                    throw new Exception($"PolygonDataQueueHandler.GetHistoryTimespan(): unsupported resolution: {resolution}.");
-            }
-        }
-
-        private static T DownloadAndParseData<T>(string url)
+        protected virtual T DownloadAndParseData<T>(string url)
         {
             var result = url.DownloadData();
             if (result == null)
@@ -177,6 +159,24 @@ namespace QuantConnect.Polygon
             }
 
             return result == null ? default : JsonConvert.DeserializeObject<T>(result);
+        }
+
+        private static string GetHistoryTimespan(Resolution resolution)
+        {
+            switch (resolution)
+            {
+                case Resolution.Daily:
+                    return "day";
+
+                case Resolution.Hour:
+                    return "hour";
+
+                case Resolution.Minute:
+                    return "minute";
+
+                default:
+                    throw new Exception($"PolygonDataQueueHandler.GetHistoryTimespan(): unsupported resolution: {resolution}.");
+            }
         }
 
         /// <summary>
