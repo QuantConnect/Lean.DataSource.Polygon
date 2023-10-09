@@ -33,6 +33,7 @@ namespace QuantConnect.Tests.Polygon
         public void Setup()
         {
             Log.DebuggingEnabled = Config.GetBool("debug-mode");
+            Log.LogHandler = new CompositeLogHandler();
         }
 
         [Test]
@@ -65,7 +66,7 @@ namespace QuantConnect.Tests.Polygon
                 {
                     var dataPoint = ((NewDataAvailableEventArgs)args).DataPoint;
                     dataFromEventHandler.Add((TradeBar)dataPoint);
-                    Console.WriteLine($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
+                    Log.Trace($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
                 }), callback);
             }
 
@@ -73,7 +74,7 @@ namespace QuantConnect.Tests.Polygon
 
             polygon.Unsubscribe(configs.First(config => config.Symbol.Underlying.Value == "AAPL"));
 
-            Console.WriteLine("Unsubscribing AAPL");
+            Log.Trace("Unsubscribing AAPL");
             Thread.Sleep(2000);
             // some messages could be inflight, but after a pause all APPL messages must have been consumed
             unsubscribed = true;
@@ -120,6 +121,36 @@ namespace QuantConnect.Tests.Polygon
             Thread.Sleep(1000);
 
             Assert.IsTrue(polygon.IsConnected);
+        }
+
+        [Test]
+        public void GetsHistoricalDataForResolutionsHigherThanMinute()
+        {
+            using var polygon = new PolygonDataQueueHandler();
+            var unsubscribed = false;
+
+            var configs = GetConfigs().GroupBy(x => x.Symbol.Underlying, (key, group) => group.First());
+            var receivedData = new List<TradeBar>();
+
+            foreach (var config in configs)
+            {
+                polygon.Subscribe(config, (sender, args) =>
+                {
+                    var dataPoint = (TradeBar)((NewDataAvailableEventArgs)args).DataPoint;
+                    Log.Trace($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
+
+                    receivedData.Add(dataPoint);
+                });
+            }
+
+            // Run for 3 hours
+            Thread.Sleep(3 * 60 * 60 * 1000);
+
+            // Data is not fill forwarded by Polygon, so we expect at most 3 trade bars
+            Assert.That(receivedData, Is.Not.Empty.And.Count.LessThanOrEqualTo(3));
+
+            polygon.DisposeSafely();
+
         }
 
         private SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)

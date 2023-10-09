@@ -52,45 +52,52 @@ namespace QuantConnect.Polygon
         /// <summary>
         /// Initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
         /// </summary>
-        public PolygonDataQueueHandler()
+        /// <param name="streamingEnabled">
+        /// Whether this handle will be used for streaming data.
+        /// If false, the handler is supposed to be used as a history provider only.
+        /// </param>
+        public PolygonDataQueueHandler(bool streamingEnabled = true)
         {
-            _subscriptionManagers = _supportedSecurityTypes.ToDictionary(securityType => securityType,
-                securityType => new BrokerageMultiWebSocketSubscriptionManager(
-                    PolygonWebSocketClientWrapper.GetWebSocketUrl(securityType),
-                    _maximumSubscriptionsPerWebSocket,
-                    _maximumWebSocketConnections,
-                    new Dictionary<Symbol, int>(),
-                    () =>
-                    {
-                        var webSocket = new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, null);
-
-                        webSocket.Open += (_, _) =>
+            if (streamingEnabled)
+            {
+                _subscriptionManagers = _supportedSecurityTypes.ToDictionary(securityType => securityType,
+                    securityType => new BrokerageMultiWebSocketSubscriptionManager(
+                        PolygonWebSocketClientWrapper.GetWebSocketUrl(securityType),
+                        _maximumSubscriptionsPerWebSocket,
+                        _maximumWebSocketConnections,
+                        new Dictionary<Symbol, int>(),
+                        () =>
                         {
-                            _webSockets.Add(webSocket);
-                        };
-                        webSocket.Closed += (_, _) =>
-                        {
-                            _webSockets.Remove(webSocket);
-                        };
+                            var webSocket = new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, null);
 
-                        return webSocket;
-                    },
-                    (webSocket, symbol) =>
-                    {
-                        ((PolygonWebSocketClientWrapper)webSocket).Subscribe(symbol, TickType.Trade);
-                        return true;
-                    },
-                    (webSocket, symbol) =>
-                    {
-                        ((PolygonWebSocketClientWrapper)webSocket).Unsubscribe(symbol, TickType.Trade);
-                        return true;
-                    },
-                    (webSocketMessage) =>
-                    {
-                        var e = (TextMessage)webSocketMessage.Data;
-                        OnMessage(e.Message);
-                    },
-                    TimeSpan.Zero));
+                            webSocket.Open += (_, _) =>
+                            {
+                                _webSockets.Add(webSocket);
+                            };
+                            webSocket.Closed += (_, _) =>
+                            {
+                                _webSockets.Remove(webSocket);
+                            };
+
+                            return webSocket;
+                        },
+                        (webSocket, symbol) =>
+                        {
+                            ((PolygonWebSocketClientWrapper)webSocket).Subscribe(symbol, TickType.Trade);
+                            return true;
+                        },
+                        (webSocket, symbol) =>
+                        {
+                            ((PolygonWebSocketClientWrapper)webSocket).Unsubscribe(symbol, TickType.Trade);
+                            return true;
+                        },
+                        (webSocketMessage) =>
+                        {
+                            var e = (TextMessage)webSocketMessage.Data;
+                            OnMessage(e.Message);
+                        },
+                        TimeSpan.Zero));
+            }
         }
 
         #region IDataQueueHandler implementation
@@ -152,9 +159,12 @@ namespace QuantConnect.Polygon
         {
             if (!_disposed)
             {
-                foreach (var kvp in _subscriptionManagers)
+                if (_subscriptionManagers != null)
                 {
-                    kvp.Value.Dispose();
+                    foreach (var kvp in _subscriptionManagers)
+                    {
+                        kvp.Value.Dispose();
+                    }
                 }
                 _dataAggregator.DisposeSafely();
 
