@@ -22,13 +22,14 @@ using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.HistoricalData;
 using QuantConnect.Logging;
 using static QuantConnect.StringExtensions;
+using QuantConnect.Configuration;
 
 namespace QuantConnect.Polygon
 {
     public partial class PolygonDataQueueHandler : SynchronizingHistoryProvider
     {
         private const string HistoryBaseUrl = "https://api.polygon.io/v2";
-        private const int AggregateDataResponseLimit = 5000;
+        private readonly int AggregateDataResponseLimit = Config.GetInt("polygon-aggregate-response-limit", 5000);
 
         private int _dataPointCount;
 

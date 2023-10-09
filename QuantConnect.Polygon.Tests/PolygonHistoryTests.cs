@@ -23,6 +23,8 @@ using QuantConnect.Securities;
 using QuantConnect.Util;
 using Microsoft.CodeAnalysis;
 using Newtonsoft.Json;
+using QuantConnect.Configuration;
+using System.Diagnostics;
 
 namespace QuantConnect.Tests.Polygon
 {
@@ -79,6 +81,42 @@ namespace QuantConnect.Tests.Polygon
         }
 
         [Test]
+        [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
+        public void GetsSameBarCountForDifferentResponseLimits()
+        {
+            const Resolution resolution = Resolution.Minute;
+            const TickType tickType = TickType.Trade;
+            var symbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 429m, new DateTime(2023, 10, 06));
+
+            var request = CreateHistoryRequest(symbol, resolution, tickType, TimeSpan.FromDays(100));
+
+            Stopwatch stopwatch = new Stopwatch();
+            stopwatch.Start();
+            var history1 = _historyProvider.GetHistory(request).ToList();
+            stopwatch.Stop();
+            var history1Duration = stopwatch.Elapsed;
+
+            Assert.That(history1, Is.Not.Empty);
+
+            Log.Trace($"Retrieved {_historyProvider.DataPointCount} data points in {history1Duration}");
+
+            Config.Set("polygon-aggregate-response-limit", 500);
+            var newHistoryProvider = new PolygonDataQueueHandler();
+
+            stopwatch.Restart();
+            var history2 = newHistoryProvider.GetHistory(request).ToList();
+            stopwatch.Stop();
+            var history2Duration = stopwatch.Elapsed;
+
+            Log.Trace($"Retrieved {newHistoryProvider.DataPointCount} data points in {history2Duration}");
+
+            Assert.That(history2, Has.Count.EqualTo(history1.Count));
+            Assert.That(history1, Is.Not.Empty);
+
+            Assert.That(history2Duration, Is.GreaterThan(history1Duration));
+        }
+
+        [Test]
         public void MakesTheRightNumberOfApiCallsToGetHistory()
         {
             // And hour of data per api call
@@ -117,11 +155,11 @@ namespace QuantConnect.Tests.Polygon
 
         private static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
         {
-            var now = DateTime.UtcNow;
+            var end = new DateTime(2023, 10, 6);
             var dataType = LeanData.GetDataType(resolution, tickType);
 
-            return new HistoryRequest(now.Add(-period),
-                now,
+            return new HistoryRequest(end.Subtract(period),
+                end,
                 dataType,
                 symbol,
                 resolution,
