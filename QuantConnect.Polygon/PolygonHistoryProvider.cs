@@ -21,8 +21,8 @@ using QuantConnect.Data.Market;
 using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.HistoricalData;
 using QuantConnect.Logging;
-using static QuantConnect.StringExtensions;
 using QuantConnect.Configuration;
+using static QuantConnect.StringExtensions;
 
 namespace QuantConnect.Polygon
 {
@@ -37,7 +37,6 @@ namespace QuantConnect.Polygon
 
         public override void Initialize(HistoryProviderInitializeParameters parameters)
         {
-            // TODO: IMPLEMENT
         }
 
         public override IEnumerable<Slice> GetHistory(IEnumerable<Data.HistoryRequest> requests, DateTimeZone sliceTimeZone)

@@ -153,6 +153,36 @@ namespace QuantConnect.Tests.Polygon
             Assert.That(historyProvider.ApiCallsCount, Is.EqualTo((end - start).TotalMinutes / responseLimit));
         }
 
+        private static TestCaseData[] UssuportedSecurityTypesResolutionsAndTickTypesTestCases => new[]
+        {
+            // Supported resolution and tick type, unsupported security type symbol
+            new TestCaseData(Symbols.SPY, Resolution.Minute, TickType.Trade),
+            new TestCaseData(Symbols.USDJPY, Resolution.Minute, TickType.Trade),
+            new TestCaseData(Symbols.BTCUSD, Resolution.Minute, TickType.Trade),
+            new TestCaseData(Symbols.DE10YBEUR, Resolution.Minute, TickType.Trade),
+            new TestCaseData(Symbols.SPX, Resolution.Minute, TickType.Trade),
+            new TestCaseData(Symbols.Future_ESZ18_Dec2018, Resolution.Minute, TickType.Trade),
+
+            // Supported security type symbol and tick type, unsupported resolution
+            new TestCaseData(Symbols.SPY_C_192_Feb19_2016, Resolution.Tick, TickType.Trade),
+            new TestCaseData(Symbols.SPY_C_192_Feb19_2016, Resolution.Second, TickType.Trade),
+
+            // Supported security type and resolution, unsupported tick type
+            new TestCaseData(Symbols.SPY_C_192_Feb19_2016, Resolution.Minute, TickType.Quote),
+            new TestCaseData(Symbols.SPY_C_192_Feb19_2016, Resolution.Minute, TickType.OpenInterest),
+        };
+
+        [TestCaseSource(nameof(UssuportedSecurityTypesResolutionsAndTickTypesTestCases))]
+        public void ReturnsEmptyForUnsupportedSecurityTypeResolutionOrTickType(Symbol symbol, Resolution resolution, TickType tickType)
+        {
+            var historyProvider = new TestPolygonHistoryProvider();
+            var request = CreateHistoryRequest(symbol, resolution, tickType, TimeSpan.FromDays(100));
+            var history = historyProvider.GetHistory(request).ToList();
+
+            Assert.That(history, Is.Empty);
+            Assert.That(historyProvider.ApiCallsCount, Is.EqualTo(0));
+        }
+
         private static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
         {
             var end = new DateTime(2023, 10, 6);
