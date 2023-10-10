@@ -23,6 +23,9 @@ namespace QuantConnect.Polygon
     /// </summary>
     public class PolygonSymbolMapper : ISymbolMapper
     {
+        private readonly Dictionary<string, Symbol> _leanSymbolsByPolygonSymbol = new();
+        private readonly Dictionary<Symbol, string> _polygonSymbolsByLeanSymbol = new();
+
         /// <summary>
         /// Converts a Lean symbol instance to a brokerage symbol
         /// </summary>
@@ -35,14 +38,22 @@ namespace QuantConnect.Polygon
                 throw new ArgumentException($"Invalid symbol: {(symbol == null ? "null" : symbol.ToString())}");
             }
 
-            switch (symbol.SecurityType)
+            if (!_polygonSymbolsByLeanSymbol.TryGetValue(symbol, out var polygonSymbol))
             {
-                case SecurityType.Option:
-                    return $"O:{symbol.Value.Replace(" ", "")}";
+                switch (symbol.SecurityType)
+                {
+                    case SecurityType.Option:
+                        polygonSymbol = $"O:{symbol.Value.Replace(" ", "")}";
+                        break;
 
-                default:
-                    throw new Exception($"PolygonSymbolMapper.GetBrokerageSymbol(): unsupported security type: {symbol.SecurityType}");
+                    default:
+                        throw new Exception($"PolygonSymbolMapper.GetBrokerageSymbol(): unsupported security type: {symbol.SecurityType}");
+                }
+
+                _polygonSymbolsByLeanSymbol[symbol] = polygonSymbol;
             }
+
+            return polygonSymbol;
         }
 
         /// <summary>
@@ -101,13 +112,19 @@ namespace QuantConnect.Polygon
 
         public Symbol GetLeanOptionSymbol(string polygonSymbol)
         {
-            var strike = Int64.Parse(polygonSymbol.Substring(polygonSymbol.Length - 8)) / 1000m;
-            var optionRight= polygonSymbol.Substring(polygonSymbol.Length - 9, 1) == "C" ? OptionRight.Call : OptionRight.Put;
-            var expirationDate = DateTime.ParseExact(polygonSymbol.Substring(polygonSymbol.Length - 15, 6), "yyMMdd", CultureInfo.InvariantCulture);
-            var underlyingTicker = polygonSymbol.Substring(2, polygonSymbol.Length - 15 - 2);
+            if (!_leanSymbolsByPolygonSymbol.TryGetValue(polygonSymbol, out var symbol))
+            {
+                var strike = Int64.Parse(polygonSymbol.Substring(polygonSymbol.Length - 8)) / 1000m;
+                var optionRight = polygonSymbol.Substring(polygonSymbol.Length - 9, 1) == "C" ? OptionRight.Call : OptionRight.Put;
+                var expirationDate = DateTime.ParseExact(polygonSymbol.Substring(polygonSymbol.Length - 15, 6), "yyMMdd", CultureInfo.InvariantCulture);
+                var underlyingTicker = polygonSymbol.Substring(2, polygonSymbol.Length - 15 - 2);
 
-            return Symbol.CreateOption(Symbol.Create(underlyingTicker, SecurityType.Equity, Market.USA), Market.USA, OptionStyle.American,
-                optionRight, strike, expirationDate);
+                symbol = Symbol.CreateOption(Symbol.Create(underlyingTicker, SecurityType.Equity, Market.USA), Market.USA, OptionStyle.American,
+                    optionRight, strike, expirationDate);
+                _leanSymbolsByPolygonSymbol[polygonSymbol] = symbol;
+            }
+
+            return symbol;
         }
     }
 }
