@@ -1,9 +1,6 @@
 ﻿using QuantConnect.Data;
 using QuantConnect.Data.Market;
 using QuantConnect.Logging;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System.Threading;
 using System;
 using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 
@@ -23,28 +20,18 @@ namespace QuantConnect.Polygon.App
                     OptionStyle.American, OptionRight.Call, 55m, new DateTime(2023, 10, 20)), Resolution.Minute)
             };
 
-            Action<BaseData> callback = (dataPoint) =>
-            {
-                if (dataPoint != null)
-                {
-                    Log.Trace($"\n\n{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}\n");
-                }
-            };
-
             foreach (var config in configs)
             {
-                ProcessFeed(polygon.Subscribe(config, (sender, args) =>
+                polygon.Subscribe(config, (sender, args) =>
                 {
                     var dataPoint = ((NewDataAvailableEventArgs)args).DataPoint;
                     Log.Trace($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
-                }), callback);
+                });
             }
 
             Console.ReadKey();
 
             polygon.Dispose();
-
-            Log.Trace($"End Time Latencies: {string.Join(", ", polygon.Latencies)}");
         }
 
         private static SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)
@@ -58,27 +45,6 @@ namespace QuantConnect.Polygon.App
                 true,
                 true,
                 false);
-        }
-
-        private static Task ProcessFeed(IEnumerator<BaseData> enumerator, Action<BaseData> callback = null)
-        {
-            return Task.Run(() =>
-            {
-                try
-                {
-                    while (enumerator.MoveNext())
-                    {
-                        var tick = enumerator.Current;
-                        callback?.Invoke(tick);
-                    }
-                }
-                catch (Exception err)
-                {
-                    Log.Error(err.ToString());
-                }
-
-                Log.Trace("Exiting process feed thread");
-            });
         }
     }
 }

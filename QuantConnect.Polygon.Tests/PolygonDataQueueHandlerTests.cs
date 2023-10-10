@@ -124,7 +124,21 @@ namespace QuantConnect.Tests.Polygon
         }
 
         [Test]
-        public void GetsHistoricalDataForResolutionsHigherThanMinute()
+        public void ThrowsOnFailedAuthentication()
+        {
+            Config.Set("polygon-api-key", "invalidapikey");
+
+            using var polygon = new PolygonDataQueueHandler();
+
+            var config = GetConfigs()[0];
+            Assert.Throws<PolygonFailedAuthenticationException>(() =>
+            {
+                polygon.Subscribe(config, (sender, args) => { });
+            });
+        }
+
+        [Test]
+        public void StreamsDataForResolutionsHigherThanMinute()
         {
             using var polygon = new PolygonDataQueueHandler();
             var unsubscribed = false;
@@ -148,9 +162,6 @@ namespace QuantConnect.Tests.Polygon
 
             // Data is not fill forwarded by Polygon, so we expect at most 3 trade bars
             Assert.That(receivedData, Is.Not.Empty.And.Count.LessThanOrEqualTo(3));
-
-            polygon.DisposeSafely();
-
         }
 
         private SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)

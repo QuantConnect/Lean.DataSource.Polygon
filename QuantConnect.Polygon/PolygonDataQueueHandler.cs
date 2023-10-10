@@ -47,6 +47,10 @@ namespace QuantConnect.Polygon
         private readonly MarketHoursDatabase _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
         private readonly Dictionary<Symbol, DateTimeZone> _symbolExchangeTimeZones = new();
 
+        private readonly ManualResetEvent _successfulAuthenticationEvent = new(false);
+        private readonly ManualResetEvent _failedAuthenticationEvent = new(false);
+        private readonly ManualResetEvent _subscribedEvent = new(false);
+
         private bool _disposed;
 
         /// <summary>
@@ -136,7 +140,28 @@ namespace QuantConnect.Polygon
             }
 
             var enumerator = _dataAggregator.Add(dataConfig, newDataAvailableHandler);
+
+            // On first subscription per websocket, authentication is performed.
+            // Let's make sure authentication is successful:
+            _successfulAuthenticationEvent.Reset();
+            _failedAuthenticationEvent.Reset();
+            _subscribedEvent.Reset();
+
+            // Subscribe
             _subscriptionManagers[dataConfig.SecurityType].Subscribe(dataConfig);
+
+            var events = new WaitHandle[] { _failedAuthenticationEvent, _successfulAuthenticationEvent, _subscribedEvent };
+            var triggeredEventIndex = WaitHandle.WaitAny(events, TimeSpan.FromMinutes(2));
+            if (triggeredEventIndex == WaitHandle.WaitTimeout)
+            {
+                throw new TimeoutException("Timeout waiting for websocket to connect.");
+            }
+            // Authentication failed
+            else if (triggeredEventIndex == 0)
+            {
+                throw new PolygonFailedAuthenticationException("Polygon WebSocket authentication failed");
+            }
+            // On successful authentication or subscription, we just continue
 
             return enumerator;
         }
@@ -225,17 +250,22 @@ namespace QuantConnect.Polygon
                 var status = jstatus.ToString();
                 if (status.Contains("auth_failed", StringComparison.InvariantCultureIgnoreCase))
                 {
-                    var errorMessage = string.Empty;
-                    var jmessage = jStatusMessage["message"];
-                    if (jmessage != null)
-                    {
-                        errorMessage = jmessage.ToString();
-                    }
+                    var errorMessage = jStatusMessage["message"]?.ToString() ?? string.Empty;
                     Log.Error($"PolygonDataQueueHandler(): authentication failed: '{errorMessage}'.");
+                    _failedAuthenticationEvent.Set();
                 }
                 else if (status.Contains("auth_success", StringComparison.InvariantCultureIgnoreCase))
                 {
                     Log.Trace($"PolygonDataQueueHandler(): successful authentication.");
+                    _successfulAuthenticationEvent.Set();
+                }
+                else if (status.Contains("success", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    var statusMessage = jStatusMessage["message"]?.ToString() ?? string.Empty;
+                    if (statusMessage.Contains("subscribed to", StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        _subscribedEvent.Set();
+                    }
                 }
             }
         }
