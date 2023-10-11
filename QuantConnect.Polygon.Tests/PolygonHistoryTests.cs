@@ -65,7 +65,7 @@ namespace QuantConnect.Tests.Polygon
 
         [TestCaseSource(nameof(HistoricalTradeBarsTestCases))]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
-        public void GetHistoricalTradeBarsTest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
+        public void GetsHistoricalTradeBars(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
         {
             var request = CreateHistoryRequest(symbol, resolution, tickType, period);
             var history = _historyProvider.GetHistory(request).ToList();
@@ -127,7 +127,7 @@ namespace QuantConnect.Tests.Polygon
         [Test]
         public void MakesTheRightNumberOfApiCallsToGetHistory()
         {
-            // And hour of data per api call
+            // 1 hour of data per api call
             const int responseLimit = 60;
             const Resolution resolution = Resolution.Minute;
             const TickType tickType = TickType.Trade;
@@ -191,6 +191,46 @@ namespace QuantConnect.Tests.Polygon
             Assert.That(historyProvider.ApiCallsCount, Is.EqualTo(0));
         }
 
+        [TestCase(5)]
+        [TestCase(10)]
+        [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
+        public void RateLimitsHistoryApiCalls(int historyRequestsCount)
+        {
+            var symbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 429m, new DateTime(2023, 10, 06));
+            var request = CreateHistoryRequest(symbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(1));
+
+            var rate = TimeSpan.FromSeconds(5);
+            using var unlimitedGate = new RateGate(int.MaxValue, rate);
+            using var unlimitedHistoryProvider = new ConfigurableRateLimitedPolygonHistoryProvider(_apiKey, unlimitedGate);
+
+            var timer = Stopwatch.StartNew();
+            for (var i = 0; i < historyRequestsCount; i++)
+            {
+                var history = unlimitedHistoryProvider.GetHistory(request).ToList();
+            }
+            timer.Stop();
+            var unlimitedHistoryRequestsElapsedTime = timer.Elapsed;
+
+            using var gate = new RateGate(1, rate);
+            using var rateLimitedHistoryProvider = new ConfigurableRateLimitedPolygonHistoryProvider(_apiKey, gate);
+
+            timer = Stopwatch.StartNew();
+            for (var i = 0; i < historyRequestsCount; i++)
+            {
+                var history = rateLimitedHistoryProvider.GetHistory(request).ToList();
+            }
+            timer.Stop();
+            var rateLimitedHistoryRequestsElapsedTime = timer.Elapsed;
+
+            var delay = rateLimitedHistoryRequestsElapsedTime - unlimitedHistoryRequestsElapsedTime;
+            var expectedDelay = rate * historyRequestsCount;
+            var lowerBound = expectedDelay - expectedDelay * 0.30;
+            var upperBound = expectedDelay + expectedDelay * 0.30;
+
+            Assert.That(delay, Is.GreaterThanOrEqualTo(lowerBound), $"The rate gate was early: {lowerBound - delay}");
+            Assert.That(delay, Is.LessThanOrEqualTo(upperBound), $"The rate gate was late: {delay - upperBound}");
+        }
+
         private static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
         {
             var end = new DateTime(2023, 10, 6);
@@ -252,6 +292,17 @@ namespace QuantConnect.Tests.Polygon
                     }).ToList(),
                     NextUrl = _currentStart < CurrentHistoryRequest.EndTimeUtc ? "https://www.someourl.com" : null
                 });
+            }
+        }
+
+        private class ConfigurableRateLimitedPolygonHistoryProvider : PolygonDataQueueHandler
+        {
+            protected override RateGate HistoryRateLimiter { get; }
+
+            public ConfigurableRateLimitedPolygonHistoryProvider(string apiKey, RateGate rateGate)
+                : base(apiKey, false)
+            {
+                HistoryRateLimiter = rateGate;
             }
         }
     }

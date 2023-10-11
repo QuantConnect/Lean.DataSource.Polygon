@@ -22,6 +22,7 @@ using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.HistoricalData;
 using QuantConnect.Logging;
 using QuantConnect.Configuration;
+using QuantConnect.Util;
 using static QuantConnect.StringExtensions;
 
 namespace QuantConnect.Polygon
@@ -30,6 +31,8 @@ namespace QuantConnect.Polygon
     {
         private const string HistoryBaseUrl = "https://api.polygon.io/v2";
         private readonly int AggregateDataResponseLimit = Config.GetInt("polygon-aggregate-response-limit", 5000);
+
+        protected virtual RateGate HistoryRateLimiter { get; } = new(300, TimeSpan.FromSeconds(1));
 
         private int _dataPointCount;
 
@@ -160,6 +163,12 @@ namespace QuantConnect.Polygon
         /// </summary>
         protected virtual T DownloadAndParseData<T>(string url)
         {
+            if (HistoryRateLimiter.IsRateLimited)
+            {
+                Log.Trace("Polygon history requests are limited to 300 per second.");
+            }
+            HistoryRateLimiter.WaitToProceed();
+
             var result = url.DownloadData(new Dictionary<string, string> { { "Authorization", $"Bearer {_apiKey}" } });
             if (result == null)
             {
