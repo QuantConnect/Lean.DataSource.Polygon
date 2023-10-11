@@ -114,6 +114,10 @@ namespace QuantConnect.Polygon
         {
             if (!_leanSymbolsByPolygonSymbol.TryGetValue(polygonSymbol, out var symbol))
             {
+                // Polygon option symbol format, without the "O:" prefix, is similar to OSI option symbol format
+                // But they don't have a fixed number of characters for the underlying ticker, so we need to parse it
+                // starting from the end of the string: strike -> option right -> expiration date -> underlying ticker.
+                // Reference: https://polygon.io/blog/how-to-read-a-stock-options-ticker
                 var strike = Int64.Parse(polygonSymbol.Substring(polygonSymbol.Length - 8)) / 1000m;
                 var optionRight = polygonSymbol.Substring(polygonSymbol.Length - 9, 1) == "C" ? OptionRight.Call : OptionRight.Put;
                 var expirationDate = DateTime.ParseExact(polygonSymbol.Substring(polygonSymbol.Length - 15, 6), "yyMMdd", CultureInfo.InvariantCulture);

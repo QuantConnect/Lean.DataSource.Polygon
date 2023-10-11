@@ -31,13 +31,13 @@ namespace QuantConnect.Polygon
         /// </summary>
         protected override IDataConsolidator GetConsolidator(SubscriptionDataConfig config)
         {
-            // We use the TradeBarConsolidator for TradeBar data and the base implementation for everything else,
-            // given that we are aggregating trade bars (that are already aggregated by Polygon) instead of ticks.
             if (config.Type != typeof(TradeBar))
             {
-                return base.GetConsolidator(config);
+                throw new ArgumentException($"Unsupported subscription data config type {config.Type}");
             }
 
+            // We use the TradeBarConsolidator for TradeBar data given that we are aggregating trade bars
+            // (that are already aggregated by Polygon) instead of ticks.
             return new TradeBarConsolidator(config.Resolution.ToTimeSpan());
         }
     }

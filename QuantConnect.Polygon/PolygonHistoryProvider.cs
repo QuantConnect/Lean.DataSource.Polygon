@@ -129,12 +129,12 @@ namespace QuantConnect.Polygon
             var start = Time.DateTimeToUnixTimeStampMilliseconds(request.StartTimeUtc.RoundDown(resolutionTimeSpan));
             var end = Time.DateTimeToUnixTimeStampMilliseconds(request.EndTimeUtc.RoundDown(resolutionTimeSpan));
 
-            var url = $"{HistoryBaseUrl}/aggs/ticker/{_symbolMapper.GetBrokerageSymbol(request.Symbol)}/range/1/{historyTimespan}/{start}/{end}";
-            var baseQuery = $"apiKey={_apiKey}&limit={AggregateDataResponseLimit}";
+            var url = $"{HistoryBaseUrl}/aggs/ticker/{_symbolMapper.GetBrokerageSymbol(request.Symbol)}/range/1/{historyTimespan}/{start}/{end}" +
+                $"?&limit={AggregateDataResponseLimit}&adjusted={request.DataNormalizationMode != DataNormalizationMode.Raw}";
 
             while (!string.IsNullOrEmpty(url))
             {
-                var response = DownloadAndParseData<AggregatesResponse>(AddQueryToUrl(new Uri(url), baseQuery));
+                var response = DownloadAndParseData<AggregatesResponse>(url);
                 if (response == null)
                 {
                     break;
@@ -160,7 +160,7 @@ namespace QuantConnect.Polygon
         /// </summary>
         protected virtual T DownloadAndParseData<T>(string url)
         {
-            var result = url.DownloadData();
+            var result = url.DownloadData(new Dictionary<string, string> { { "Authorization", $"Bearer {_apiKey}" } });
             if (result == null)
             {
                 return default;
@@ -202,24 +202,6 @@ namespace QuantConnect.Polygon
                 default:
                     throw new Exception($"PolygonDataQueueHandler.GetHistoryTimespan(): unsupported resolution: {resolution}.");
             }
-        }
-
-        /// <summary>
-        /// Adds the given query to the url, making sure it keeps the existing query parameters if any
-        /// </summary>
-        private static string AddQueryToUrl(Uri url, string query)
-        {
-            var newQuery = url.Query;
-            if (!string.IsNullOrEmpty(newQuery))
-            {
-                newQuery += $"&{query}";
-            }
-            else
-            {
-                newQuery = $"?{query}";
-            }
-
-            return new Uri(url, newQuery).ToString();
         }
     }
 }
