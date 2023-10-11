@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+using QuantConnect.Configuration;
 using QuantConnect.Data;
 using QuantConnect.Securities;
 using QuantConnect.Util;
@@ -24,7 +25,25 @@ namespace QuantConnect.Polygon
     /// </summary>
     public class PolygonDataDownloader : IDataDownloader, IDisposable
     {
-        private readonly PolygonDataQueueHandler _historyProvider = new PolygonDataQueueHandler();
+        private readonly PolygonDataQueueHandler _historyProvider;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PolygonDataDownloader"/>
+        /// </summary>
+        /// <param name="apiKey">The Polygon.io API key</param>
+        public PolygonDataDownloader(string apiKey)
+        {
+            _historyProvider = new PolygonDataQueueHandler(apiKey, false);
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PolygonDataDownloader"/>
+        /// getting the Polygon.io API key from the configuration
+        /// </summary>
+        public PolygonDataDownloader()
+            : this(Config.Get("polygon-api-key"))
+        {
+        }
 
         /// <summary>
         /// Get historical data enumerable for a single symbol, type and resolution given this start and end time (in UTC).

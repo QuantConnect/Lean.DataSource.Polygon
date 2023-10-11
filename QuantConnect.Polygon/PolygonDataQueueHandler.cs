@@ -31,16 +31,16 @@ namespace QuantConnect.Polygon
 {
     public partial class PolygonDataQueueHandler : IDataQueueHandler
     {
-        private readonly int _maximumWebSocketConnections = Config.GetInt("polygon-max-websocket-connections", 7);
-        private readonly int _maximumSubscriptionsPerWebSocket = Config.GetInt("polygon-max-subscriptions-per-websocket", 1000);
+        private int _maximumWebSocketConnections;
+        private int _maximumSubscriptionsPerWebSocket;
 
-        private readonly string _apiKey = Config.Get("polygon-api-key");
+        private string _apiKey;
 
         private readonly ReadOnlyCollection<SecurityType> _supportedSecurityTypes = new List<SecurityType>() { SecurityType.Option }.AsReadOnly();
 
         private readonly PolygonAggregationManager _dataAggregator = new();
 
-        private readonly Dictionary<SecurityType, BrokerageMultiWebSocketSubscriptionManager> _subscriptionManagers;
+        private readonly Dictionary<SecurityType, BrokerageMultiWebSocketSubscriptionManager> _subscriptionManagers = new();
         private readonly List<PolygonWebSocketClientWrapper> _webSockets = new();
 
         private readonly PolygonSymbolMapper _symbolMapper = new();
@@ -51,21 +51,72 @@ namespace QuantConnect.Polygon
         private readonly ManualResetEvent _failedAuthenticationEvent = new(false);
         private readonly ManualResetEvent _subscribedEvent = new(false);
 
+        private bool _isInitialized;
+
         private bool _disposed;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
+        /// Creates a new instance of the <see cref="PolygonDataQueueHandler"/> class
         /// </summary>
+        public PolygonDataQueueHandler()
+        {
+        }
+
+        /// <summary>
+        /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
+        /// </summary>
+        /// <param name="apiKey">The Polygon.io API key for authentication</param>
+        /// <param name="maximumWebSocketConnections">The maximum websocket connections allowed</param>
+        /// <param name="maximumSubscriptionsPerWebSocket">The maximum number of subscriptions allowed per websocket</param>
         /// <param name="streamingEnabled">
         /// Whether this handle will be used for streaming data.
         /// If false, the handler is supposed to be used as a history provider only.
         /// </param>
-        public PolygonDataQueueHandler(bool streamingEnabled = true)
+        public PolygonDataQueueHandler(string apiKey, int maximumWebSocketConnections, int maximumSubscriptionsPerWebSocket,
+            bool streamingEnabled = true)
         {
+            Initialize(apiKey, maximumWebSocketConnections, maximumSubscriptionsPerWebSocket, streamingEnabled);
+        }
+
+        /// <summary>
+        /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
+        /// </summary>
+        /// <param name="apiKey">The Polygon API key for authentication</param>
+        /// <param name="streamingEnabled">
+        /// Whether this handle will be used for streaming data.
+        /// If false, the handler is supposed to be used as a history provider only.
+        /// </param>
+        public PolygonDataQueueHandler(string apiKey, bool streamingEnabled = true)
+        {
+            Initialize(apiKey,
+                Config.GetInt("polygon-max-websocket-connections", 5),
+                Config.GetInt("polygon-max-subscriptions-per-websocket", 1000),
+                streamingEnabled);
+        }
+
+        /// <summary>
+        /// Initializes the data queue handler with the passed parameters
+        /// </summary>
+        /// <param name="maximumWebSocketConnections">The maximum websocket connections allowed</param>
+        /// <param name="maximumSubscriptionsPerWebSocket">The maximum number of subscriptions allowed per websocket</param>
+        /// <param name="streamingEnabled">
+        private void Initialize(string apiKey, int maximumWebSocketConnections, int maximumSubscriptionsPerWebSocket, bool streamingEnabled)
+        {
+            if (_isInitialized)
+            {
+                return;
+            }
+
+            _apiKey = apiKey;
+            _maximumWebSocketConnections = Math.Max(maximumWebSocketConnections, 5);
+            _maximumSubscriptionsPerWebSocket = Math.Max(maximumSubscriptionsPerWebSocket, 1000);
+
+            // Data streaming is enable, configure the subscription managers
             if (streamingEnabled)
             {
-                _subscriptionManagers = _supportedSecurityTypes.ToDictionary(securityType => securityType,
-                    securityType => new BrokerageMultiWebSocketSubscriptionManager(
+                foreach (var securityType in _supportedSecurityTypes)
+                {
+                    _subscriptionManagers[securityType] = new BrokerageMultiWebSocketSubscriptionManager(
                         PolygonWebSocketClientWrapper.GetWebSocketUrl(securityType),
                         _maximumSubscriptionsPerWebSocket,
                         _maximumWebSocketConnections,
@@ -100,8 +151,11 @@ namespace QuantConnect.Polygon
                             var e = (TextMessage)webSocketMessage.Data;
                             OnMessage(e.Message);
                         },
-                        TimeSpan.Zero));
+                        TimeSpan.Zero);
+                }
             }
+
+            _isInitialized = true;
         }
 
         #region IDataQueueHandler implementation
@@ -118,6 +172,13 @@ namespace QuantConnect.Polygon
         /// <param name="job">Job we're subscribing for</param>
         public void SetJob(LiveNodePacket job)
         {
+            var maximumWebSocketConnections = Config.GetInt("polygon-max-websocket-connections", 5);
+            var maximumSubscriptionsPerWebSocket = Config.GetInt("polygon-max-subscriptions-per-websocket", 1000);
+            var streamingEnabled = Config.GetBool("polygon-streaming-enabled", true);
+
+            var apiKey = job.BrokerageData["api-key"];
+
+            Initialize(apiKey, maximumWebSocketConnections, maximumSubscriptionsPerWebSocket, streamingEnabled);
         }
 
         /// <summary>

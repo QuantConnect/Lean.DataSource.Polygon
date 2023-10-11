@@ -29,6 +29,8 @@ namespace QuantConnect.Tests.Polygon
     [Explicit("Tests are dependent on network and take long")]
     public class PolygonDataQueueHandlerTests
     {
+        private string _apiKey = Config.Get("polygon-api-key");
+
         [SetUp]
         public void Setup()
         {
@@ -39,7 +41,7 @@ namespace QuantConnect.Tests.Polygon
         [Test]
         public void CanSubscribeAndUnsubscribe()
         {
-            using var polygon = new PolygonDataQueueHandler();
+            using var polygon = new PolygonDataQueueHandler(_apiKey);
             var unsubscribed = false;
 
             var configs = GetConfigs().GroupBy(x => x.Symbol.Underlying, (key, group) => group.First());
@@ -107,7 +109,7 @@ namespace QuantConnect.Tests.Polygon
         [Test]
         public void IsConnectedReturnsTrueOnlyAfterAWebSocketConnectionIsOpen()
         {
-            using var polygon = new PolygonDataQueueHandler();
+            using var polygon = new PolygonDataQueueHandler(_apiKey);
 
             Assert.IsFalse(polygon.IsConnected);
 
@@ -126,9 +128,7 @@ namespace QuantConnect.Tests.Polygon
         [Test]
         public void ThrowsOnFailedAuthentication()
         {
-            Config.Set("polygon-api-key", "invalidapikey");
-
-            using var polygon = new PolygonDataQueueHandler();
+            using var polygon = new PolygonDataQueueHandler("invalidapikey");
 
             var config = GetConfigs()[0];
             Assert.Throws<PolygonFailedAuthenticationException>(() =>
@@ -140,7 +140,7 @@ namespace QuantConnect.Tests.Polygon
         [Test]
         public void StreamsDataForResolutionsHigherThanMinute()
         {
-            using var polygon = new PolygonDataQueueHandler();
+            using var polygon = new PolygonDataQueueHandler(_apiKey);
             var unsubscribed = false;
 
             var configs = GetConfigs().GroupBy(x => x.Symbol.Underlying, (key, group) => group.First());

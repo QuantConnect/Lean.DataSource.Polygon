@@ -33,13 +33,26 @@ namespace QuantConnect.Polygon
 
         private int _dataPointCount;
 
+        /// <summary>
+        /// Gets the total number of data points emitted by this history provider
+        /// </summary>
         public override int DataPointCount => _dataPointCount;
 
+        /// <summary>
+        /// Initializes this history provider to work for the specified job
+        /// </summary>
+        /// <param name="parameters">The initialization parameters</param>
         public override void Initialize(HistoryProviderInitializeParameters parameters)
         {
         }
 
-        public override IEnumerable<Slice> GetHistory(IEnumerable<Data.HistoryRequest> requests, DateTimeZone sliceTimeZone)
+        /// <summary>
+        /// Gets the history for the requested securities
+        /// </summary>
+        /// <param name="requests">The historical data requests</param>
+        /// <param name="sliceTimeZone">The time zone used when time stamping the slice instances</param>
+        /// <returns>An enumerable of the slices of data covering the span specified in each request</returns>
+        public override IEnumerable<Slice> GetHistory(IEnumerable<HistoryRequest> requests, DateTimeZone sliceTimeZone)
         {
             var subscriptions = new List<Subscription>();
             foreach (var request in requests)
@@ -63,6 +76,9 @@ namespace QuantConnect.Polygon
             return ProcessHistoryRequest(request);
         }
 
+        /// <summary>
+        /// Processes the history request, filtering and making sure it can be served.
+        /// </summary>
         private IEnumerable<BaseData> ProcessHistoryRequest(HistoryRequest request)
         {
             if (string.IsNullOrWhiteSpace(_apiKey))
@@ -103,6 +119,9 @@ namespace QuantConnect.Polygon
             }
         }
 
+        /// <summary>
+        /// Gets the trade bars for the specified history request
+        /// </summary>
         private IEnumerable<TradeBar> GetTradeBars(HistoryRequest request)
         {
             var historyTimespan = GetHistoryTimespan(request.Resolution);
@@ -136,6 +155,9 @@ namespace QuantConnect.Polygon
             }
         }
 
+        /// <summary>
+        /// Downloads data and tries to parse the JSON response data into the specified type
+        /// </summary>
         protected virtual T DownloadAndParseData<T>(string url)
         {
             var result = url.DownloadData();
@@ -161,6 +183,9 @@ namespace QuantConnect.Polygon
             return result == null ? default : JsonConvert.DeserializeObject<T>(result);
         }
 
+        /// <summary>
+        /// Converts the given resolution into the corresponding timespan for the Polygon.io API
+        /// </summary>
         private static string GetHistoryTimespan(Resolution resolution)
         {
             switch (resolution)

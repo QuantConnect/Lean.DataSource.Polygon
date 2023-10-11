@@ -46,9 +46,10 @@ namespace QuantConnect.Tests.Polygon
 
             return new[]
             {
-                // long requests
                 new TestCaseData(optionSymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(100)),
-                new TestCaseData(optionSymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(200))
+                new TestCaseData(optionSymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(200)),
+                new TestCaseData(optionSymbol, Resolution.Hour, TickType.Trade, TimeSpan.FromDays(365)),
+                new TestCaseData(optionSymbol, Resolution.Daily, TickType.Trade, TimeSpan.FromDays(3650))
             };
         }
 
