@@ -178,7 +178,12 @@ namespace QuantConnect.Polygon
             var maximumSubscriptionsPerWebSocket = Config.GetInt("polygon-max-subscriptions-per-websocket", 1000);
             var streamingEnabled = Config.GetBool("polygon-streaming-enabled", true);
 
-            var apiKey = job.BrokerageData["api-key"];
+            var apiKey = _apiKey;
+            if (string.IsNullOrEmpty(_apiKey) && !job.BrokerageData.TryGetValue("polygon-api-key", out apiKey))
+            {
+                // Last resort is config
+                apiKey = Config.Get("polygon-api-key", "");
+            }
 
             Initialize(apiKey, maximumWebSocketConnections, maximumSubscriptionsPerWebSocket, streamingEnabled);
         }
