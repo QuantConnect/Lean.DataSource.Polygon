@@ -17,29 +17,56 @@ using Newtonsoft.Json;
 
 namespace QuantConnect.Polygon
 {
+    /// <summary>
+    /// Models a Polygon.io REST API message containing a list of aggregates
+    /// </summary>
     public class AggregatesResponse
     {
+        /// <summary>
+        /// The symbol that the aggregates are for
+        /// </summary>
         [JsonProperty("ticker")]
         public string Ticker { get; set; }
 
+        /// <summary>
+        /// The status of the response
+        /// </summary>
         [JsonProperty("status")]
         public string Status { get; set; }
 
+        /// <summary>
+        /// The number of aggregates used to generate the response
+        /// </summary>
         [JsonProperty("queryCount")]
         public int QueryCount { get; set; }
 
+        /// <summary>
+        /// The total number of results for the request
+        /// </summary>
         [JsonProperty("resultsCount")]
         public int ResultsCount { get; set; }
 
+        /// <summary>
+        /// Whether or not the data was adjusted for splits.
+        /// </summary>
         [JsonProperty("adjusted")]
         public bool Adjusted { get; set; }
 
+        /// <summary>
+        /// A request id assigned by the Polygon.io server.
+        /// </summary>
         [JsonProperty("request_id")]
         public string RequestId { get; set; }
 
+        /// <summary>
+        /// The list of aggregates
+        /// </summary>
         [JsonProperty("results")]
         public List<SingleResponseAggregate> Results { get; set; }
 
+        /// <summary>
+        /// The URL to the next page of results. This is null if there are no more results.
+        /// </summary>
         [JsonProperty("next_url")]
         public string NextUrl { get; set; }
     }

@@ -29,14 +29,16 @@ using static QuantConnect.Brokerages.WebSocketClientWrapper;
 
 namespace QuantConnect.Polygon
 {
+    /// <summary>
+    /// Polygon.io implementation of <see cref="IDataQueueHandler"/> and <see cref="IHistoryProvider"/>
+    /// </summary>
     public partial class PolygonDataQueueHandler : IDataQueueHandler
     {
         private int _maximumWebSocketConnections;
         private int _maximumSubscriptionsPerWebSocket;
-
         private string _apiKey;
 
-        private readonly ReadOnlyCollection<SecurityType> _supportedSecurityTypes = new List<SecurityType>() { SecurityType.Option }.AsReadOnly();
+        private readonly ReadOnlyCollection<SecurityType> _supportedSecurityTypes = Array.AsReadOnly(new[] { SecurityType.Option });
 
         private readonly PolygonAggregationManager _dataAggregator = new();
 
@@ -56,7 +58,7 @@ namespace QuantConnect.Polygon
         private bool _disposed;
 
         /// <summary>
-        /// Creates a new instance of the <see cref="PolygonDataQueueHandler"/> class
+        /// Creates a new instance of the <see cref="PolygonDataQueueHandler"/> class without initializing it
         /// </summary>
         public PolygonDataQueueHandler()
         {
@@ -87,11 +89,11 @@ namespace QuantConnect.Polygon
         /// If false, the handler is supposed to be used as a history provider only.
         /// </param>
         public PolygonDataQueueHandler(string apiKey, bool streamingEnabled = true)
-        {
-            Initialize(apiKey,
+            : this(apiKey,
                 Config.GetInt("polygon-max-websocket-connections", 5),
                 Config.GetInt("polygon-max-subscriptions-per-websocket", 1000),
-                streamingEnabled);
+                streamingEnabled)
+        {
         }
 
         /// <summary>
@@ -253,6 +255,7 @@ namespace QuantConnect.Polygon
                     }
                 }
                 _dataAggregator.DisposeSafely();
+                HistoryRateLimiter.DisposeSafely();
 
                 _disposed = true;
             }
@@ -271,6 +274,9 @@ namespace QuantConnect.Polygon
 
         #endregion
 
+        /// <summary>
+        /// Handles Polygon.io websocket messages
+        /// </summary>
         private void OnMessage(string message)
         {
             foreach (var parsedMessage in JArray.Parse(message))
@@ -293,6 +299,9 @@ namespace QuantConnect.Polygon
             }
         }
 
+        /// <summary>
+        /// Processes an option aggregate event message handling the incoming bar
+        /// </summary>
         private void ProcessOptionAggregate(AggregateMessage aggregate)
         {
             var symbol = _symbolMapper.GetLeanOptionSymbol(aggregate.Symbol);
@@ -303,6 +312,9 @@ namespace QuantConnect.Polygon
             _dataAggregator.Update(bar);
         }
 
+        /// <summary>
+        /// Processes status message
+        /// </summary>
         private void ProcessStatusMessage(JToken jStatusMessage)
         {
             var jstatus = jStatusMessage["status"];
@@ -331,6 +343,9 @@ namespace QuantConnect.Polygon
             }
         }
 
+        /// <summary>
+        /// Converts the given UTC timestamp into the symbol security exchange time zone
+        /// </summary>
         private DateTime GetTickTime(Symbol symbol, long timestamp)
         {
             var utcTime = Time.UnixMillisecondTimeStampToDateTime(timestamp);
@@ -338,6 +353,9 @@ namespace QuantConnect.Polygon
             return GetTickTime(symbol, utcTime);
         }
 
+        /// <summary>
+        /// Converts the given UTC time into the symbol security exchange time zone
+        /// </summary>
         private DateTime GetTickTime(Symbol symbol, DateTime utcTime)
         {
             if (!_symbolExchangeTimeZones.TryGetValue(symbol, out var exchangeTimeZone))

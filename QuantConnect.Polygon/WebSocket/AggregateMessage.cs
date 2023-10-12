@@ -17,48 +17,86 @@ using Newtonsoft.Json;
 
 namespace QuantConnect.Polygon
 {
+    /// <summary>
+    /// Models a Polygon.io WebSocket aggregates API message
+    /// </summary>
     public class AggregateMessage : BaseMessage
     {
+        /// <summary>
+        /// The symbol these aggregates are for
+        /// </summary>
         [JsonProperty("sym")]
         public string Symbol { get; set; }
 
+        /// <summary>
+        /// The tick volume
+        /// </summary>
         [JsonProperty("v")]
         public long Volume { get; set; }
 
+        /// <summary>
+        /// Today's accumulated volume
+        /// </summary>
         [JsonProperty("av")]
         public long DayAccumulatedVolume { get; set; }
 
+        /// <summary>
+        /// Today's official opening price
+        /// </summary>
         [JsonProperty("op")]
         public decimal DayOpen { get; set; }
 
+        /// <summary>
+        /// The volume-weighted average value for the aggregate window
+        /// </summary>
         [JsonProperty("vw")]
         public decimal VolumeWeightedAveragePrice { get; set; }
 
+        /// <summary>
+        /// The open price for the symbol in this aggregate
+        /// </summary>
         [JsonProperty("o")]
         public decimal Open { get; set; }
 
-        [JsonProperty("c")]
-        public decimal Close { get; set; }
-
+        /// <summary>
+        /// The highest price for the symbol in this aggregate
+        /// </summary>
         [JsonProperty("h")]
         public decimal High { get; set; }
 
+        /// <summary>
+        /// The lowest price for the symbol in this aggregate
+        /// </summary>
         [JsonProperty("l")]
         public decimal Low { get; set; }
 
+        /// <summary>
+        /// The close price for the symbol in this aggregate
+        [JsonProperty("c")]
+        public decimal Close { get; set; }
+
+        /// <summary>
+        /// Today's volume weighted average price
+        /// </summary>
         [JsonProperty("a")]
         public decimal DayVolumeWeightedAveragePrice { get; set; }
 
+        /// <summary>
+        /// The average trade size for this aggregate window
+        /// </summary>
         [JsonProperty("z")]
         public long AverageTradeSize { get; set; }
 
+        /// <summary>
+        /// The timestamp of the starting tick for this aggregate window in Unix Milliseconds
+        /// </summary>
         [JsonProperty("s")]
         public long StartingTickTimestamp { get; set; }
 
+        /// <summary>
+        /// The timestamp of the ending tick for this aggregate window in Unix Milliseconds
+        /// </summary>
         [JsonProperty("e")]
         public long EndingTickTimestamp { get; set; }
-
-        [JsonProperty("otc")]
-        public bool IsOTC { get; set; }
     }
 }

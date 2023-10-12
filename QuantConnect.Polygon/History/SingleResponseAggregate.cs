@@ -17,23 +17,44 @@ using Newtonsoft.Json;
 
 namespace QuantConnect.Polygon
 {
+    /// <summary>
+    /// Models a single aggregate bar from a Polygon.io REST API response
+    /// </summary>
     public class SingleResponseAggregate
     {
+        /// <summary>
+        /// Open price of the aggregate window
+        /// </summary>
         [JsonProperty("o")]
         public decimal Open { get; set; }
 
+        /// <summary>
+        /// High price of the aggregate window
+        /// </summary>
         [JsonProperty("h")]
         public decimal High { get; set; }
 
+        /// <summary>
+        /// Low price of the aggregate window
+        /// </summary>
         [JsonProperty("l")]
         public decimal Low { get; set; }
 
+        /// <summary>
+        /// Close price of the aggregate window
+        /// </summary>
         [JsonProperty("c")]
         public decimal Close { get; set; }
 
+        /// <summary>
+        /// Volume of the aggregate window
+        /// </summary>
         [JsonProperty("v")]
         public decimal Volume { get; set; }
 
+        /// <summary>
+        /// Starting Timestamp of the aggregate window
+        /// </summary>
         [JsonProperty("t")]
         public long Timestamp { get; set; }
     }

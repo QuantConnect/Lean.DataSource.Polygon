@@ -21,8 +21,7 @@ using QuantConnect.Lean.Engine.DataFeeds;
 namespace QuantConnect.Polygon
 {
     /// <summary>
-    /// Aggregates ticks and bars based on given subscriptions.
-    /// Current implementation is based on <see cref="AggregationManager"/> and adds special handling to aggregate <see cref="TradeBar"/> data.
+    /// Aggregates Polygon.io trade bars into same or higher resolution bars
     /// </summary>
     public class PolygonAggregationManager : AggregationManager
     {

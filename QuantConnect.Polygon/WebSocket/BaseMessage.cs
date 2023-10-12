@@ -17,11 +17,20 @@ using Newtonsoft.Json;
 
 namespace QuantConnect.Polygon
 {
+    /// <summary>
+    /// Base Polygon.io WebSocket response message properties
+    /// </summary>
     public class BaseMessage
     {
+        /// <summary>
+        /// The type of event this message represents (e.g. "AM" for minute aggregates)
+        /// </summary>
         [JsonProperty("ev")]
         public string EventType { get; set; }
 
+        /// <summary>
+        /// The message timestamp in milliseconds since Unix Epoch
+        /// </summary>
         [JsonProperty("t")]
         public long Timestamp { get; set; }
     }

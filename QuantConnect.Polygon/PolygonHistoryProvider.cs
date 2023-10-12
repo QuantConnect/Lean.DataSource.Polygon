@@ -32,7 +32,7 @@ namespace QuantConnect.Polygon
         private const string HistoryBaseUrl = "https://api.polygon.io/v2";
         private readonly int AggregateDataResponseLimit = Config.GetInt("polygon-aggregate-response-limit", 5000);
 
-        protected virtual RateGate HistoryRateLimiter { get; } = new(300, TimeSpan.FromSeconds(1));
+        protected virtual RateGate HistoryRateLimiter => new(300, TimeSpan.FromSeconds(1));
 
         private int _dataPointCount;
 
