@@ -151,7 +151,7 @@ namespace QuantConnect.Tests.Polygon
                 DataNormalizationMode.Adjusted,
                 tickType);
 
-            using var historyProvider = new TestPolygonHistoryProvider(_apiKey);
+            using var historyProvider = new TestPolygonHistoryProvider();
             historyProvider.ResponseLimit = responseLimit;
             historyProvider.SetHistoryRequest(request);
 
@@ -185,7 +185,7 @@ namespace QuantConnect.Tests.Polygon
         [TestCaseSource(nameof(UssuportedSecurityTypesResolutionsAndTickTypesTestCases))]
         public void ReturnsEmptyForUnsupportedSecurityTypeResolutionOrTickType(Symbol symbol, Resolution resolution, TickType tickType)
         {
-            using var historyProvider = new TestPolygonHistoryProvider(_apiKey);
+            using var historyProvider = new TestPolygonHistoryProvider();
             var request = CreateHistoryRequest(symbol, resolution, tickType, TimeSpan.FromDays(100));
             var history = historyProvider.GetHistory(request).ToList();
 
@@ -262,7 +262,7 @@ namespace QuantConnect.Tests.Polygon
 
             public int ApiCallsCount { get; private set; }
 
-            public TestPolygonHistoryProvider(string apiKey) : base(apiKey, false) { }
+            public TestPolygonHistoryProvider() : base("test-api-key", false) { }
 
             public void SetHistoryRequest(HistoryRequest request)
             {
