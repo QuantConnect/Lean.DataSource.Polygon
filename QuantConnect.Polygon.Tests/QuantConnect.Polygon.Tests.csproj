@@ -6,10 +6,10 @@
 		<IsPackable>false</IsPackable>
 	    <TestProjectType>UnitTest</TestProjectType>
 	    <OutputPath>bin\$(Configuration)\</OutputPath>
-	    <Product>QuantConnect.BinanceBrokerage.Tests</Product>
-	    <AssemblyName>QuantConnect.BinanceBrokerage.Tests</AssemblyName>
-	    <RootNamespace>QuantConnect.BinanceBrokerage.Tests</RootNamespace>
-	    <AssemblyTitle>QuantConnect.BinanceBrokerage.Tests</AssemblyTitle>
+	    <Product>QuantConnect.Polygon.Tests</Product>
+	    <AssemblyName>QuantConnect.Polygon.Tests</AssemblyName>
+	    <RootNamespace>QuantConnect.Polygon.Tests</RootNamespace>
+	    <AssemblyTitle>QuantConnect.Polygon.Tests</AssemblyTitle>
 	    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 	</PropertyGroup>
 

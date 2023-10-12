@@ -7,8 +7,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "QuantConnect.Polygon", "Qua
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "QuantConnect.Polygon.Tests", "QuantConnect.Polygon.Tests\QuantConnect.Polygon.Tests.csproj", "{0CC63603-4D32-4B78-9C3B-EE1162D269B3}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PolygonApp", "PolygonApp\PolygonApp.csproj", "{5E4236DB-9CC0-4094-8609-A7464112D16E}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "QuantConnect.Brokerages", "..\Lean\Brokerages\QuantConnect.Brokerages.csproj", "{C336280C-5F42-4369-B90F-F72107A35DF1}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "QuantConnect", "..\Lean\Common\QuantConnect.csproj", "{D17813A8-658B-481D-9504-1F73F11B8416}"
@@ -31,10 +29,6 @@ Global
 		{0CC63603-4D32-4B78-9C3B-EE1162D269B3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0CC63603-4D32-4B78-9C3B-EE1162D269B3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0CC63603-4D32-4B78-9C3B-EE1162D269B3}.Release|Any CPU.Build.0 = Release|Any CPU
-		{5E4236DB-9CC0-4094-8609-A7464112D16E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{5E4236DB-9CC0-4094-8609-A7464112D16E}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{5E4236DB-9CC0-4094-8609-A7464112D16E}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{5E4236DB-9CC0-4094-8609-A7464112D16E}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C336280C-5F42-4369-B90F-F72107A35DF1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C336280C-5F42-4369-B90F-F72107A35DF1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C336280C-5F42-4369-B90F-F72107A35DF1}.Release|Any CPU.ActiveCfg = Release|Any CPU
