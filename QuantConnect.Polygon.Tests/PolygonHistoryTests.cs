@@ -25,6 +25,8 @@ using Microsoft.CodeAnalysis;
 using Newtonsoft.Json;
 using QuantConnect.Configuration;
 using System.Diagnostics;
+using System;
+using System.Linq;
 
 namespace QuantConnect.Tests.Polygon
 {

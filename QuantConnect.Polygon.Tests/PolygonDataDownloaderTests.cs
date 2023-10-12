@@ -15,14 +15,13 @@
 */
 
 using NUnit.Framework;
-using QuantConnect.Data;
-using QuantConnect.Data.Market;
 using QuantConnect.Logging;
 using QuantConnect.Polygon;
 using QuantConnect.Securities;
 using QuantConnect.Util;
 using Microsoft.CodeAnalysis;
-using Newtonsoft.Json;
+using System;
+using System.Linq;
 
 namespace QuantConnect.Tests.Polygon
 {

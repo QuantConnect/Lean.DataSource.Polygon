@@ -15,9 +15,8 @@
 */
 
 using NUnit.Framework;
-using QuantConnect.Data;
-using QuantConnect.Logging;
 using QuantConnect.Polygon;
+using System;
 
 namespace QuantConnect.Tests.Polygon
 {

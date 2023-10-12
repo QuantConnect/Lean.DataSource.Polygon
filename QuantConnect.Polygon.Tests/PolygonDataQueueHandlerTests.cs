@@ -22,6 +22,11 @@ using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 using QuantConnect.Logging;
 using QuantConnect.Polygon;
 using QuantConnect.Util;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace QuantConnect.Tests.Polygon
 {
