@@ -91,7 +91,7 @@ namespace QuantConnect.Polygon
 
         private void OnError(object? sender, WebSocketError e)
         {
-            Log.Error(e.Message);
+            Log.Error($"PolygonWebSocketClientWrapper.OnError(): {e.Message}");
         }
 
         private void OnMessage(object? sender, WebSocketMessage webSocketMessage)
@@ -102,12 +102,12 @@ namespace QuantConnect.Polygon
 
         private void OnClosed(object? sender, WebSocketCloseData e)
         {
-            Log.Trace($"PolygonDataQueueHandler.OnClosed({_securityType}): {e.Reason}");
+            Log.Trace($"PolygonWebSocketClientWrapper.OnClosed(): {_securityType} - {e.Reason}");
         }
 
         private void OnOpen(object? sender, EventArgs e)
         {
-            Log.Trace($"PolygonDataQueueHandler.OnOpen({_securityType}): connection open");
+            Log.Trace($"PolygonWebSocketClientWrapper.OnOpen(): {_securityType} - connection open");
 
             Send(JsonConvert.SerializeObject(new
             {

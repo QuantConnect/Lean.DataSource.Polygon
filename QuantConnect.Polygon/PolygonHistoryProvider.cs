@@ -76,14 +76,6 @@ namespace QuantConnect.Polygon
         /// <returns>An enumerable of BaseData points</returns>
         public IEnumerable<BaseData> GetHistory(HistoryRequest request)
         {
-            return ProcessHistoryRequest(request);
-        }
-
-        /// <summary>
-        /// Processes the history request, filtering and making sure it can be served.
-        /// </summary>
-        private IEnumerable<BaseData> ProcessHistoryRequest(HistoryRequest request)
-        {
             if (string.IsNullOrWhiteSpace(_apiKey))
             {
                 Log.Error("PolygonDataQueueHandler.GetHistory(): History calls for Polygon.io require an API key.");
@@ -93,25 +85,25 @@ namespace QuantConnect.Polygon
             // check security type
             if (!_supportedSecurityTypes.Contains(request.Symbol.SecurityType))
             {
-                Log.Error($"PolygonDataQueueHandler.ProcessHistoryRequests(): Unsupported security type: {request.Symbol.SecurityType}.");
+                Log.Error($"PolygonDataQueueHandler.GetHistorys(): Unsupported security type: {request.Symbol.SecurityType}.");
                 yield break;
             }
 
             // we only support minute, hour and daily resolution for option data
             if (request.Resolution < Resolution.Minute)
             {
-                Log.Error($"PolygonDataQueueHandler.ProcessHistoryRequests(): Unsupported resolution: {request.Resolution}.");
+                Log.Error($"PolygonDataQueueHandler.GetHistorys(): Unsupported resolution: {request.Resolution}.");
                 yield break;
             }
 
             // check tick type
             if (request.TickType != TickType.Trade)
             {
-                Log.Error($"PolygonDataQueueHandler.ProcessHistoryRequests(): Unsupported tick type: {request.TickType}.");
+                Log.Error($"PolygonDataQueueHandler.GetHistorys(): Unsupported tick type: {request.TickType}.");
                 yield break;
             }
 
-            Log.Trace("PolygonDataQueueHandler.ProcessHistoryRequests(): Submitting request: " +
+            Log.Trace("PolygonDataQueueHandler.GetHistory(): Submitting request: " +
                 Invariant($"{request.Symbol.SecurityType}-{request.TickType}-{request.Symbol.Value}: {request.Resolution} {request.StartTimeUtc}->{request.EndTimeUtc}"));
 
             foreach (var tradeBar in GetTradeBars(request))
@@ -165,7 +157,7 @@ namespace QuantConnect.Polygon
         {
             if (HistoryRateLimiter.IsRateLimited)
             {
-                Log.Trace("Polygon history requests are limited to 300 per second.");
+                Log.Trace("PolygonDataQueueHandler.DownloadAndParseData(): Polygon history requests are limited to 300 per second.");
             }
             HistoryRateLimiter.WaitToProceed();
 
@@ -185,7 +177,7 @@ namespace QuantConnect.Polygon
 
             if (!success)
             {
-                Log.Debug($"No data for {url}. Reason: {result}");
+                Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No data for {url}. Reason: {result}");
                 return default;
             }
 
@@ -209,7 +201,7 @@ namespace QuantConnect.Polygon
                     return "minute";
 
                 default:
-                    throw new Exception($"PolygonDataQueueHandler.GetHistoryTimespan(): unsupported resolution: {resolution}.");
+                    throw new Exception($"Unsupported resolution: {resolution}.");
             }
         }
     }
