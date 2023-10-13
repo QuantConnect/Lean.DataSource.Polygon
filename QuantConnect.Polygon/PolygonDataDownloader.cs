@@ -27,6 +27,8 @@ namespace QuantConnect.Polygon
     {
         private readonly PolygonDataQueueHandler _historyProvider;
 
+        private readonly MarketHoursDatabase _marketHoursDatabase;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="PolygonDataDownloader"/>
         /// </summary>
@@ -34,6 +36,7 @@ namespace QuantConnect.Polygon
         public PolygonDataDownloader(string apiKey)
         {
             _historyProvider = new PolygonDataQueueHandler(apiKey, false);
+            _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
         }
 
         /// <summary>
@@ -69,6 +72,8 @@ namespace QuantConnect.Polygon
             }
 
             var dataType = LeanData.GetDataType(resolution, tickType);
+            var exchangeHours = _marketHoursDatabase.GetExchangeHours(symbol.ID.Market, symbol, symbol.SecurityType);
+            var dataTimeZone = _marketHoursDatabase.GetDataTimeZone(symbol.ID.Market, symbol, symbol.SecurityType);
 
             var historyRequest =
                 new HistoryRequest(startUtc,
@@ -76,12 +81,12 @@ namespace QuantConnect.Polygon
                     dataType,
                     symbol,
                     resolution,
-                    SecurityExchangeHours.AlwaysOpen(TimeZones.NewYork),
-                    TimeZones.NewYork,
+                    exchangeHours,
+                    dataTimeZone,
                     resolution,
                     true,
                     false,
-                    DataNormalizationMode.Adjusted,
+                    DataNormalizationMode.Raw,
                     tickType);
 
             foreach (var baseData in _historyProvider.GetHistory(historyRequest))

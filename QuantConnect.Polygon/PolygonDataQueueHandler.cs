@@ -58,9 +58,28 @@ namespace QuantConnect.Polygon
         private bool _disposed;
 
         /// <summary>
-        /// Creates a new instance of the <see cref="PolygonDataQueueHandler"/> class without initializing it
+        /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
         /// </summary>
         public PolygonDataQueueHandler()
+            : this(Config.Get("polygon-api-key"),
+                Config.GetInt("polygon-max-websocket-connections", 5),
+                Config.GetInt("polygon-max-subscriptions-per-websocket", 1000))
+        {
+        }
+
+        /// <summary>
+        /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
+        /// </summary>
+        /// <param name="apiKey">The Polygon API key for authentication</param>
+        /// <param name="streamingEnabled">
+        /// Whether this handle will be used for streaming data.
+        /// If false, the handler is supposed to be used as a history provider only.
+        /// </param>
+        public PolygonDataQueueHandler(string apiKey, bool streamingEnabled = true)
+            : this(apiKey,
+                Config.GetInt("polygon-max-websocket-connections", 5),
+                Config.GetInt("polygon-max-subscriptions-per-websocket", 1000),
+                streamingEnabled)
         {
         }
 
@@ -78,22 +97,6 @@ namespace QuantConnect.Polygon
             bool streamingEnabled = true)
         {
             Initialize(apiKey, maximumWebSocketConnections, maximumSubscriptionsPerWebSocket, streamingEnabled);
-        }
-
-        /// <summary>
-        /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
-        /// </summary>
-        /// <param name="apiKey">The Polygon API key for authentication</param>
-        /// <param name="streamingEnabled">
-        /// Whether this handle will be used for streaming data.
-        /// If false, the handler is supposed to be used as a history provider only.
-        /// </param>
-        public PolygonDataQueueHandler(string apiKey, bool streamingEnabled = true)
-            : this(apiKey,
-                Config.GetInt("polygon-max-websocket-connections", 5),
-                Config.GetInt("polygon-max-subscriptions-per-websocket", 1000),
-                streamingEnabled)
-        {
         }
 
         /// <summary>
@@ -174,19 +177,7 @@ namespace QuantConnect.Polygon
         /// <param name="job">Job we're subscribing for</param>
         public void SetJob(LiveNodePacket job)
         {
-            var maximumWebSocketConnections = Config.GetInt("polygon-max-websocket-connections", 5);
-            var maximumSubscriptionsPerWebSocket = Config.GetInt("polygon-max-subscriptions-per-websocket", 1000);
-            var streamingEnabled = Config.GetBool("polygon-streaming-enabled", true);
-
-            var apiKey = _apiKey;
-            if (string.IsNullOrEmpty(_apiKey) && !job.BrokerageData.TryGetValue("polygon-api-key", out apiKey))
-            {
-                // Last resort is config
-                apiKey = Config.Get("polygon-api-key", "");
             }
-
-            Initialize(apiKey, maximumWebSocketConnections, maximumSubscriptionsPerWebSocket, streamingEnabled);
-        }
 
         /// <summary>
         /// Subscribe to the specified configuration
