@@ -18,6 +18,7 @@ using NUnit.Framework;
 using QuantConnect.Configuration;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
+using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 using QuantConnect.Logging;
 using QuantConnect.Polygon;
@@ -185,7 +186,8 @@ namespace QuantConnect.Tests.Polygon
 
             var configs = GetConfigs();
 
-            for (var i = 0; i < maxWebSocketConnections * maxSubscriptionsPerWebSocket; i++)
+            var i = 0;
+            for (; i < maxWebSocketConnections * maxSubscriptionsPerWebSocket; i++)
             {
                 var config = configs[i];
                 Assert.DoesNotThrow(() => polygon.Subscribe(config, (sender, args) => { }),
@@ -201,7 +203,61 @@ namespace QuantConnect.Tests.Polygon
             Assert.That(polygon.SubscriptionManager.WebSocketConnectionsCount, Is.EqualTo(maxWebSocketConnections));
             Assert.That(polygon.SubscriptionManager.TotalSubscriptionsCount, Is.EqualTo(maxWebSocketConnections * maxSubscriptionsPerWebSocket));
 
-            Assert.Throws<NotSupportedException>(() => polygon.Subscribe(configs.Last(), (sender, args) => { }));
+            Assert.Throws<NotSupportedException>(() => polygon.Subscribe(configs[i], (sender, args) => { }));
+        }
+
+        [Test]
+        public void StressTest()
+        {
+            const int maxWebSocketConnections = 5;
+            const int maxOptionsSubscriptionsPerWebSocket = 999;
+            const int maxSubscriptions = maxWebSocketConnections * maxOptionsSubscriptionsPerWebSocket;
+
+            using var polygon = new PolygonDataQueueHandler(_apiKey, maxWebSocketConnections, maxOptionsSubscriptionsPerWebSocket);
+            var optionChainProvider = new LiveOptionChainProvider(TestGlobals.DataCacheProvider, TestGlobals.MapFileProvider);
+
+            var underlyingTickers = new[] { "SPY", "AAPL", "GOOG", "IBM" };
+            var subscriptionsCount = 0;
+
+            foreach (var underlyingTicker in underlyingTickers)
+            {
+                var underlyingSymbol = Symbol.Create(underlyingTicker, SecurityType.Equity, Market.USA);
+                var optionChain = optionChainProvider.GetOptionContractList(underlyingSymbol, DateTime.UtcNow);
+
+                foreach (var optionSymbol in optionChain)
+                {
+                    var config = GetSubscriptionDataConfig<TradeBar>(
+                        Symbol.CreateOption(
+                            underlyingSymbol,
+                            Market.USA,
+                            OptionStyle.American,
+                            optionSymbol.ID.OptionRight,
+                            optionSymbol.ID.StrikePrice,
+                            optionSymbol.ID.Date),
+                        Resolution.Minute);
+
+                    Assert.DoesNotThrow(() => polygon.Subscribe(config, (sender, args) =>
+                    {
+                        var dataPoint = ((NewDataAvailableEventArgs)args).DataPoint;
+                        Log.Trace(dataPoint.ToString());
+                    }));
+
+                    if (++subscriptionsCount >= maxSubscriptions)
+                    {
+                        Log.Trace($"Subscribed to {subscriptionsCount} options");
+                        break;
+                    }
+                }
+
+                if (subscriptionsCount >= maxSubscriptions)
+                {
+                    break;
+                }
+            }
+
+            Thread.Sleep(1000 * 60 * 3);
+
+            polygon.DisposeSafely();
         }
 
         private SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)

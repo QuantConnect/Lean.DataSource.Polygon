@@ -63,7 +63,7 @@ namespace QuantConnect.Polygon
         public PolygonDataQueueHandler()
             : this(Config.Get("polygon-api-key"),
                 Config.GetInt("polygon-max-websocket-connections", 5),
-                Config.GetInt("polygon-max-options-subscriptions-per-websocket", 1000))
+                Config.GetInt("polygon-max-options-subscriptions-per-websocket", 999))
         {
         }
 
@@ -78,7 +78,7 @@ namespace QuantConnect.Polygon
         public PolygonDataQueueHandler(string apiKey, bool streamingEnabled = true)
             : this(apiKey,
                 Config.GetInt("polygon-max-websocket-connections", 5),
-                Config.GetInt("polygon-max-options-subscriptions-per-websocket", 1000),
+                Config.GetInt("polygon-max-options-subscriptions-per-websocket", 999),
                 streamingEnabled)
         {
         }
@@ -98,7 +98,7 @@ namespace QuantConnect.Polygon
         {
             _apiKey = apiKey;
             _maximumWebSocketConnections = Math.Min(maximumWebSocketConnections, 5);
-            _maximumOptionsSubscriptionsPerWebSocket = Math.Min(maximumOptionsSubscriptionsPerWebSocket, 1000);
+            _maximumOptionsSubscriptionsPerWebSocket = Math.Min(maximumOptionsSubscriptionsPerWebSocket, 999);
 
             if (streamingEnabled)
             {
