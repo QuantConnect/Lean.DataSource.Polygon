@@ -15,7 +15,6 @@
 
 using Newtonsoft.Json.Linq;
 using NodaTime;
-using QuantConnect.Brokerages;
 using QuantConnect.Configuration;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
@@ -35,15 +34,14 @@ namespace QuantConnect.Polygon
     public partial class PolygonDataQueueHandler : IDataQueueHandler, IDataQueueUniverseProvider
     {
         private int _maximumWebSocketConnections;
-        private int _maximumSubscriptionsPerWebSocket;
+        private int _maximumOptionsSubscriptionsPerWebSocket;
         private string _apiKey;
 
         private readonly ReadOnlyCollection<SecurityType> _supportedSecurityTypes = Array.AsReadOnly(new[] { SecurityType.Option });
 
         private readonly PolygonAggregationManager _dataAggregator = new();
 
-        private readonly Dictionary<SecurityType, BrokerageMultiWebSocketSubscriptionManager> _subscriptionManagers = new();
-        private readonly List<PolygonWebSocketClientWrapper> _webSockets = new();
+        protected readonly PolygonSubscriptionManager _subscriptionManager;
 
         private readonly PolygonSymbolMapper _symbolMapper = new();
         private readonly MarketHoursDatabase _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
@@ -55,8 +53,6 @@ namespace QuantConnect.Polygon
 
         private IOptionChainProvider _optionChainProvider;
 
-        private bool _isInitialized;
-
         private bool _disposed;
 
         protected virtual ITimeProvider TimeProvider => RealTimeProvider.Instance;
@@ -67,7 +63,7 @@ namespace QuantConnect.Polygon
         public PolygonDataQueueHandler()
             : this(Config.Get("polygon-api-key"),
                 Config.GetInt("polygon-max-websocket-connections", 5),
-                Config.GetInt("polygon-max-subscriptions-per-websocket", 1000))
+                Config.GetInt("polygon-max-options-subscriptions-per-websocket", 1000))
         {
         }
 
@@ -82,7 +78,7 @@ namespace QuantConnect.Polygon
         public PolygonDataQueueHandler(string apiKey, bool streamingEnabled = true)
             : this(apiKey,
                 Config.GetInt("polygon-max-websocket-connections", 5),
-                Config.GetInt("polygon-max-subscriptions-per-websocket", 1000),
+                Config.GetInt("polygon-max-options-subscriptions-per-websocket", 1000),
                 streamingEnabled)
         {
         }
@@ -97,52 +93,24 @@ namespace QuantConnect.Polygon
         /// Whether this handle will be used for streaming data.
         /// If false, the handler is supposed to be used as a history provider only.
         /// </param>
-        public PolygonDataQueueHandler(string apiKey, int maximumWebSocketConnections, int maximumSubscriptionsPerWebSocket,
+        public PolygonDataQueueHandler(string apiKey, int maximumWebSocketConnections, int maximumOptionsSubscriptionsPerWebSocket,
             bool streamingEnabled = true)
         {
-            Initialize(apiKey, maximumWebSocketConnections, maximumSubscriptionsPerWebSocket, streamingEnabled);
-        }
-
-        /// <summary>
-        /// Initializes the data queue handler with the passed parameters
-        /// </summary>
-        /// <param name="maximumWebSocketConnections">The maximum websocket connections allowed</param>
-        /// <param name="maximumSubscriptionsPerWebSocket">The maximum number of subscriptions allowed per websocket</param>
-        /// <param name="streamingEnabled">
-        private void Initialize(string apiKey, int maximumWebSocketConnections, int maximumSubscriptionsPerWebSocket, bool streamingEnabled)
-        {
-            if (_isInitialized)
-            {
-                return;
-            }
-
             _apiKey = apiKey;
-            _maximumWebSocketConnections = Math.Max(maximumWebSocketConnections, 5);
-            _maximumSubscriptionsPerWebSocket = Math.Max(maximumSubscriptionsPerWebSocket, 1000);
+            _maximumWebSocketConnections = Math.Min(maximumWebSocketConnections, 5);
+            _maximumOptionsSubscriptionsPerWebSocket = Math.Min(maximumOptionsSubscriptionsPerWebSocket, 1000);
 
-            // Data streaming is enable, configure the subscription managers
             if (streamingEnabled)
             {
-                foreach (var securityType in _supportedSecurityTypes)
-                {
-                    _subscriptionManagers[securityType] = new BrokerageMultiWebSocketSubscriptionManager(
-                        PolygonWebSocketClientWrapper.GetWebSocketUrl(securityType),
-                        _maximumSubscriptionsPerWebSocket,
+                _subscriptionManager = new PolygonSubscriptionManager(
                         _maximumWebSocketConnections,
-                        new Dictionary<Symbol, int>(),
-                        () =>
+                    new Dictionary<SecurityType, int>()
+                    {
+                        { SecurityType.Option, _maximumOptionsSubscriptionsPerWebSocket }
+                    },
+                    (symbol) =>
                         {
-                            var webSocket = new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, null);
-
-                            webSocket.Open += (_, _) =>
-                            {
-                                _webSockets.Add(webSocket);
-                            };
-                            webSocket.Closed += (_, _) =>
-                            {
-                                _webSockets.Remove(webSocket);
-                            };
-
+                            var webSocket = new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, symbol.SecurityType, null);
                             return webSocket;
                         },
                         (webSocket, symbol) =>
@@ -161,12 +129,9 @@ namespace QuantConnect.Polygon
                             OnMessage(e.Message);
                         },
                         TimeSpan.Zero);
-                }
             }
 
             _optionChainProvider = Composer.Instance.GetPart<IOptionChainProvider>();
-
-            _isInitialized = true;
         }
 
         #region IDataQueueHandler implementation
@@ -175,7 +140,7 @@ namespace QuantConnect.Polygon
         /// Returns whether the data provider is connected
         /// </summary>
         /// <returns>True if the data provider is connected</returns>
-        public bool IsConnected => _webSockets.Count > 0 && _webSockets.All(webSocket => webSocket.IsOpen);
+        public bool IsConnected => _subscriptionManager.IsConnected;
 
         /// <summary>
         /// Sets the job we're subscribing for
@@ -213,7 +178,7 @@ namespace QuantConnect.Polygon
             _subscribedEvent.Reset();
 
             // Subscribe
-            _subscriptionManagers[dataConfig.SecurityType].Subscribe(dataConfig);
+            _subscriptionManager.Subscribe(dataConfig);
 
             var events = new WaitHandle[] { _failedAuthenticationEvent, _successfulAuthenticationEvent, _subscribedEvent };
             var triggeredEventIndex = WaitHandle.WaitAny(events, TimeSpan.FromMinutes(2));
@@ -237,7 +202,7 @@ namespace QuantConnect.Polygon
         /// <param name="dataConfig">Subscription config to be removed</param>
         public void Unsubscribe(SubscriptionDataConfig dataConfig)
         {
-            _subscriptionManagers[dataConfig.SecurityType].Unsubscribe(dataConfig);
+            _subscriptionManager.Unsubscribe(dataConfig);
             _dataAggregator.Remove(dataConfig);
         }
 
@@ -311,13 +276,7 @@ namespace QuantConnect.Polygon
         {
             if (!_disposed)
             {
-                if (_subscriptionManagers != null)
-                {
-                    foreach (var kvp in _subscriptionManagers)
-                    {
-                        kvp.Value.Dispose();
-                    }
-                }
+                _subscriptionManager?.DisposeSafely();
                 _dataAggregator.DisposeSafely();
                 HistoryRateLimiter.DisposeSafely();
 

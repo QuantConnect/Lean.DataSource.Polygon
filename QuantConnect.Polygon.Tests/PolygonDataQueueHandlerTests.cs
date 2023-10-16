@@ -169,6 +169,41 @@ namespace QuantConnect.Tests.Polygon
             Assert.That(receivedData, Is.Not.Empty.And.Count.LessThanOrEqualTo(3));
         }
 
+        [TestCase(1, 5)]
+        [TestCase(5, 1)]
+        [TestCase(2, 4)]
+        [TestCase(4, 2)]
+        [TestCase(2, 3)]
+        [TestCase(3, 2)]
+        [TestCase(1, 1)]
+        [TestCase(2, 2)]
+        [TestCase(3, 3)]
+        public void RespectsMaximumWebSocketConnectionsAndSubscriptions(int maxWebSocketConnections, int maxSubscriptionsPerWebSocket)
+        {
+            using var polygon = new TestablePolygonDataQueueHandler(Config.Get("polygon-api-key"), maxWebSocketConnections,
+                maxSubscriptionsPerWebSocket);
+
+            var configs = GetConfigs();
+
+            for (var i = 0; i < maxWebSocketConnections * maxSubscriptionsPerWebSocket; i++)
+            {
+                var config = configs[i];
+                Assert.DoesNotThrow(() => polygon.Subscribe(config, (sender, args) => { }),
+                    $"Could not subscribe symbol #{i + 1}. WebSocket count: {polygon.SubscriptionManager.WebSocketConnectionsCount}. Subscription count: {polygon.SubscriptionManager.TotalSubscriptionsCount}");
+
+                var expectedSubscriptionCount = i + 1;
+                Assert.That(polygon.SubscriptionManager.TotalSubscriptionsCount, Is.EqualTo(expectedSubscriptionCount));
+
+                var expectedWebSocketCount = i / maxSubscriptionsPerWebSocket + 1;
+                Assert.That(polygon.SubscriptionManager.WebSocketConnectionsCount, Is.EqualTo(expectedWebSocketCount));
+            }
+
+            Assert.That(polygon.SubscriptionManager.WebSocketConnectionsCount, Is.EqualTo(maxWebSocketConnections));
+            Assert.That(polygon.SubscriptionManager.TotalSubscriptionsCount, Is.EqualTo(maxWebSocketConnections * maxSubscriptionsPerWebSocket));
+
+            Assert.Throws<NotSupportedException>(() => polygon.Subscribe(configs.Last(), (sender, args) => { }));
+        }
+
         private SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)
         {
             return new SubscriptionDataConfig(
@@ -228,6 +263,16 @@ namespace QuantConnect.Tests.Polygon
                 Resolution.Minute));
 
             return spyOptions.Concat(aaplOptions).ToArray();
+        }
+
+        private class TestablePolygonDataQueueHandler : PolygonDataQueueHandler
+        {
+            public PolygonSubscriptionManager SubscriptionManager => _subscriptionManager;
+
+            public TestablePolygonDataQueueHandler(string apiKey, int maximumWebSocketConnections, int maximumOptionsSubscriptionsPerWebSocket)
+                : base(apiKey, maximumWebSocketConnections, maximumOptionsSubscriptionsPerWebSocket)
+            {
+            }
         }
     }
 }
