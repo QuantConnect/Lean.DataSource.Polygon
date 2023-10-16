@@ -104,9 +104,9 @@ namespace QuantConnect.Polygon
                     {
                         { SecurityType.Option, _maximumOptionsSubscriptionsPerWebSocket }
                     },
-                    (securityType) =>
+                    (symbol) =>
                         {
-                            var webSocket = new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, null);
+                            var webSocket = new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, symbol.SecurityType, null);
                             return webSocket;
                         },
                         (webSocket, symbol) =>

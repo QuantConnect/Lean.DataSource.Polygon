@@ -13,8 +13,9 @@
  * limitations under the License.
 */
 
+using System.Runtime.CompilerServices;
+
 using QuantConnect.Brokerages;
-using QuantConnect.Logging;
 using QuantConnect.Util;
 
 namespace QuantConnect.Polygon
@@ -29,19 +30,44 @@ namespace QuantConnect.Polygon
     /// </summary>
     public partial class PolygonSubscriptionManager : BrokerageMultiWebSocketSubscriptionManager
     {
-        private readonly int _maxWebSocketConnections;
+        // Each Polygon websocket endpoint has a different subscriptions limit
         private readonly Dictionary<SecurityType, int> _maxSubscriptionsPerSecurityTypeWebSocket;
-
-        private readonly Func<SecurityType, PolygonWebSocketClientWrapper> _webSocketFactory;
 
         /// <summary>
         /// Whether or not there is at least one open socket
         /// </summary>
-        public bool IsConnected => _webSocketEntries.Any(x => x.WebSocket.IsOpen);
+        public bool IsConnected
+        {
+            get
+            {
+                lock (_locker)
+                {
+                    return _webSocketEntries.Any(x => x.WebSocket.IsOpen);
+                }
+            }
+        }
 
-        public int WebSocketConnectionsCount => _webSocketEntries.Count(x => x.WebSocket.IsOpen);
+        public int WebSocketConnectionsCount
+        {
+            get
+            {
+                lock (_locker)
+                {
+                    return _webSocketEntries.Count(x => x.WebSocket.IsOpen);
+                }
+            }
+        }
 
-        public int TotalSubscriptionsCount => _webSocketEntries.Sum(x => x.SymbolCount);
+        public int TotalSubscriptionsCount
+        {
+            get
+            {
+                lock (_locker)
+                {
+                    return _webSocketEntries.Sum(x => x.SymbolCount);
+                }
+            }
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="PolygonSubscriptionManager"/> class
@@ -59,72 +85,35 @@ namespace QuantConnect.Polygon
         public PolygonSubscriptionManager(
             int maxWebSocketConnections,
             Dictionary<SecurityType, int> maxSubscriptionsPerSecurityTypeWebSocket,
-            Func<SecurityType, PolygonWebSocketClientWrapper> webSocketFactory,
+            Func<Symbol, PolygonWebSocketClientWrapper> webSocketFactory,
             Func<IWebSocket, Symbol, bool> subscribeFunc,
             Func<IWebSocket, Symbol, bool> unsubscribeFunc,
             Action<WebSocketMessage> messageHandler,
             TimeSpan webSocketConnectionDuration,
             RateGate connectionRateLimiter = null)
-            : base(null, 0, 0, null, null, subscribeFunc, unsubscribeFunc, messageHandler, webSocketConnectionDuration,
-                  connectionRateLimiter)
+            : base(null, 0, maxWebSocketConnections, null, webSocketFactory, subscribeFunc, unsubscribeFunc, messageHandler,
+                  webSocketConnectionDuration, connectionRateLimiter)
         {
-            _maxWebSocketConnections = maxWebSocketConnections;
             _maxSubscriptionsPerSecurityTypeWebSocket = maxSubscriptionsPerSecurityTypeWebSocket;
-            _webSocketFactory = webSocketFactory;
-
-            // Make sure no websockets are created, we will do it on demand
-            _webSocketEntries.Clear();
         }
 
         /// <summary>
-        /// Gets a websocket where a symbol can be subscribed in.
+        /// Checks whether or not the websocket entry is full
         /// </summary>
-        protected override IWebSocket GetWebSocketForSymbol(Symbol symbol)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected override bool IsWebSocketEntryFull(BrokerageMultiWebSocketEntry entry)
         {
-            BrokerageMultiWebSocketEntry entry;
-
-            lock (_locker)
-            {
-                var entriesForSecurityType = _webSocketEntries.Where(x => x.Symbols.Any(s => s.SecurityType == symbol.SecurityType)).ToList();
-                // TODO: Throw if !_maxSubscriptionsPerSecurityTypeWebSocket.TryGetValue????
-                var maxSubscriptions = _maxSubscriptionsPerSecurityTypeWebSocket[symbol.SecurityType];
-
-                entry = entriesForSecurityType.FirstOrDefault(x => x.SymbolCount < maxSubscriptions);
-
-                if (entry == null)
-                {
-                    if (_webSocketEntries.Count >= _maxWebSocketConnections)
-                    {
-                        throw new NotSupportedException($"Maximum symbol count reached for the current configuration [MaxSymbolsPerWebSocket={maxSubscriptions}, MaxWebSocketConnections:{_maxWebSocketConnections}]");
-                    }
-
-                    entry = new BrokerageMultiWebSocketEntry(new(), CreateWebSocket(symbol.SecurityType));
-                    _webSocketEntries.Add(entry);
-                }
-            }
-
-            if (!entry.WebSocket.IsOpen)
-            {
-                Connect(entry.WebSocket);
-            }
-
-            entry.AddSymbol(symbol);
-
-            Log.Trace($"PolygonSubscriptionManager.GetWebSocketForSymbol(): added symbol: {symbol} to websocket: {entry.WebSocket.GetHashCode()} - Count: {entry.SymbolCount}");
-
-            return entry.WebSocket;
+            var securityType = (entry.WebSocket as PolygonWebSocketClientWrapper)?.SecurityType;
+            return securityType != null && entry.SymbolCount >= _maxSubscriptionsPerSecurityTypeWebSocket[securityType.Value];
         }
 
         /// <summary>
-        /// Creates a new websocket using the provided factory method and subscribing some of its event handlers
+        /// Checks whether or not the symbol can be added to the websocket entry
         /// </summary>
-        private IWebSocket CreateWebSocket(SecurityType securityType)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected override bool IsWebSocketEntryForSymbol(BrokerageMultiWebSocketEntry entry, Symbol symbol)
         {
-            var webSocket = _webSocketFactory(securityType);
-            webSocket.Open += OnOpen;
-            webSocket.Message += EventHandler;
-
-            return webSocket;
+            return (entry.WebSocket as PolygonWebSocketClientWrapper)?.SecurityType == symbol.SecurityType;
         }
     }
 }

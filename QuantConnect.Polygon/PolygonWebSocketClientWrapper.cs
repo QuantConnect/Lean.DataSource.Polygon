@@ -28,8 +28,9 @@ namespace QuantConnect.Polygon
 
         private readonly string _apiKey;
         private readonly ISymbolMapper _symbolMapper;
-        private readonly SecurityType _securityType;
         private readonly Action<string> _messageHandler;
+
+        public SecurityType SecurityType { get; }
 
         /// <summary>
         /// Creates a new instance of the <see cref="PolygonWebSocketClientWrapper"/> class
@@ -42,7 +43,7 @@ namespace QuantConnect.Polygon
         {
             _apiKey = apiKey;
             _symbolMapper = symbolMapper;
-            _securityType = securityType;
+            SecurityType = securityType;
             _messageHandler = messageHandler;
 
             var url = GetWebSocketUrl(securityType);
@@ -102,12 +103,12 @@ namespace QuantConnect.Polygon
 
         private void OnClosed(object? sender, WebSocketCloseData e)
         {
-            Log.Trace($"PolygonWebSocketClientWrapper.OnClosed(): {_securityType} - {e.Reason}");
+            Log.Trace($"PolygonWebSocketClientWrapper.OnClosed(): {SecurityType} - {e.Reason}");
         }
 
         private void OnOpen(object? sender, EventArgs e)
         {
-            Log.Trace($"PolygonWebSocketClientWrapper.OnOpen(): {_securityType} - connection open");
+            Log.Trace($"PolygonWebSocketClientWrapper.OnOpen(): {SecurityType} - connection open");
 
             Send(JsonConvert.SerializeObject(new
             {
