@@ -30,7 +30,10 @@ namespace QuantConnect.Polygon
         private readonly ISymbolMapper _symbolMapper;
         private readonly Action<string> _messageHandler;
 
-        public SecurityType SecurityType { get; }
+        /// <summary>
+        /// Gets the security types supported by this websocket client
+        /// </summary>
+        public List<SecurityType> SecurityTypes { get; }
 
         /// <summary>
         /// Creates a new instance of the <see cref="PolygonWebSocketClientWrapper"/> class
@@ -43,7 +46,7 @@ namespace QuantConnect.Polygon
         {
             _apiKey = apiKey;
             _symbolMapper = symbolMapper;
-            SecurityType = securityType;
+            SecurityTypes = GetSupportedSecurityTypes(securityType);
             _messageHandler = messageHandler;
 
             var url = GetWebSocketUrl(securityType);
@@ -103,12 +106,12 @@ namespace QuantConnect.Polygon
 
         private void OnClosed(object? sender, WebSocketCloseData e)
         {
-            Log.Trace($"PolygonWebSocketClientWrapper.OnClosed(): {SecurityType} - {e.Reason}");
+            Log.Trace($"PolygonWebSocketClientWrapper.OnClosed(): {string.Join(", ", SecurityTypes)} - {e.Reason}");
         }
 
         private void OnOpen(object? sender, EventArgs e)
         {
-            Log.Trace($"PolygonWebSocketClientWrapper.OnOpen(): {SecurityType} - connection open");
+            Log.Trace($"PolygonWebSocketClientWrapper.OnOpen(): {string.Join(", ", SecurityTypes)} - connection open");
 
             Send(JsonConvert.SerializeObject(new
             {
@@ -122,6 +125,7 @@ namespace QuantConnect.Polygon
             switch (securityType)
             {
                 case SecurityType.Option:
+                case SecurityType.IndexOption:
                     // Only support aggregated minute data for options
                     return "AM";
 
@@ -135,7 +139,21 @@ namespace QuantConnect.Polygon
             switch (securityType)
             {
                 case SecurityType.Option:
+                case SecurityType.IndexOption:
                     return BaseUrl + "/options";
+
+                default:
+                    throw new Exception($"Unsupported security type: {securityType}");
+            }
+        }
+
+        private static List<SecurityType> GetSupportedSecurityTypes(SecurityType securityType)
+        {
+            switch (securityType)
+            {
+                case SecurityType.Option:
+                case SecurityType.IndexOption:
+                    return new List<SecurityType> { SecurityType.Option, SecurityType.IndexOption };
 
                 default:
                     throw new Exception($"Unsupported security type: {securityType}");

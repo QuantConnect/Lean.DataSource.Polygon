@@ -13,6 +13,7 @@
  * limitations under the License.
 */
 
+using System.Collections.ObjectModel;
 using Newtonsoft.Json.Linq;
 using NodaTime;
 using QuantConnect.Configuration;
@@ -23,7 +24,6 @@ using QuantConnect.Logging;
 using QuantConnect.Packets;
 using QuantConnect.Securities;
 using QuantConnect.Util;
-using System.Collections.ObjectModel;
 using static QuantConnect.Brokerages.WebSocketClientWrapper;
 
 namespace QuantConnect.Polygon
@@ -37,7 +37,11 @@ namespace QuantConnect.Polygon
         private int _maximumOptionsSubscriptionsPerWebSocket;
         private string _apiKey;
 
-        private readonly ReadOnlyCollection<SecurityType> _supportedSecurityTypes = Array.AsReadOnly(new[] { SecurityType.Option });
+        private readonly ReadOnlyCollection<SecurityType> _supportedSecurityTypes = Array.AsReadOnly(new[]
+        {
+            SecurityType.Option,
+            SecurityType.IndexOption
+        });
 
         private readonly PolygonAggregationManager _dataAggregator = new();
 
@@ -103,10 +107,17 @@ namespace QuantConnect.Polygon
             if (streamingEnabled)
             {
                 _subscriptionManager = new PolygonSubscriptionManager(
-                        _maximumWebSocketConnections,
-                    new Dictionary<SecurityType, int>()
+                    _maximumWebSocketConnections,
+                    (securityType) =>
                     {
-                        { SecurityType.Option, _maximumOptionsSubscriptionsPerWebSocket }
+                        switch (securityType)
+                        {
+                            case SecurityType.Option:
+                            case SecurityType.IndexOption:
+                                return _maximumOptionsSubscriptionsPerWebSocket;
+                            default:
+                                return 0;
+                        }
                     },
                     (symbol) =>
                         {
@@ -163,7 +174,7 @@ namespace QuantConnect.Polygon
                 return null;
             }
 
-            if (dataConfig.SecurityType == SecurityType.Option && dataConfig.Resolution != Resolution.Minute)
+            if (IsSupportedOption(dataConfig.SecurityType) && dataConfig.Resolution != Resolution.Minute)
             {
                 throw new ArgumentException($@"Polygon data queue handler does not support {dataConfig.Resolution
                     } resolution options subscriptions. Only {Resolution.Minute} resolution is supported for options.");
@@ -224,7 +235,7 @@ namespace QuantConnect.Polygon
                 return Enumerable.Empty<Symbol>();
             }
 
-            if (symbol.SecurityType != SecurityType.Option)
+            if (!IsSupportedOption(symbol.SecurityType))
             {
                 throw new ArgumentException($"Unsupported security type {symbol.SecurityType}");
             }
@@ -408,7 +419,15 @@ namespace QuantConnect.Polygon
             var securityType = symbol.ID.SecurityType;
 
             // Only options are supported for now
-            return symbol.Value.IndexOfInvariant("universe", true) == -1 && securityType == SecurityType.Option;
+            return symbol.Value.IndexOfInvariant("universe", true) == -1 && IsSupportedOption(securityType);
+        }
+
+        /// <summary>
+        /// Determines whether or not the specified security type is a supported option
+        /// </summary>
+        private static bool IsSupportedOption(SecurityType securityType)
+        {
+            return securityType == SecurityType.Option || securityType == SecurityType.IndexOption;
         }
     }
 }

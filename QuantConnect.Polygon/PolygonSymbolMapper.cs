@@ -48,6 +48,7 @@ namespace QuantConnect.Polygon
                     switch (symbol.SecurityType)
                     {
                         case SecurityType.Option:
+                        case SecurityType.IndexOption:
                             polygonSymbol = $"O:{symbol.Value.Replace(" ", "")}";
                             break;
 
@@ -100,6 +101,7 @@ namespace QuantConnect.Polygon
             switch (securityType)
             {
                 case SecurityType.Option:
+                case SecurityType.IndexOption:
                     return Symbol.CreateOption(brokerageSymbol, market, optionStyle, optionRight, strike, expirationDate);
 
                 case SecurityType.Equity:

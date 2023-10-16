@@ -31,7 +31,7 @@ namespace QuantConnect.Polygon
     public partial class PolygonSubscriptionManager : BrokerageMultiWebSocketSubscriptionManager
     {
         // Each Polygon websocket endpoint has a different subscriptions limit
-        private readonly Dictionary<SecurityType, int> _maxSubscriptionsPerSecurityTypeWebSocket;
+        private readonly Func<SecurityType, int> _maxSubscriptionsPerWebSocketFunc;
 
         /// <summary>
         /// Whether or not there is at least one open socket
@@ -47,6 +47,9 @@ namespace QuantConnect.Polygon
             }
         }
 
+        /// <summary>
+        /// Gets the number of open websockets
+        /// </summary>
         public int WebSocketConnectionsCount
         {
             get
@@ -58,6 +61,9 @@ namespace QuantConnect.Polygon
             }
         }
 
+        /// <summary>
+        /// Gets the total number of subscriptions
+        /// </summary>
         public int TotalSubscriptionsCount
         {
             get
@@ -73,8 +79,8 @@ namespace QuantConnect.Polygon
         /// Initializes a new instance of the <see cref="PolygonSubscriptionManager"/> class
         /// </summary>
         /// <param name="maxWebSocketConnections">The maximum number of subscriptions per websocket connection</param>
-        /// <param name="maxSubscriptionsPerSecurityTypeWebSocket">
-        /// The maximum number of subscriptions per websocket connection, which depend on the security type the websocket streams data for
+        /// <param name="maxSubscriptionsPerWebSocketFunc">
+        /// Function that gets the maximum number of subscriptions allowed for a security type websocket connection
         /// </param>
         /// <param name="webSocketFactory">A function which returns a new websocket instance</param>
         /// <param name="subscribeFunc">A function which subscribes a symbol</param>
@@ -84,7 +90,7 @@ namespace QuantConnect.Polygon
         /// <param name="connectionRateLimiter">The rate limiter for creating new websocket connections</param>
         public PolygonSubscriptionManager(
             int maxWebSocketConnections,
-            Dictionary<SecurityType, int> maxSubscriptionsPerSecurityTypeWebSocket,
+            Func<SecurityType, int> maxSubscriptionsPerWebSocketFunc,
             Func<Symbol, PolygonWebSocketClientWrapper> webSocketFactory,
             Func<IWebSocket, Symbol, bool> subscribeFunc,
             Func<IWebSocket, Symbol, bool> unsubscribeFunc,
@@ -94,7 +100,7 @@ namespace QuantConnect.Polygon
             : base(null, 0, maxWebSocketConnections, null, webSocketFactory, subscribeFunc, unsubscribeFunc, messageHandler,
                   webSocketConnectionDuration, connectionRateLimiter)
         {
-            _maxSubscriptionsPerSecurityTypeWebSocket = maxSubscriptionsPerSecurityTypeWebSocket;
+            _maxSubscriptionsPerWebSocketFunc = maxSubscriptionsPerWebSocketFunc;
         }
 
         /// <summary>
@@ -103,8 +109,8 @@ namespace QuantConnect.Polygon
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected override bool IsWebSocketEntryFull(BrokerageMultiWebSocketEntry entry)
         {
-            var securityType = (entry.WebSocket as PolygonWebSocketClientWrapper)?.SecurityType;
-            return securityType != null && entry.SymbolCount >= _maxSubscriptionsPerSecurityTypeWebSocket[securityType.Value];
+            var securityTypes = (entry.WebSocket as PolygonWebSocketClientWrapper)?.SecurityTypes;
+            return securityTypes != null && entry.SymbolCount >= _maxSubscriptionsPerWebSocketFunc(securityTypes[0]);
         }
 
         /// <summary>
@@ -113,7 +119,8 @@ namespace QuantConnect.Polygon
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected override bool IsWebSocketEntryForSymbol(BrokerageMultiWebSocketEntry entry, Symbol symbol)
         {
-            return (entry.WebSocket as PolygonWebSocketClientWrapper)?.SecurityType == symbol.SecurityType;
+            var securityTypes = (entry.WebSocket as PolygonWebSocketClientWrapper)?.SecurityTypes;
+            return securityTypes != null && securityTypes.Contains(symbol.SecurityType);
         }
     }
 }
