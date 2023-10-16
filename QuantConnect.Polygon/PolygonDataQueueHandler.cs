@@ -32,7 +32,7 @@ namespace QuantConnect.Polygon
     /// <summary>
     /// Polygon.io implementation of <see cref="IDataQueueHandler"/> and <see cref="IHistoryProvider"/>
     /// </summary>
-    public partial class PolygonDataQueueHandler : IDataQueueHandler
+    public partial class PolygonDataQueueHandler : IDataQueueHandler, IDataQueueUniverseProvider
     {
         private int _maximumWebSocketConnections;
         private int _maximumSubscriptionsPerWebSocket;
@@ -53,9 +53,13 @@ namespace QuantConnect.Polygon
         private readonly ManualResetEvent _failedAuthenticationEvent = new(false);
         private readonly ManualResetEvent _subscribedEvent = new(false);
 
+        private IOptionChainProvider _optionChainProvider;
+
         private bool _isInitialized;
 
         private bool _disposed;
+
+        protected virtual ITimeProvider TimeProvider => RealTimeProvider.Instance;
 
         /// <summary>
         /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
@@ -160,6 +164,8 @@ namespace QuantConnect.Polygon
                 }
             }
 
+            _optionChainProvider = Composer.Instance.GetPart<IOptionChainProvider>();
+
             _isInitialized = true;
         }
 
@@ -233,6 +239,68 @@ namespace QuantConnect.Polygon
         {
             _subscriptionManagers[dataConfig.SecurityType].Unsubscribe(dataConfig);
             _dataAggregator.Remove(dataConfig);
+        }
+
+        #endregion
+
+        #region IDataQueueUniverseProvider
+
+        /// <summary>
+        /// Method returns a collection of symbols that are available at the broker.
+        /// </summary>
+        /// <param name="symbol">Symbol to search option chain for</param>
+        /// <param name="includeExpired">Include expired contracts</param>
+        /// <param name="securityCurrency">Expected security currency(if any)</param>
+        /// <returns>Future/Option chain associated with the Symbol provided</returns>
+        public IEnumerable<Symbol> LookupSymbols(Symbol symbol, bool includeExpired, string securityCurrency = null)
+        {
+            if (_optionChainProvider == null)
+            {
+                return Enumerable.Empty<Symbol>();
+            }
+
+            if (symbol.SecurityType != SecurityType.Option)
+            {
+                throw new ArgumentException($"Unsupported security type {symbol.SecurityType}");
+            }
+
+            Log.Trace($"PolygonDataQueueHandler.LookupSymbols(): Requesting symbol list for {symbol}");
+
+            var symbols = _optionChainProvider.GetOptionContractList(symbol, TimeProvider.GetUtcNow().Date).ToList();
+
+            // Try to remove options contracts that have expired
+            if (!includeExpired)
+            {
+                var removedSymbols = new List<Symbol>();
+                symbols.RemoveAll(x =>
+                {
+                    var expired = x.ID.Date < GetTickTime(x, TimeProvider.GetUtcNow()).Date;
+                    if (expired)
+                    {
+                        removedSymbols.Add(x);
+                    }
+                    return expired;
+                });
+
+                if (removedSymbols.Count > 0)
+                {
+                    Log.Trace($@"PolygonDataQueueHandler.LookupSymbols(): Removed contract(s) for having expiry in the past: {
+                        string.Join(",", removedSymbols.Select(x => x.Value))}");
+                }
+            }
+
+            Log.Trace($"PolygonDataQueueHandler.LookupSymbols(): Returning {symbols.Count} contract(s) for {symbol}");
+
+            return symbols;
+        }
+
+        /// <summary>
+        /// Returns whether selection can take place or not.
+        /// </summary>
+        /// <returns>True if selection can take place</returns>
+        public bool CanPerformSelection()
+        {
+            return IsConnected;
         }
 
         #endregion
