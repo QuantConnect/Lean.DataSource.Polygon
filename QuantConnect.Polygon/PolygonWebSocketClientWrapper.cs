@@ -13,6 +13,7 @@
  * limitations under the License.
 */
 
+using System.Collections.ObjectModel;
 using Newtonsoft.Json;
 using QuantConnect.Brokerages;
 using QuantConnect.Configuration;
@@ -31,10 +32,17 @@ namespace QuantConnect.Polygon
         private readonly ISymbolMapper _symbolMapper;
         private readonly Action<string> _messageHandler;
 
+        private List<SecurityType> _supportedSecurityTypes;
+
         /// <summary>
         /// Gets the security types supported by this websocket client
         /// </summary>
-        public List<SecurityType> SecurityTypes { get; }
+        public ReadOnlyCollection<SecurityType> SupportedSecurityTypes => _supportedSecurityTypes.AsReadOnly();
+
+        /// <summary>
+        /// The number of current subscriptions for this websocket
+        /// </summary>
+        public int SubscriptionsCount { get; private set; }
 
         /// <summary>
         /// Creates a new instance of the <see cref="PolygonWebSocketClientWrapper"/> class
@@ -47,7 +55,7 @@ namespace QuantConnect.Polygon
         {
             _apiKey = apiKey;
             _symbolMapper = symbolMapper;
-            SecurityTypes = GetSupportedSecurityTypes(securityType);
+            _supportedSecurityTypes = GetSupportedSecurityTypes(securityType);
             _messageHandler = messageHandler;
 
             var url = GetWebSocketUrl(securityType);
@@ -72,6 +80,7 @@ namespace QuantConnect.Polygon
             }
 
             Subscribe(symbol, tickType, true);
+            SubscriptionsCount++;
         }
 
         /// <summary>
@@ -82,6 +91,7 @@ namespace QuantConnect.Polygon
         public void Unsubscribe(Symbol symbol, TickType tickType)
         {
             Subscribe(symbol, tickType, false);
+            SubscriptionsCount--;
         }
 
         private void Subscribe(Symbol symbol, TickType tickType, bool subscribe)
@@ -107,12 +117,12 @@ namespace QuantConnect.Polygon
 
         private void OnClosed(object? sender, WebSocketCloseData e)
         {
-            Log.Trace($"PolygonWebSocketClientWrapper.OnClosed(): {string.Join(", ", SecurityTypes)} - {e.Reason}");
+            Log.Trace($"PolygonWebSocketClientWrapper.OnClosed(): {string.Join(", ", _supportedSecurityTypes)} - {e.Reason}");
         }
 
         private void OnOpen(object? sender, EventArgs e)
         {
-            Log.Trace($"PolygonWebSocketClientWrapper.OnOpen(): {string.Join(", ", SecurityTypes)} - connection open");
+            Log.Trace($"PolygonWebSocketClientWrapper.OnOpen(): {string.Join(", ", _supportedSecurityTypes)} - connection open");
 
             Send(JsonConvert.SerializeObject(new
             {

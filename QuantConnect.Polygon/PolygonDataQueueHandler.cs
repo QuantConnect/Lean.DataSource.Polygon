@@ -73,8 +73,7 @@ namespace QuantConnect.Polygon
         /// </summary>
         public PolygonDataQueueHandler()
             : this(Config.Get("polygon-api-key"),
-                Config.GetInt("polygon-max-websocket-connections", 5),
-                Config.GetInt("polygon-max-options-subscriptions-per-websocket", 999))
+                Config.GetInt("polygon-max-subscriptions-per-websocket", -1))
         {
         }
 
@@ -88,8 +87,7 @@ namespace QuantConnect.Polygon
         /// </param>
         public PolygonDataQueueHandler(string apiKey, bool streamingEnabled = true)
             : this(apiKey,
-                Config.GetInt("polygon-max-websocket-connections", 5),
-                Config.GetInt("polygon-max-options-subscriptions-per-websocket", 999),
+                Config.GetInt("polygon-max-subscriptions-per-websocket", -1),
                 streamingEnabled)
         {
         }
@@ -98,18 +96,15 @@ namespace QuantConnect.Polygon
         /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
         /// </summary>
         /// <param name="apiKey">The Polygon.io API key for authentication</param>
-        /// <param name="maximumWebSocketConnections">The maximum websocket connections allowed</param>
-        /// <param name="maximumSubscriptionsPerWebSocket">The maximum number of subscriptions allowed per websocket</param>
+        /// <param name="maxSubscriptionsPerWebSocket">The maximum number of subscriptions allowed per websocket</param>
         /// <param name="streamingEnabled">
         /// Whether this handle will be used for streaming data.
         /// If false, the handler is supposed to be used as a history provider only.
         /// </param>
-        public PolygonDataQueueHandler(string apiKey, int maximumWebSocketConnections, int maximumOptionsSubscriptionsPerWebSocket,
-            bool streamingEnabled = true)
+        public PolygonDataQueueHandler(string apiKey, int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
         {
             _apiKey = apiKey;
-            _maximumWebSocketConnections = Math.Min(maximumWebSocketConnections, 5);
-            _maximumOptionsSubscriptionsPerWebSocket = Math.Min(maximumOptionsSubscriptionsPerWebSocket, 999);
+            _maximumOptionsSubscriptionsPerWebSocket = maxSubscriptionsPerWebSocket;
             _optionChainProvider = Composer.Instance.GetPart<IOptionChainProvider>();
 
             ValidateSubscription();
@@ -117,39 +112,9 @@ namespace QuantConnect.Polygon
             if (streamingEnabled)
             {
                 _subscriptionManager = new PolygonSubscriptionManager(
-                    _maximumWebSocketConnections,
-                    (securityType) =>
-                    {
-                        switch (securityType)
-                        {
-                            case SecurityType.Option:
-                            case SecurityType.IndexOption:
-                                return _maximumOptionsSubscriptionsPerWebSocket;
-                            default:
-                                return 0;
-                        }
-                    },
-                    (symbol) =>
-                    {
-                        var webSocket = new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, symbol.SecurityType, null);
-                        return webSocket;
-                    },
-                    (webSocket, symbol) =>
-                    {
-                        ((PolygonWebSocketClientWrapper)webSocket).Subscribe(symbol, TickType.Trade);
-                        return true;
-                    },
-                    (webSocket, symbol) =>
-                    {
-                        ((PolygonWebSocketClientWrapper)webSocket).Unsubscribe(symbol, TickType.Trade);
-                        return true;
-                    },
-                    (webSocketMessage) =>
-                    {
-                        var e = (TextMessage)webSocketMessage.Data;
-                        OnMessage(e.Message);
-                    },
-                    TimeSpan.Zero);
+                    _supportedSecurityTypes,
+                    maxSubscriptionsPerWebSocket,
+                    (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage));
             }
         }
 

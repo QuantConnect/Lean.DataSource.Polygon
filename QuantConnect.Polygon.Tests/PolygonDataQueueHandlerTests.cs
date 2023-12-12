@@ -172,38 +172,23 @@ namespace QuantConnect.Tests.Polygon
             Assert.That(receivedData, Is.Not.Empty.And.Count.LessThanOrEqualTo(3));
         }
 
-        [TestCase(1, 5)]
-        [TestCase(5, 1)]
-        [TestCase(2, 4)]
-        [TestCase(4, 2)]
-        [TestCase(2, 3)]
-        [TestCase(3, 2)]
-        [TestCase(1, 1)]
-        [TestCase(2, 2)]
-        [TestCase(3, 3)]
-        public void RespectsMaximumWebSocketConnectionsAndSubscriptions(int maxWebSocketConnections, int maxSubscriptionsPerWebSocket)
+        [Test]
+        public void RespectsMaximumWebSocketConnectionsAndSubscriptions(
+            [Values(1, 2, 3, 4, 5)] int maxSubscriptionsPerWebSocket)
         {
-            using var polygon = new TestablePolygonDataQueueHandler(Config.Get("polygon-api-key"), maxWebSocketConnections,
-                maxSubscriptionsPerWebSocket);
-
+            using var polygon = new TestablePolygonDataQueueHandler(Config.Get("polygon-api-key"), maxSubscriptionsPerWebSocket);
             var configs = GetConfigs();
 
             var i = 0;
-            for (; i < maxWebSocketConnections * maxSubscriptionsPerWebSocket; i++)
+            for (; i < maxSubscriptionsPerWebSocket; i++)
             {
                 var config = configs[i];
                 Assert.DoesNotThrow(() => polygon.Subscribe(config, (sender, args) => { }),
-                    $"Could not subscribe symbol #{i + 1}. WebSocket count: {polygon.SubscriptionManager.WebSocketConnectionsCount}. Subscription count: {polygon.SubscriptionManager.TotalSubscriptionsCount}");
+                    $"Could not subscribe symbol #{i + 1}. Subscription count: {polygon.SubscriptionManager.TotalSubscriptionsCount}");
 
                 var expectedSubscriptionCount = i + 1;
                 Assert.That(polygon.SubscriptionManager.TotalSubscriptionsCount, Is.EqualTo(expectedSubscriptionCount));
-
-                var expectedWebSocketCount = i / maxSubscriptionsPerWebSocket + 1;
-                Assert.That(polygon.SubscriptionManager.WebSocketConnectionsCount, Is.EqualTo(expectedWebSocketCount));
             }
-
-            Assert.That(polygon.SubscriptionManager.WebSocketConnectionsCount, Is.EqualTo(maxWebSocketConnections));
-            Assert.That(polygon.SubscriptionManager.TotalSubscriptionsCount, Is.EqualTo(maxWebSocketConnections * maxSubscriptionsPerWebSocket));
 
             Assert.Throws<NotSupportedException>(() => polygon.Subscribe(configs[i], (sender, args) => { }));
         }
@@ -211,11 +196,9 @@ namespace QuantConnect.Tests.Polygon
         [Test]
         public void StressTest()
         {
-            const int maxWebSocketConnections = 5;
-            const int maxOptionsSubscriptionsPerWebSocket = 999;
-            const int maxSubscriptions = maxWebSocketConnections * maxOptionsSubscriptionsPerWebSocket;
+            const int maxSubscriptions = 1000;
 
-            using var polygon = new PolygonDataQueueHandler(_apiKey, maxWebSocketConnections, maxOptionsSubscriptionsPerWebSocket);
+            using var polygon = new PolygonDataQueueHandler(_apiKey, maxSubscriptions);
             var optionChainProvider = new LiveOptionChainProvider(TestGlobals.DataCacheProvider, TestGlobals.MapFileProvider);
 
             var underlyingTickers = new[] { "SPY", "AAPL", "GOOG", "IBM" };
@@ -330,8 +313,8 @@ namespace QuantConnect.Tests.Polygon
         {
             public PolygonSubscriptionManager SubscriptionManager => _subscriptionManager;
 
-            public TestablePolygonDataQueueHandler(string apiKey, int maximumWebSocketConnections, int maximumOptionsSubscriptionsPerWebSocket)
-                : base(apiKey, maximumWebSocketConnections, maximumOptionsSubscriptionsPerWebSocket)
+            public TestablePolygonDataQueueHandler(string apiKey, int maxSubscriptionsPerWebSocket)
+                : base(apiKey, maxSubscriptionsPerWebSocket)
             {
             }
         }
