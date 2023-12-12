@@ -58,7 +58,9 @@ namespace QuantConnect.Tests.Polygon
             Action<BaseData> callback = (dataPoint) =>
             {
                 if (dataPoint == null)
+                {
                     return;
+                }
 
                 dataFromEnumerator.Add((TradeBar)dataPoint);
 
@@ -296,26 +298,29 @@ namespace QuantConnect.Tests.Polygon
             });
         }
 
+        /// <summary>
+        /// In order to successfuly run the tests, the right contracts should be used. Update expiracy
+        /// </summary>
         private SubscriptionDataConfig[] GetConfigs()
         {
-            var spyOptions = new[] { 220m, 260m, 300m, 340m, 380m }.Select(strike => GetSubscriptionDataConfig<TradeBar>(
+            var spyOptions = new[] { 463m, 464m, 465m, 466m, 467m }.Select(strike => GetSubscriptionDataConfig<TradeBar>(
                 Symbol.CreateOption(
                     Symbols.SPY,
                     Market.USA,
                     OptionStyle.American,
                     OptionRight.Call,
                     strike,
-                    new DateTime(2023, 10, 20)),
+                    new DateTime(2023, 12, 18)),
                 Resolution.Minute));
 
-            var aaplOptions = new[] { 80m, 100m, 130m, 150m, 170m }.Select(strike => GetSubscriptionDataConfig<TradeBar>(
+            var aaplOptions = new[] { 195m, 197.5m, 200m, 202.5m, 205m }.Select(strike => GetSubscriptionDataConfig<TradeBar>(
                 Symbol.CreateOption(
                     Symbols.AAPL,
                     Market.USA,
                     OptionStyle.American,
                     OptionRight.Call,
                     strike,
-                    new DateTime(2023, 10, 27)),
+                    new DateTime(2023, 12, 15)),
                 Resolution.Minute));
 
             return spyOptions.Concat(aaplOptions).ToArray();

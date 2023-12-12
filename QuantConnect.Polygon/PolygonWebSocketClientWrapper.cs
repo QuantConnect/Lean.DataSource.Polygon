@@ -15,6 +15,7 @@
 
 using Newtonsoft.Json;
 using QuantConnect.Brokerages;
+using QuantConnect.Configuration;
 using QuantConnect.Logging;
 
 namespace QuantConnect.Polygon
@@ -24,7 +25,7 @@ namespace QuantConnect.Polygon
     /// </summary>
     public class PolygonWebSocketClientWrapper : WebSocketClientWrapper
     {
-        private const string BaseUrl = "wss://launchpad.polygon.io";
+        private static string BaseUrl = Config.Get("polygon-ws-url", "wss://socket.polygon.io");
 
         private readonly string _apiKey;
         private readonly ISymbolMapper _symbolMapper;

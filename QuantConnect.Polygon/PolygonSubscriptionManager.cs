@@ -110,7 +110,13 @@ namespace QuantConnect.Polygon
         protected override bool IsWebSocketEntryFull(BrokerageMultiWebSocketEntry entry)
         {
             var securityTypes = (entry.WebSocket as PolygonWebSocketClientWrapper)?.SecurityTypes;
-            return securityTypes != null && entry.SymbolCount >= _maxSubscriptionsPerWebSocketFunc(securityTypes[0]);
+            if (securityTypes == null)
+            {
+                return false;
+            }
+
+            var maxSubscriptions = _maxSubscriptionsPerWebSocketFunc(securityTypes[0]);
+            return maxSubscriptions > 0 && entry.SymbolCount >= _maxSubscriptionsPerWebSocketFunc(securityTypes[0]);
         }
 
         /// <summary>

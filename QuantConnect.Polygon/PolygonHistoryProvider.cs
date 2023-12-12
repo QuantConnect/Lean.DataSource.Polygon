@@ -29,7 +29,7 @@ namespace QuantConnect.Polygon
 {
     public partial class PolygonDataQueueHandler : SynchronizingHistoryProvider
     {
-        private const string HistoryBaseUrl = "https://api.polygon.io/v2";
+        private static string HistoryBaseUrl = Config.Get("polygon-api-url", "https://api.polygon.io/v2");
         private readonly int AggregateDataResponseLimit = Config.GetInt("polygon-aggregate-response-limit", 5000);
 
         protected virtual RateGate HistoryRateLimiter => new(300, TimeSpan.FromSeconds(1));
