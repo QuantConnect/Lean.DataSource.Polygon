@@ -41,10 +41,18 @@ namespace QuantConnect.Tests.Polygon
 
         private static TestCaseData[] HistoricalTradeBarsTestCases()
         {
+            var equitySymbol = Symbols.SPY;
             var optionSymbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 429m, new DateTime(2023, 10, 06));
 
             return new[]
             {
+                // Equity
+                new TestCaseData(equitySymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(100)),
+                new TestCaseData(equitySymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(200)),
+                new TestCaseData(equitySymbol, Resolution.Hour, TickType.Trade, TimeSpan.FromDays(365)),
+                new TestCaseData(equitySymbol, Resolution.Daily, TickType.Trade, TimeSpan.FromDays(3650)),
+
+                // Options
                 new TestCaseData(optionSymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(100)),
                 new TestCaseData(optionSymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(200)),
                 new TestCaseData(optionSymbol, Resolution.Hour, TickType.Trade, TimeSpan.FromDays(365)),

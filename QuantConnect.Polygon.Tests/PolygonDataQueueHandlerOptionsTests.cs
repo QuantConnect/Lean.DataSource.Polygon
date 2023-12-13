@@ -15,6 +15,7 @@
 */
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using NUnit.Framework;
@@ -37,7 +38,7 @@ namespace QuantConnect.Tests.Polygon
         {
             const int maxSubscriptions = 1000;
 
-            using var polygon = new PolygonDataQueueHandler(_apiKey, maxSubscriptions);
+            using var polygon = new PolygonDataQueueHandler(ApiKey, maxSubscriptions);
             var optionChainProvider = new LiveOptionChainProvider(TestGlobals.DataCacheProvider, TestGlobals.MapFileProvider);
 
             var underlyingTickers = new[] { "SPY", "AAPL", "GOOG", "IBM" };
@@ -85,9 +86,12 @@ namespace QuantConnect.Tests.Polygon
         }
 
         /// <summary>
-        /// In order to successfully run the tests, the right contracts should be used. Update expiracy
+        /// The subscription data configs to be used in the tests. At least 2 configs are required
         /// </summary>
-        protected override SubscriptionDataConfig[] GetConfigs()
+        /// <remarks>
+        /// In order to successfully run the tests, valid contracts should be used. Update them
+        /// </remarks>
+        protected override List<SubscriptionDataConfig> GetConfigs()
         {
             var spyOptions = new[] { 463m, 464m, 465m, 466m, 467m }.Select(strike => GetSubscriptionDataConfig<TradeBar>(
                 Symbol.CreateOption(
@@ -109,7 +113,7 @@ namespace QuantConnect.Tests.Polygon
                     new DateTime(2023, 12, 15)),
                 Resolution.Minute));
 
-            return spyOptions.Concat(aaplOptions).ToArray();
+            return spyOptions.Concat(aaplOptions).ToList();
         }
     }
 }

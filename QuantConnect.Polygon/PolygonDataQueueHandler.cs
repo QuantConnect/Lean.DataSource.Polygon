@@ -41,6 +41,7 @@ namespace QuantConnect.Polygon
     {
         private static readonly ReadOnlyCollection<SecurityType> _supportedSecurityTypes = Array.AsReadOnly(new[]
         {
+            SecurityType.Equity,
             SecurityType.Option,
             SecurityType.IndexOption
         });
@@ -143,10 +144,10 @@ namespace QuantConnect.Polygon
                 return null;
             }
 
-            if (IsSupportedOption(dataConfig.SecurityType) && dataConfig.Resolution != Resolution.Minute)
+            if (IsSecurityTypeSupported(dataConfig.SecurityType) && dataConfig.Resolution != Resolution.Minute)
             {
-                throw new ArgumentException($@"Polygon data queue handler does not support {dataConfig.Resolution
-                    } resolution options subscriptions. Only {Resolution.Minute} resolution is supported for options.");
+                throw new ArgumentException(
+                    $"Polygon data queue handler does not support {dataConfig.SecurityType} {dataConfig.Resolution} subscriptions");
             }
 
             var enumerator = _dataAggregator.Add(dataConfig, newDataAvailableHandler);
@@ -204,7 +205,7 @@ namespace QuantConnect.Polygon
                 return Enumerable.Empty<Symbol>();
             }
 
-            if (!IsSupportedOption(symbol.SecurityType))
+            if (!IsSecurityTypeSupported(symbol.SecurityType))
             {
                 throw new ArgumentException($"Unsupported security type {symbol.SecurityType}");
             }
@@ -289,7 +290,7 @@ namespace QuantConnect.Polygon
                 switch (eventType)
                 {
                     case "AM":
-                        ProcessOptionAggregate(parsedMessage.ToObject<AggregateMessage>());
+                        ProcessAggregate(parsedMessage.ToObject<AggregateMessage>());
                         break;
 
                     case "status":
@@ -305,9 +306,9 @@ namespace QuantConnect.Polygon
         /// <summary>
         /// Processes an option aggregate event message handling the incoming bar
         /// </summary>
-        private void ProcessOptionAggregate(AggregateMessage aggregate)
+        private void ProcessAggregate(AggregateMessage aggregate)
         {
-            var symbol = _symbolMapper.GetLeanOptionSymbol(aggregate.Symbol);
+            var symbol = _symbolMapper.GetLeanSymbol(aggregate.Symbol);
             var time = GetTickTime(symbol, aggregate.StartingTickTimestamp);
             var period = TimeSpan.FromMilliseconds(aggregate.EndingTickTimestamp - aggregate.StartingTickTimestamp);
             var bar = new TradeBar(time, symbol, aggregate.Open, aggregate.High, aggregate.Low, aggregate.Close, aggregate.Volume, period);
@@ -385,18 +386,15 @@ namespace QuantConnect.Polygon
         /// </summary>
         private static bool CanSubscribe(Symbol symbol)
         {
-            var securityType = symbol.ID.SecurityType;
-
-            // Only options are supported for now
-            return symbol.Value.IndexOfInvariant("universe", true) == -1 && IsSupportedOption(securityType);
+            return symbol.Value.IndexOfInvariant("universe", true) == -1 && IsSecurityTypeSupported(symbol.ID.SecurityType);
         }
 
         /// <summary>
         /// Determines whether or not the specified security type is a supported option
         /// </summary>
-        private static bool IsSupportedOption(SecurityType securityType)
+        private static bool IsSecurityTypeSupported(SecurityType securityType)
         {
-            return securityType == SecurityType.Option || securityType == SecurityType.IndexOption;
+            return _supportedSecurityTypes.Contains(securityType);
         }
 
         private class ModulesReadLicenseRead : Api.RestResponse

@@ -83,7 +83,7 @@ namespace QuantConnect.Polygon
             }
 
             // check security type
-            if (!_supportedSecurityTypes.Contains(request.Symbol.SecurityType))
+            if (!IsSecurityTypeSupported(request.Symbol.SecurityType))
             {
                 Log.Error($"PolygonDataQueueHandler.GetHistorys(): Unsupported security type: {request.Symbol.SecurityType}.");
                 yield break;

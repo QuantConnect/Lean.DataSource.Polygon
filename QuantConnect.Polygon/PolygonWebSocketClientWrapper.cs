@@ -135,6 +135,7 @@ namespace QuantConnect.Polygon
         {
             switch (securityType)
             {
+                case SecurityType.Equity:
                 case SecurityType.Option:
                 case SecurityType.IndexOption:
                     // Only support aggregated minute data for options
@@ -149,6 +150,9 @@ namespace QuantConnect.Polygon
         {
             switch (securityType)
             {
+                case SecurityType.Equity:
+                    return BaseUrl + "/stocks";
+
                 case SecurityType.Option:
                 case SecurityType.IndexOption:
                     return BaseUrl + "/options";
@@ -162,6 +166,9 @@ namespace QuantConnect.Polygon
         {
             switch (securityType)
             {
+                case SecurityType.Equity:
+                    return new List<SecurityType> { securityType };
+
                 case SecurityType.Option:
                 case SecurityType.IndexOption:
                     return new List<SecurityType> { SecurityType.Option, SecurityType.IndexOption };

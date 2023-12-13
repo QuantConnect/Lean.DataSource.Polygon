@@ -61,11 +61,6 @@ namespace QuantConnect.Polygon
             var endUtc = parameters.EndUtc;
             var tickType = parameters.TickType;
 
-            if (symbol.SecurityType != SecurityType.Option && symbol.SecurityType != SecurityType.IndexOption)
-            {
-                throw new NotSupportedException($"Security type not supported: {symbol.SecurityType}");
-            }
-
             if (endUtc < startUtc)
             {
                 throw new ArgumentException("The end date must be greater or equal than the start date.");

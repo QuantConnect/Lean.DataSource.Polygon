@@ -47,6 +47,10 @@ namespace QuantConnect.Polygon
                 {
                     switch (symbol.SecurityType)
                     {
+                        case SecurityType.Equity:
+                            polygonSymbol = symbol.Value.Replace(" ", "");
+                            break;
+
                         case SecurityType.Option:
                         case SecurityType.IndexOption:
                             polygonSymbol = $"O:{symbol.Value.Replace(" ", "")}";
@@ -118,6 +122,26 @@ namespace QuantConnect.Polygon
             }
         }
 
+        /// <summary>
+        /// Gets the Lean symbol for the specified Polygon symbol
+        /// </summary>
+        /// <param name="polygonSymbol">The polygon symbol</param>
+        /// <returns>The corresponding Lean symbol</returns>
+        public Symbol GetLeanSymbol(string polygonSymbol)
+        {
+            if (polygonSymbol.StartsWith("O:"))
+            {
+                return GetLeanOptionSymbol(polygonSymbol);
+            }
+
+            return GetLeanSymbol(polygonSymbol, SecurityType.Equity, Market.USA);
+        }
+
+        /// <summary>
+        /// Gets the Lean option symbol for the specified Polygon symbol
+        /// </summary>
+        /// <param name="polygonSymbol">The polygon symbol</param>
+        /// <returns>The corresponding Lean option symbol</returns>
         public Symbol GetLeanOptionSymbol(string polygonSymbol)
         {
             lock (_polygonToLeanSymbolMapLock)

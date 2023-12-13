@@ -47,17 +47,25 @@ namespace QuantConnect.Tests.Polygon
         }
 
         [TearDown]
-        public void TeadDown()
+        public void TearDown()
         {
             _historyProvider.Dispose();
         }
 
         private static TestCaseData[] HistoricalTradeBarsTestCases()
         {
+            var equitySymbol = Symbols.SPY;
             var optionSymbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 429m, new DateTime(2023, 10, 06));
 
             return new[]
             {
+                // Equity
+                new TestCaseData(equitySymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(100)),
+                new TestCaseData(equitySymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(200)),
+                new TestCaseData(equitySymbol, Resolution.Hour, TickType.Trade, TimeSpan.FromDays(365)),
+                new TestCaseData(equitySymbol, Resolution.Daily, TickType.Trade, TimeSpan.FromDays(3650)),
+
+                // Options
                 new TestCaseData(optionSymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(100)),
                 new TestCaseData(optionSymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(200)),
                 new TestCaseData(optionSymbol, Resolution.Hour, TickType.Trade, TimeSpan.FromDays(365)),
@@ -166,7 +174,6 @@ namespace QuantConnect.Tests.Polygon
         private static TestCaseData[] UssuportedSecurityTypesResolutionsAndTickTypesTestCases => new[]
         {
             // Supported resolution and tick type, unsupported security type symbol
-            new TestCaseData(Symbols.SPY, Resolution.Minute, TickType.Trade),
             new TestCaseData(Symbols.USDJPY, Resolution.Minute, TickType.Trade),
             new TestCaseData(Symbols.BTCUSD, Resolution.Minute, TickType.Trade),
             new TestCaseData(Symbols.DE10YBEUR, Resolution.Minute, TickType.Trade),
@@ -292,7 +299,7 @@ namespace QuantConnect.Tests.Polygon
                         Close = 1.5m,
                         Volume = 100m
                     }).ToList(),
-                    NextUrl = _currentStart < CurrentHistoryRequest.EndTimeUtc ? "https://www.someourl.com" : null
+                    NextUrl = _currentStart < CurrentHistoryRequest?.EndTimeUtc ? "https://www.someourl.com" : null
                 });
             }
         }

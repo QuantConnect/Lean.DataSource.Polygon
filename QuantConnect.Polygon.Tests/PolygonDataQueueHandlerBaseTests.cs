@@ -32,7 +32,7 @@ namespace QuantConnect.Tests.Polygon
 {
     public abstract class PolygonDataQueueHandlerBaseTests
     {
-        private readonly string _apiKey = Config.Get("polygon-api-key");
+        protected readonly string ApiKey = Config.Get("polygon-api-key");
 
         [SetUp]
         public void Setup()
@@ -44,11 +44,12 @@ namespace QuantConnect.Tests.Polygon
         [Test]
         public void CanSubscribeAndUnsubscribe()
         {
-            using var polygon = new PolygonDataQueueHandler(_apiKey);
+            using var polygon = new PolygonDataQueueHandler(ApiKey);
             var unsubscribed = false;
 
-            var configs = GetConfigs().Take(2).ToList();
-            var configToUnsubscribe = configs[1];
+            var configs = GetConfigs();
+            Assert.That(configs, Has.Count.GreaterThanOrEqualTo(2));
+            SubscriptionDataConfig unsubscribedConfig = null;
 
             var dataFromEnumerator = new List<TradeBar>();
             var dataFromEventHandler = new List<TradeBar>();
@@ -62,7 +63,7 @@ namespace QuantConnect.Tests.Polygon
 
                 dataFromEnumerator.Add((TradeBar)dataPoint);
 
-                if (unsubscribed && dataPoint.Symbol == configToUnsubscribe.Symbol)
+                if (unsubscribedConfig != null && dataPoint.Symbol == unsubscribedConfig.Symbol)
                 {
                     Assert.Fail("Should not receive data for unsubscribed symbol");
                 }
@@ -78,20 +79,23 @@ namespace QuantConnect.Tests.Polygon
                 }), callback);
             }
 
-            Thread.Sleep(3 * 60 * 1000);
+            Thread.Sleep(2 * 60 * 1000);
 
+            Assert.That(dataFromEnumerator, Has.Count.GreaterThanOrEqualTo(2));
+            Assert.That(dataFromEnumerator.Select(x => x.Symbol).Distinct().ToList(), Has.Count.GreaterThanOrEqualTo(2));
+
+            var configToUnsubscribe = configs.First(x => x.Symbol == dataFromEnumerator.Last().Symbol);
             polygon.Unsubscribe(configToUnsubscribe);
             Log.Trace($"Unsubscribing {configToUnsubscribe.Symbol}");
 
             Thread.Sleep(2000);
             // some messages could be inflight, but after a pause all APPL messages must have been consumed
-            unsubscribed = true;
+            unsubscribedConfig = configToUnsubscribe;
 
-            Thread.Sleep(3 * 60 * 1000);
+            Thread.Sleep(2 * 60 * 1000);
 
             polygon.DisposeSafely();
 
-            Assert.That(dataFromEnumerator, Has.Count.GreaterThan(0));
             Assert.That(dataFromEventHandler, Has.Count.EqualTo(dataFromEnumerator.Count));
 
             dataFromEnumerator = dataFromEnumerator.OrderBy(x => x.Symbol.Value).ThenBy(x => x.Time).ToList();
@@ -115,7 +119,7 @@ namespace QuantConnect.Tests.Polygon
         [Test]
         public void StreamsDataForResolutionsHigherThanMinute()
         {
-            using var polygon = new PolygonDataQueueHandler(_apiKey);
+            using var polygon = new PolygonDataQueueHandler(ApiKey);
             var unsubscribed = false;
 
             var configs = GetConfigs().Take(2).ToList();
@@ -176,8 +180,11 @@ namespace QuantConnect.Tests.Polygon
         }
 
         /// <summary>
-        /// In order to successfully run the tests, the right contracts should be used. Update expiracy
+        /// The subscription data configs to be used in the tests. At least 2 configs are required
         /// </summary>
-        protected abstract SubscriptionDataConfig[] GetConfigs();
+        /// <remarks>
+        /// In order to successfully run the tests, valid contracts should be used. Update them
+        /// </remarks>
+        protected abstract List<SubscriptionDataConfig> GetConfigs();
     }
 }
