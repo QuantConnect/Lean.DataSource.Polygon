@@ -31,7 +31,6 @@ using QuantConnect.Packets;
 using QuantConnect.Securities;
 using QuantConnect.Util;
 using RestSharp;
-using static QuantConnect.Brokerages.WebSocketClientWrapper;
 
 namespace QuantConnect.Polygon
 {
@@ -40,15 +39,13 @@ namespace QuantConnect.Polygon
     /// </summary>
     public partial class PolygonDataQueueHandler : IDataQueueHandler, IDataQueueUniverseProvider
     {
-        private int _maximumWebSocketConnections;
-        private int _maximumOptionsSubscriptionsPerWebSocket;
-        private string _apiKey;
-
-        private readonly ReadOnlyCollection<SecurityType> _supportedSecurityTypes = Array.AsReadOnly(new[]
+        private static readonly ReadOnlyCollection<SecurityType> _supportedSecurityTypes = Array.AsReadOnly(new[]
         {
             SecurityType.Option,
             SecurityType.IndexOption
         });
+
+        private string _apiKey;
 
         private readonly PolygonAggregationManager _dataAggregator = new();
 
@@ -104,7 +101,6 @@ namespace QuantConnect.Polygon
         public PolygonDataQueueHandler(string apiKey, int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
         {
             _apiKey = apiKey;
-            _maximumOptionsSubscriptionsPerWebSocket = maxSubscriptionsPerWebSocket;
             _optionChainProvider = Composer.Instance.GetPart<IOptionChainProvider>();
 
             ValidateSubscription();
