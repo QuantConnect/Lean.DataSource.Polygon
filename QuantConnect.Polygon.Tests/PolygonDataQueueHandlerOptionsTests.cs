@@ -91,7 +91,7 @@ namespace QuantConnect.Tests.Polygon
         /// <remarks>
         /// In order to successfully run the tests, valid contracts should be used. Update them
         /// </remarks>
-        protected override List<SubscriptionDataConfig> GetConfigs()
+        protected override List<SubscriptionDataConfig> GetConfigs(Resolution resolution = Resolution.Second)
         {
             var spyOptions = new[] { 463m, 464m, 465m, 466m, 467m }.Select(strike => GetSubscriptionDataConfig<TradeBar>(
                 Symbol.CreateOption(
@@ -101,7 +101,7 @@ namespace QuantConnect.Tests.Polygon
                     OptionRight.Call,
                     strike,
                     new DateTime(2023, 12, 18)),
-                Resolution.Minute));
+                resolution));
 
             var aaplOptions = new[] { 195m, 197.5m, 200m, 202.5m, 205m }.Select(strike => GetSubscriptionDataConfig<TradeBar>(
                 Symbol.CreateOption(
@@ -111,7 +111,7 @@ namespace QuantConnect.Tests.Polygon
                     OptionRight.Call,
                     strike,
                     new DateTime(2023, 12, 15)),
-                Resolution.Minute));
+                resolution));
 
             return spyOptions.Concat(aaplOptions).ToList();
         }

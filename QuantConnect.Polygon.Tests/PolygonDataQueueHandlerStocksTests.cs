@@ -33,12 +33,12 @@ namespace QuantConnect.Tests.Polygon
         /// <remarks>
         /// In order to successfully run the tests, valid contracts should be used. Update them
         /// </remarks>
-        protected override List<SubscriptionDataConfig> GetConfigs()
+        protected override List<SubscriptionDataConfig> GetConfigs(Resolution resolution = Resolution.Second)
         {
             return new [] { "SPY", "AAPL", "GOOG", "IBM" }
                 .Select(ticker => GetSubscriptionDataConfig<TradeBar>(
                     Symbol.Create(ticker, SecurityType.Equity, Market.USA),
-                    Resolution.Minute))
+                    resolution))
                 .ToList();
         }
     }

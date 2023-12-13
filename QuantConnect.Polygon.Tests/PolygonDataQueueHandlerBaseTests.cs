@@ -42,12 +42,13 @@ namespace QuantConnect.Tests.Polygon
         }
 
         [Test]
+        [Explicit("Tests are dependent on network and take long")]
         public void CanSubscribeAndUnsubscribe()
         {
             using var polygon = new PolygonDataQueueHandler(ApiKey);
             var unsubscribed = false;
 
-            var configs = GetConfigs();
+            var configs = GetConfigs(Resolution.Second);
             Assert.That(configs, Has.Count.GreaterThanOrEqualTo(2));
             SubscriptionDataConfig unsubscribedConfig = null;
 
@@ -79,7 +80,7 @@ namespace QuantConnect.Tests.Polygon
                 }), callback);
             }
 
-            Thread.Sleep(2 * 60 * 1000);
+            Thread.Sleep(10 * 1000);
 
             Assert.That(dataFromEnumerator, Has.Count.GreaterThanOrEqualTo(2));
             Assert.That(dataFromEnumerator.Select(x => x.Symbol).Distinct().ToList(), Has.Count.GreaterThanOrEqualTo(2));
@@ -92,7 +93,7 @@ namespace QuantConnect.Tests.Polygon
             // some messages could be inflight, but after a pause all APPL messages must have been consumed
             unsubscribedConfig = configToUnsubscribe;
 
-            Thread.Sleep(2 * 60 * 1000);
+            Thread.Sleep(10 * 1000);
 
             polygon.DisposeSafely();
 
@@ -116,13 +117,15 @@ namespace QuantConnect.Tests.Polygon
             }
         }
 
-        [Test]
-        public void StreamsDataForResolutionsHigherThanMinute()
+        [TestCase(Resolution.Second, 15)]
+        [TestCase(Resolution.Minute, 3)]
+        [TestCase(Resolution.Hour, 3)]
+        [Explicit("Tests are dependent on network and take long")]
+        public void StreamsDataForResolutionsHigherThanMinute(Resolution resolution, int period)
         {
             using var polygon = new PolygonDataQueueHandler(ApiKey);
-            var unsubscribed = false;
 
-            var configs = GetConfigs().Take(2).ToList();
+            var configs = GetConfigs(resolution);
             var receivedData = new List<TradeBar>();
 
             foreach (var config in configs)
@@ -136,11 +139,17 @@ namespace QuantConnect.Tests.Polygon
                 });
             }
 
-            // Run for 3 hours
-            Thread.Sleep(3 * 60 * 60 * 1000);
+            var timeSpan = resolution.ToTimeSpan();
 
-            // Data is not fill forwarded by Polygon, so we expect at most 3 trade bars
-            Assert.That(receivedData, Is.Not.Empty.And.Count.LessThanOrEqualTo(3));
+            // Run for the specified period
+            Thread.Sleep(period * (int)timeSpan.TotalMilliseconds);
+
+            Log.Debug($"Received {receivedData.Count} data points");
+
+            foreach (var data in receivedData)
+            {
+                Assert.That(data.EndTime - data.Time, Is.EqualTo(timeSpan));
+            }
         }
 
         private void ProcessFeed(IEnumerator<BaseData> enumerator, Action<BaseData> callback = null)
@@ -185,6 +194,6 @@ namespace QuantConnect.Tests.Polygon
         /// <remarks>
         /// In order to successfully run the tests, valid contracts should be used. Update them
         /// </remarks>
-        protected abstract List<SubscriptionDataConfig> GetConfigs();
+        protected abstract List<SubscriptionDataConfig> GetConfigs(Resolution resolution = Resolution.Second);
     }
 }

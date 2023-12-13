@@ -23,7 +23,7 @@ namespace QuantConnect.Polygon
     public class BaseMessage
     {
         /// <summary>
-        /// The type of event this message represents (e.g. "AM" for minute aggregates)
+        /// The type of event this message represents (e.g. "A"/"AM" for second/minute aggregates)
         /// </summary>
         [JsonProperty("ev")]
         public string EventType { get; set; }

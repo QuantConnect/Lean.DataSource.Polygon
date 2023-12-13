@@ -139,15 +139,9 @@ namespace QuantConnect.Polygon
         /// <returns>The new enumerator for this subscription request</returns>
         public IEnumerator<BaseData> Subscribe(SubscriptionDataConfig dataConfig, EventHandler newDataAvailableHandler)
         {
-            if (!CanSubscribe(dataConfig.Symbol))
+            if (!CanSubscribe(dataConfig))
             {
                 return null;
-            }
-
-            if (IsSecurityTypeSupported(dataConfig.SecurityType) && dataConfig.Resolution != Resolution.Minute)
-            {
-                throw new ArgumentException(
-                    $"Polygon data queue handler does not support {dataConfig.SecurityType} {dataConfig.Resolution} subscriptions");
             }
 
             var enumerator = _dataAggregator.Add(dataConfig, newDataAvailableHandler);
@@ -289,7 +283,7 @@ namespace QuantConnect.Polygon
 
                 switch (eventType)
                 {
-                    case "AM":
+                    case "A":
                         ProcessAggregate(parsedMessage.ToObject<AggregateMessage>());
                         break;
 
@@ -382,11 +376,23 @@ namespace QuantConnect.Polygon
         }
 
         /// <summary>
-        /// Determines whether or not the specified symbol can be subscribed to
+        /// Determines whether or not the specified config can be subscribed to
         /// </summary>
-        private static bool CanSubscribe(Symbol symbol)
+        private static bool CanSubscribe(SubscriptionDataConfig config)
         {
-            return symbol.Value.IndexOfInvariant("universe", true) == -1 && IsSecurityTypeSupported(symbol.ID.SecurityType);
+            if (!IsSecurityTypeSupported(config.SecurityType))
+            {
+                Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Unsupported security type: {config.SecurityType}");
+                return false;
+            }
+
+            if (config.Resolution < Resolution.Second)
+            {
+                Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Unsupported resolution: {config.Resolution}");
+                return false;
+            }
+
+            return config.Symbol.Value.IndexOfInvariant("universe", true) == -1;
         }
 
         /// <summary>

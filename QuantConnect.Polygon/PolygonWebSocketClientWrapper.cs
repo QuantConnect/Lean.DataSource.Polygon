@@ -138,8 +138,8 @@ namespace QuantConnect.Polygon
                 case SecurityType.Equity:
                 case SecurityType.Option:
                 case SecurityType.IndexOption:
-                    // Only support aggregated minute data for options
-                    return "AM";
+                    // Only support aggregated second data for options
+                    return "A";
 
                 default:
                     throw new Exception($"Unsupported security type: {securityType}");
