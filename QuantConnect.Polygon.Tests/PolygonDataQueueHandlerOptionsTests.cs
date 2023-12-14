@@ -93,25 +93,31 @@ namespace QuantConnect.Tests.Polygon
         /// </remarks>
         protected override List<SubscriptionDataConfig> GetConfigs(Resolution resolution = Resolution.Second)
         {
-            var spyOptions = new[] { 463m, 464m, 465m, 466m, 467m }.Select(strike => GetSubscriptionDataConfig<TradeBar>(
-                Symbol.CreateOption(
-                    Symbols.SPY,
-                    Market.USA,
-                    OptionStyle.American,
-                    OptionRight.Call,
-                    strike,
-                    new DateTime(2023, 12, 18)),
-                resolution));
+            var spyOptions = new[] { 463m, 464m, 465m, 466m, 467m }
+                .Select(strike =>
+                {
+                    var symbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, strike,
+                        new DateTime(2023, 12, 18));
+                    return new[]
+                    {
+                        GetSubscriptionDataConfig<TradeBar>(symbol, resolution),
+                        GetSubscriptionDataConfig<QuoteBar>(symbol, resolution)
+                    };
+                })
+                .SelectMany(x => x);
 
-            var aaplOptions = new[] { 195m, 197.5m, 200m, 202.5m, 205m }.Select(strike => GetSubscriptionDataConfig<TradeBar>(
-                Symbol.CreateOption(
-                    Symbols.AAPL,
-                    Market.USA,
-                    OptionStyle.American,
-                    OptionRight.Call,
-                    strike,
-                    new DateTime(2023, 12, 15)),
-                resolution));
+            var aaplOptions = new[] { 195m, 197.5m, 200m, 202.5m, 205m }
+                .Select(strike =>
+                {
+                    var symbol = Symbol.CreateOption(Symbols.AAPL, Market.USA, OptionStyle.American, OptionRight.Call, strike,
+                        new DateTime(2023, 12, 15));
+                    return new[]
+                    {
+                        GetSubscriptionDataConfig<TradeBar>(symbol, resolution),
+                        GetSubscriptionDataConfig<QuoteBar>(symbol, resolution)
+                    };
+                })
+                .SelectMany(x => x);
 
             return spyOptions.Concat(aaplOptions).ToList();
         }

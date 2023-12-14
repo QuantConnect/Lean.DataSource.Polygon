@@ -166,10 +166,11 @@ namespace QuantConnect.Polygon
             _subscribedEvent.Reset();
 
             // Subscribe
+            Log.Debug($"PolygonDataQueueHandler.Subscribe(): Subscribing to {dataConfig.Symbol} | {dataConfig.TickType}");
             _subscriptionManager.Subscribe(dataConfig);
 
             var events = new WaitHandle[] { _failedAuthenticationEvent, _successfulAuthenticationEvent, _subscribedEvent };
-            var triggeredEventIndex = WaitHandle.WaitAny(events, TimeSpan.FromMinutes(2));
+            var triggeredEventIndex = WaitHandle.WaitAny(events, TimeSpan.FromMinutes(1));
             if (triggeredEventIndex == WaitHandle.WaitTimeout)
             {
                 throw new TimeoutException("Timeout waiting for websocket to connect.");
@@ -306,6 +307,10 @@ namespace QuantConnect.Polygon
                         ProcessTrade(parsedMessage.ToObject<TradeMessage>());
                         break;
 
+                    case "Q":
+                        ProcessQuote(parsedMessage.ToObject<QuoteMessage>());
+                        break;
+
                     case "status":
                         ProcessStatusMessage(parsedMessage);
                         break;
@@ -336,7 +341,22 @@ namespace QuantConnect.Polygon
         {
             var symbol = _symbolMapper.GetLeanSymbol(trade.Symbol);
             var time = GetTickTime(symbol, trade.Timestamp);
-            var tick = new Tick(time, symbol, "", GetExchangeCode(trade.ExchangeID), trade.Price, trade.Size);
+            // TODO: What about trade.Conditions? How to we map them to Lean?
+            var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(trade.ExchangeID), trade.Price, trade.Size);
+            _dataAggregator.Update(tick);
+        }
+
+        /// <summary>
+        /// Processes and incoming quote tick
+        /// </summary>
+        private void ProcessQuote(QuoteMessage quote)
+        {
+            var symbol = _symbolMapper.GetLeanSymbol(quote.Symbol);
+            var time = GetTickTime(symbol, quote.Timestamp);
+            // TODO: What about quote.Conditions? How to we map them to Lean?
+            // TODO: Polygon's quotes have bid/ask exchange IDs, but Lean only has one exchange per tick
+            var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(quote.BidExchangeID),
+                quote.BidPrice, quote.BidSize, quote.AskPrice, quote.AskSize);
             _dataAggregator.Update(tick);
         }
 
@@ -447,18 +467,21 @@ namespace QuantConnect.Polygon
         /// </summary>
         private bool CanSubscribe(SubscriptionDataConfig config)
         {
-            if (_subscriptionPlan == PolygonSubscriptionPlan.Basic)
-            {
-                Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Basic plan does not support streaming data.");
-                return false;
-            }
-
+            // Check supported security types
             if (!IsSecurityTypeSupported(config.SecurityType))
             {
                 Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Unsupported security type: {config.SecurityType}");
                 return false;
             }
 
+            // Basic plan does not support streaming data
+            if (_subscriptionPlan == PolygonSubscriptionPlan.Basic)
+            {
+                Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Basic plan does not support streaming data.");
+                return false;
+            }
+
+            // Starter plan does not support streaming ticks
             if (_subscriptionPlan < PolygonSubscriptionPlan.Developer && config.Resolution < Resolution.Second)
             {
                 Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Unsupported resolution: {config.Resolution} " +
@@ -466,6 +489,15 @@ namespace QuantConnect.Polygon
                 return false;
             }
 
+            // Only advanced plan supports streaming quotes
+            if (_subscriptionPlan < PolygonSubscriptionPlan.Advanced && config.TickType != TickType.Trade)
+            {
+                Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Unsupported tick type: {config.TickType} " +
+                    $"for {_subscriptionPlan} subscription plan");
+                return false;
+            }
+
+            // Filter out universe symbols
             return config.Symbol.Value.IndexOfInvariant("universe", true) == -1;
         }
 

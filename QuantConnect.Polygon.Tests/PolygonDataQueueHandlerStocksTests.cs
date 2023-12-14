@@ -35,10 +35,17 @@ namespace QuantConnect.Tests.Polygon
         /// </remarks>
         protected override List<SubscriptionDataConfig> GetConfigs(Resolution resolution = Resolution.Second)
         {
-            return new [] { "SPY", "AAPL", "GOOG", "IBM" }
-                .Select(ticker => GetSubscriptionDataConfig<TradeBar>(
-                    Symbol.Create(ticker, SecurityType.Equity, Market.USA),
-                    resolution))
+            return new[] { "SPY", "AAPL", "GOOG", "MSFT" }
+                .Select(ticker =>
+                {
+                    var symbol = Symbol.Create(ticker, SecurityType.Equity, Market.USA);
+                    return new[]
+                    {
+                        GetSubscriptionDataConfig<TradeBar>(symbol, resolution),
+                        GetSubscriptionDataConfig<QuoteBar>(symbol, resolution),
+                    };
+                })
+                .SelectMany(x => x)
                 .ToList();
         }
     }

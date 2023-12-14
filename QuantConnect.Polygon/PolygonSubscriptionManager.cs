@@ -14,10 +14,12 @@
 */
 
 using System.Runtime.CompilerServices;
-
+using Newtonsoft.Json.Linq;
+using QuantConnect.Brokerages;
 using QuantConnect.Data;
 using QuantConnect.Logging;
 using QuantConnect.Util;
+using static QuantConnect.Brokerages.WebSocketClientWrapper;
 
 namespace QuantConnect.Polygon
 {
@@ -101,11 +103,14 @@ namespace QuantConnect.Polygon
                     throw new NotSupportedException("Maximum symbol count reached for the current configuration " +
                         $"[MaxSymbolsPerWebSocket={_maxSubscriptionsPerWebSocket}");
                 }
-                if (!webSocket.IsOpen)
+
+                if (!webSocket.IsOpen && !ConnectWebSocket(webSocket))
                 {
-                    webSocket.Connect();
+                    // Could not connect or authenticate
+                    return false;
                 }
-                webSocket.Subscribe(symbol, TickType.Trade);
+
+                webSocket.Subscribe(symbol, tickType);
             }
 
             return true;
@@ -139,6 +144,40 @@ namespace QuantConnect.Polygon
         private PolygonWebSocketClientWrapper GetWebSocket(SecurityType securityType)
         {
             return _webSockets.FirstOrDefault(x => x.SupportedSecurityTypes.Contains(securityType));
+        }
+
+        private bool ConnectWebSocket(PolygonWebSocketClientWrapper webSocket)
+        {
+            var authenticatedEvent = new AutoResetEvent(false);
+            EventHandler<WebSocketMessage> callback = (sender, e) =>
+            {
+                var data = (TextMessage)e.Data;
+                // Find the authentication message
+                var authenticationMessage = JArray.Parse(data.Message)
+                    .FirstOrDefault(message => message["ev"].ToString() == "status" && message["status"].ToString() == "auth_success");
+                if (authenticationMessage != null)
+                {
+                    authenticatedEvent.Set();
+                }
+            };
+
+            webSocket.Message += callback;
+            webSocket.Connect();
+
+            var result = authenticatedEvent.WaitOne(TimeSpan.FromSeconds(60));
+            webSocket.Message -= callback;
+
+            return result;
+        }
+
+        /// <summary>
+        /// Channel name
+        /// </summary>
+        /// <param name="tickType">Type of tick data</param>
+        /// <returns>Returns Socket channel name corresponding <paramref name="tickType"/></returns>
+        protected override string ChannelNameFromTickType(TickType tickType)
+        {
+            return tickType.ToString();
         }
 
         /// <summary>

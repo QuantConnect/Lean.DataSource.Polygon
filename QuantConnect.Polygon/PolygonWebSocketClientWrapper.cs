@@ -81,9 +81,9 @@ namespace QuantConnect.Polygon
         /// <param name="tickType">Type of tick data</param>
         public void Subscribe(Symbol symbol, TickType tickType)
         {
-            if (tickType != TickType.Trade)
+            if (_subscriptionPlan == PolygonSubscriptionPlan.Basic)
             {
-                throw new Exception($"Unsupported tick type: {tickType}");
+                throw new NotSupportedException("Basic plan does not support streaming data");
             }
 
             Subscribe(symbol, tickType, true);
@@ -103,11 +103,6 @@ namespace QuantConnect.Polygon
 
         private void Subscribe(Symbol symbol, TickType tickType, bool subscribe)
         {
-            if (_subscriptionPlan == PolygonSubscriptionPlan.Basic)
-            {
-                throw new NotSupportedException("Basic plan does not support streaming data");
-            }
-
             var ticker = _symbolMapper.GetBrokerageSymbol(symbol);
             Send(JsonConvert.SerializeObject(new
             {

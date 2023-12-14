@@ -15,7 +15,6 @@
 
 using QuantConnect.Data;
 using QuantConnect.Data.Consolidators;
-using QuantConnect.Data.Market;
 using QuantConnect.Lean.Engine.DataFeeds;
 
 namespace QuantConnect.Polygon
@@ -41,11 +40,16 @@ namespace QuantConnect.Polygon
         /// </summary>
         protected override IDataConsolidator GetConsolidator(SubscriptionDataConfig config)
         {
+            if (config.TickType == TickType.OpenInterest)
+            {
+                throw new ArgumentException($"Unsupported subscription tick type {config.TickType}");
+            }
+
             if (_subscriptionPlan < PolygonSubscriptionPlan.Advanced)
             {
-                if (config.Type != typeof(TradeBar))
+                if (config.TickType != TickType.Trade)
                 {
-                    throw new ArgumentException($"Unsupported subscription data config type {config.Type} " +
+                    throw new ArgumentException($"Unsupported subscription data config type {config.TickType} " +
                         $"for {_subscriptionPlan} Polygon.io subscription plan");
                 }
 

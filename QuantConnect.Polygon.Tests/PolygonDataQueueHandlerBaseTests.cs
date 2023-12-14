@@ -58,7 +58,7 @@ namespace QuantConnect.Tests.Polygon
             var configs = GetConfigs(Resolution.Second);
             if (subscriptionPlan < PolygonSubscriptionPlan.Advanced)
             {
-                configs = configs.Where(config => config.TickType != TickType.Trade).ToList();
+                configs = configs.Where(config => config.TickType == TickType.Trade).ToList();
             }
             Assert.That(configs, Is.Not.Empty);
 
@@ -146,13 +146,13 @@ namespace QuantConnect.Tests.Polygon
             using var polygon = new PolygonDataQueueHandler(ApiKey, PolygonSubscriptionPlan.Advanced);
 
             var configs = GetConfigs(resolution);
-            var receivedData = new List<TradeBar>();
+            var receivedData = new List<BaseData>();
 
             foreach (var config in configs)
             {
                 polygon.Subscribe(config, (sender, args) =>
                 {
-                    var dataPoint = (TradeBar)((NewDataAvailableEventArgs)args).DataPoint;
+                    var dataPoint = (BaseData)((NewDataAvailableEventArgs)args).DataPoint;
                     Log.Trace($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
 
                     receivedData.Add(dataPoint);
@@ -164,8 +164,16 @@ namespace QuantConnect.Tests.Polygon
             // Run for the specified period
             Thread.Sleep(period * (int)timeSpan.TotalMilliseconds);
 
-            Log.Trace($"Received {receivedData.Count} data points");
+            Log.Trace("Unsubscribing symbols");
+            foreach (var config in configs)
+            {
+                polygon.Unsubscribe(config);
+            }
 
+            // Some messages could be inflight
+            Thread.Sleep(2 * 1000);
+
+            Log.Trace($"Received {receivedData.Count} data points");
             Assert.That(receivedData, Is.Not.Empty);
 
             if (resolution == Resolution.Tick)
