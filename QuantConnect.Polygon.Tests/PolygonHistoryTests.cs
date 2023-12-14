@@ -41,7 +41,7 @@ namespace QuantConnect.Tests.Polygon
         {
             Log.LogHandler = new CompositeLogHandler();
 
-            _historyProvider = new PolygonDataQueueHandler(_apiKey, false);
+            _historyProvider = new PolygonDataQueueHandler(_apiKey, streamingEnabled: false);
             _historyProvider.Initialize(new HistoryProviderInitializeParameters(null, null, null, null, null, null, null, false, null, null));
 
         }
@@ -119,7 +119,7 @@ namespace QuantConnect.Tests.Polygon
             Log.Trace($"Retrieved {_historyProvider.DataPointCount} data points in {history1Duration}");
 
             Config.Set("polygon-aggregate-response-limit", 500);
-            using var newHistoryProvider = new PolygonDataQueueHandler(_apiKey, false);
+            using var newHistoryProvider = new PolygonDataQueueHandler(_apiKey, streamingEnabled: false);
 
             stopwatch.Restart();
             var history2 = newHistoryProvider.GetHistory(request).ToList();
@@ -269,7 +269,7 @@ namespace QuantConnect.Tests.Polygon
 
             public int ApiCallsCount { get; private set; }
 
-            public TestPolygonHistoryProvider() : base("test-api-key", false) { }
+            public TestPolygonHistoryProvider() : base("test-api-key", streamingEnabled: false) { }
 
             public void SetHistoryRequest(HistoryRequest request)
             {
@@ -309,7 +309,7 @@ namespace QuantConnect.Tests.Polygon
             protected override RateGate RestApiRateLimiter { get; }
 
             public ConfigurableRateLimitedPolygonHistoryProvider(string apiKey, RateGate rateGate)
-                : base(apiKey, false)
+                : base(apiKey, streamingEnabled: false)
             {
                 RestApiRateLimiter = rateGate;
             }

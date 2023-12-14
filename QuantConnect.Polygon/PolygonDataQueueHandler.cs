@@ -82,13 +82,14 @@ namespace QuantConnect.Polygon
         /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
         /// </summary>
         /// <param name="apiKey">The Polygon API key for authentication</param>
+        /// <param name="subscriptionPlan">Polygon subscription plan</param>
         /// <param name="streamingEnabled">
         /// Whether this handle will be used for streaming data.
         /// If false, the handler is supposed to be used as a history provider only.
         /// </param>
-        public PolygonDataQueueHandler(string apiKey, bool streamingEnabled = true)
+        public PolygonDataQueueHandler(string apiKey, PolygonSubscriptionPlan? subscriptionPlan = null, bool streamingEnabled = true)
             : this(apiKey,
-                Config.GetValue("polygon-subscription-plan", PolygonSubscriptionPlan.Advanced),
+                subscriptionPlan ?? Config.GetValue("polygon-subscription-plan", PolygonSubscriptionPlan.Advanced),
                 Config.GetInt("polygon-max-subscriptions-per-websocket", -1),
                 streamingEnabled)
         {

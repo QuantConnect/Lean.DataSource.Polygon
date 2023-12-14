@@ -37,21 +37,30 @@ namespace QuantConnect.Tests.Polygon
         [SetUp]
         public void Setup()
         {
-            Log.DebuggingEnabled = Config.GetBool("debug-mode");
+            Log.DebuggingEnabled = Config.GetBool("debug-mode", true);
             Log.LogHandler = new CompositeLogHandler();
         }
 
-        [Test]
+        // With each subscription plan, different streaming methods will be used:
+        //  - Starter: Only resolutions >= second and trade data will be streamed, using aggregated second bars
+        //  - Developer: All resolutions and trade data only will be streamed, using trade ticks
+        //  - Advanced: All resolutions and both trade and quote data will be streamed, using trade and quote ticks
+        [TestCase(PolygonSubscriptionPlan.Starter)]
+        [TestCase(PolygonSubscriptionPlan.Developer)]
+        [TestCase(PolygonSubscriptionPlan.Advanced)]
         [Explicit("Tests are dependent on network and take long. " +
             "Also, this test will only pass if the subscribed securities are liquid enough to get data in the test run time.")]
-        public void CanSubscribeAndUnsubscribe()
+        public void CanSubscribeAndUnsubscribe(PolygonSubscriptionPlan subscriptionPlan)
         {
-            using var polygon = new PolygonDataQueueHandler(ApiKey);
-            var unsubscribed = false;
+            using var polygon = new PolygonDataQueueHandler(ApiKey, subscriptionPlan);
+            var unsusbscribed = false;
 
             var configs = GetConfigs(Resolution.Second);
-            Assert.That(configs, Has.Count.GreaterThanOrEqualTo(2));
-            SubscriptionDataConfig unsubscribedConfig = null;
+            if (subscriptionPlan < PolygonSubscriptionPlan.Advanced)
+            {
+                configs = configs.Where(config => config.TickType != TickType.Trade).ToList();
+            }
+            Assert.That(configs, Is.Not.Empty);
 
             var dataFromEnumerator = new List<TradeBar>();
             var dataFromEventHandler = new List<TradeBar>();
@@ -65,9 +74,9 @@ namespace QuantConnect.Tests.Polygon
 
                 dataFromEnumerator.Add((TradeBar)dataPoint);
 
-                if (unsubscribedConfig != null && dataPoint.Symbol == unsubscribedConfig.Symbol)
+                if (unsusbscribed)
                 {
-                    Assert.Fail("Should not receive data for unsubscribed symbol");
+                    Assert.Fail("Should not receive data for unsubscribed symbols");
                 }
             };
 
@@ -81,24 +90,32 @@ namespace QuantConnect.Tests.Polygon
                 }), callback);
             }
 
-            Thread.Sleep(10 * 1000);
+            const int seconds = 10;
+            Thread.Sleep(seconds * 1000);
 
-            Assert.That(dataFromEnumerator, Has.Count.GreaterThanOrEqualTo(2));
-            Assert.That(dataFromEnumerator.Select(x => x.Symbol).Distinct().ToList(), Has.Count.GreaterThanOrEqualTo(2));
+            foreach (var config in configs)
+            {
+                polygon.Unsubscribe(config);
+            }
 
-            var configToUnsubscribe = configs.First(x => x.Symbol == dataFromEnumerator.Last().Symbol);
-            polygon.Unsubscribe(configToUnsubscribe);
-            Log.Trace($"Unsubscribing {configToUnsubscribe.Symbol}");
+            Log.Trace("Unsubscribing symbols");
 
+            // some messages could be inflight, but after a pause all messages must have been consumed
             Thread.Sleep(2 * 1000);
-            // some messages could be inflight, but after a pause all APPL messages must have been consumed
-            unsubscribedConfig = configToUnsubscribe;
 
-            Thread.Sleep(10 * 1000);
+            unsusbscribed = true;
+            var dataCount = dataFromEnumerator.Count;
+
+            Assert.That(dataFromEnumerator, Is.Not.Empty.And.Count.LessThanOrEqualTo(seconds * configs.Count));
+            Assert.That(dataFromEventHandler, Has.Count.EqualTo(dataFromEnumerator.Count));
+
+            // Let's give some time to make sure we don't receive any more data
+            Thread.Sleep(seconds * 1000);
+
+            Assert.That(dataFromEnumerator.Count, Is.EqualTo(dataCount));
+            Assert.That(dataFromEventHandler.Count, Is.EqualTo(dataCount));
 
             polygon.DisposeSafely();
-
-            Assert.That(dataFromEventHandler, Has.Count.EqualTo(dataFromEnumerator.Count));
 
             dataFromEnumerator = dataFromEnumerator.OrderBy(x => x.Symbol.Value).ThenBy(x => x.Time).ToList();
             dataFromEventHandler = dataFromEventHandler.OrderBy(x => x.Symbol.Value).ThenBy(x => x.Time).ToList();
@@ -118,6 +135,7 @@ namespace QuantConnect.Tests.Polygon
             }
         }
 
+        [TestCase(Resolution.Tick, 1)]
         [TestCase(Resolution.Second, 15)]
         [TestCase(Resolution.Minute, 3)]
         [TestCase(Resolution.Hour, 3)]
@@ -125,7 +143,7 @@ namespace QuantConnect.Tests.Polygon
             "Also, this test will only pass if the subscribed securities are liquid enough to get data in the test run time.")]
         public void StreamsDataForDifferentResolutions(Resolution resolution, int period)
         {
-            using var polygon = new PolygonDataQueueHandler(ApiKey);
+            using var polygon = new PolygonDataQueueHandler(ApiKey, PolygonSubscriptionPlan.Advanced);
 
             var configs = GetConfigs(resolution);
             var receivedData = new List<TradeBar>();
@@ -141,7 +159,7 @@ namespace QuantConnect.Tests.Polygon
                 });
             }
 
-            var timeSpan = resolution.ToTimeSpan();
+            var timeSpan = resolution != Resolution.Tick ? resolution.ToTimeSpan() : TimeSpan.FromSeconds(5);
 
             // Run for the specified period
             Thread.Sleep(period * (int)timeSpan.TotalMilliseconds);
@@ -149,9 +167,20 @@ namespace QuantConnect.Tests.Polygon
             Log.Trace($"Received {receivedData.Count} data points");
 
             Assert.That(receivedData, Is.Not.Empty);
-            foreach (var data in receivedData)
+
+            if (resolution == Resolution.Tick)
             {
-                Assert.That(data.EndTime - data.Time, Is.EqualTo(timeSpan));
+                foreach (var data in receivedData)
+                {
+                    Assert.That(data.EndTime - data.Time, Is.LessThan(TimeSpan.FromSeconds(1)));
+                }
+            }
+            else
+            {
+                foreach (var data in receivedData)
+                {
+                    Assert.That(data.EndTime - data.Time, Is.EqualTo(timeSpan));
+                }
             }
         }
 
