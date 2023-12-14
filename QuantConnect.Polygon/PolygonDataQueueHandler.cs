@@ -47,11 +47,13 @@ namespace QuantConnect.Polygon
         });
 
         private string _apiKey;
+        private PolygonSubscriptionPlan _subscriptionPlan;
 
-        private readonly PolygonAggregationManager _dataAggregator = new();
+        private readonly PolygonAggregationManager _dataAggregator;
 
         protected readonly PolygonSubscriptionManager _subscriptionManager;
 
+        private readonly List<ExchangeMapping> _exchangeMappings;
         private readonly PolygonSymbolMapper _symbolMapper = new();
         private readonly MarketHoursDatabase _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
         private readonly Dictionary<Symbol, DateTimeZone> _symbolExchangeTimeZones = new();
@@ -71,6 +73,7 @@ namespace QuantConnect.Polygon
         /// </summary>
         public PolygonDataQueueHandler()
             : this(Config.Get("polygon-api-key"),
+                Config.GetValue("polygon-subscription-plan", PolygonSubscriptionPlan.Advanced),
                 Config.GetInt("polygon-max-subscriptions-per-websocket", -1))
         {
         }
@@ -85,6 +88,7 @@ namespace QuantConnect.Polygon
         /// </param>
         public PolygonDataQueueHandler(string apiKey, bool streamingEnabled = true)
             : this(apiKey,
+                Config.GetValue("polygon-subscription-plan", PolygonSubscriptionPlan.Advanced),
                 Config.GetInt("polygon-max-subscriptions-per-websocket", -1),
                 streamingEnabled)
         {
@@ -94,24 +98,32 @@ namespace QuantConnect.Polygon
         /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
         /// </summary>
         /// <param name="apiKey">The Polygon.io API key for authentication</param>
+        /// <param name="subscriptionPlan">Polygon subscription plan</param>
         /// <param name="maxSubscriptionsPerWebSocket">The maximum number of subscriptions allowed per websocket</param>
         /// <param name="streamingEnabled">
         /// Whether this handle will be used for streaming data.
         /// If false, the handler is supposed to be used as a history provider only.
         /// </param>
-        public PolygonDataQueueHandler(string apiKey, int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
+        public PolygonDataQueueHandler(string apiKey, PolygonSubscriptionPlan subscriptionPlan,
+            int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
         {
             _apiKey = apiKey;
+            _subscriptionPlan = subscriptionPlan;
+            _dataAggregator = new PolygonAggregationManager(subscriptionPlan);
             _optionChainProvider = Composer.Instance.GetPart<IOptionChainProvider>();
 
             ValidateSubscription();
 
+            // Initialize the exchange mappings
+            _exchangeMappings = FetchExchangeMappings();
+
+            // Initialize the subscription manager if this instance is going to be used as a data queue handler
             if (streamingEnabled)
             {
                 _subscriptionManager = new PolygonSubscriptionManager(
                     _supportedSecurityTypes,
                     maxSubscriptionsPerWebSocket,
-                    (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage));
+                    (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _subscriptionPlan, _symbolMapper, securityType, OnMessage));
             }
         }
 
@@ -253,7 +265,7 @@ namespace QuantConnect.Polygon
             {
                 _subscriptionManager?.DisposeSafely();
                 _dataAggregator.DisposeSafely();
-                HistoryRateLimiter.DisposeSafely();
+                RestApiRateLimiter.DisposeSafely();
 
                 _disposed = true;
             }
@@ -272,6 +284,8 @@ namespace QuantConnect.Polygon
 
         #endregion
 
+        #region WebSocket
+
         /// <summary>
         /// Handles Polygon.io websocket messages
         /// </summary>
@@ -287,6 +301,10 @@ namespace QuantConnect.Polygon
                         ProcessAggregate(parsedMessage.ToObject<AggregateMessage>());
                         break;
 
+                    case "T":
+                        ProcessTrade(parsedMessage.ToObject<TradeMessage>());
+                        break;
+
                     case "status":
                         ProcessStatusMessage(parsedMessage);
                         break;
@@ -298,7 +316,7 @@ namespace QuantConnect.Polygon
         }
 
         /// <summary>
-        /// Processes an option aggregate event message handling the incoming bar
+        /// Processes an aggregate event message handling the incoming bar
         /// </summary>
         private void ProcessAggregate(AggregateMessage aggregate)
         {
@@ -308,6 +326,17 @@ namespace QuantConnect.Polygon
             var bar = new TradeBar(time, symbol, aggregate.Open, aggregate.High, aggregate.Low, aggregate.Close, aggregate.Volume, period);
 
             _dataAggregator.Update(bar);
+        }
+
+        /// <summary>
+        /// Processes and incoming trade tick
+        /// </summary>
+        private void ProcessTrade(TradeMessage trade)
+        {
+            var symbol = _symbolMapper.GetLeanSymbol(trade.Symbol);
+            var time = GetTickTime(symbol, trade.Timestamp);
+            var tick = new Tick(time, symbol, "", GetExchangeCode(trade.ExchangeID), trade.Price, trade.Size);
+            _dataAggregator.Update(tick);
         }
 
         /// <summary>
@@ -375,20 +404,64 @@ namespace QuantConnect.Polygon
             return utcTime.ConvertFromUtc(exchangeTimeZone);
         }
 
+        #endregion
+
+        #region Exchange mappings
+
+        /// <summary>
+        /// Gets the exchange code mappings from Polygon.io to be cached and used when fetching tick data
+        /// </summary>
+        private List<ExchangeMapping> FetchExchangeMappings()
+        {
+            var url = $"{RestApiBaseUrl}/v3/reference/exchanges";
+            var response = DownloadAndParseData<ExchangesResponse>(url);
+            if (response == null)
+            {
+                throw new Exception($"Failed to download exchange mappings from {url}");
+            }
+
+            return response.Results;
+        }
+
+        /// <summary>
+        /// Gets the exchange code for the given exchange polygon id.
+        /// This code is universal and can be used by Lean to create and <see cref="Exchange"/> instance.
+        /// </summary>
+        private string GetExchangeCode(int exchangePolygonId)
+        {
+            var mapping = _exchangeMappings.FirstOrDefault(x => x.ID == exchangePolygonId);
+            if (mapping == null)
+            {
+                // Unknown exchange
+                return string.Empty;
+            }
+
+            return mapping.Code;
+        }
+
+        #endregion
+
         /// <summary>
         /// Determines whether or not the specified config can be subscribed to
         /// </summary>
-        private static bool CanSubscribe(SubscriptionDataConfig config)
+        private bool CanSubscribe(SubscriptionDataConfig config)
         {
+            if (_subscriptionPlan == PolygonSubscriptionPlan.Basic)
+            {
+                Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Basic plan does not support streaming data.");
+                return false;
+            }
+
             if (!IsSecurityTypeSupported(config.SecurityType))
             {
                 Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Unsupported security type: {config.SecurityType}");
                 return false;
             }
 
-            if (config.Resolution < Resolution.Second)
+            if (_subscriptionPlan < PolygonSubscriptionPlan.Developer && config.Resolution < Resolution.Second)
             {
-                Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Unsupported resolution: {config.Resolution}");
+                Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Unsupported resolution: {config.Resolution} " +
+                    $"for {_subscriptionPlan} subscription plan");
                 return false;
             }
 

@@ -38,7 +38,7 @@ namespace QuantConnect.Tests.Polygon
         {
             const int maxSubscriptions = 1000;
 
-            using var polygon = new PolygonDataQueueHandler(ApiKey, maxSubscriptions);
+            using var polygon = new PolygonDataQueueHandler(ApiKey, PolygonSubscriptionPlan.Starter, maxSubscriptions);
             var optionChainProvider = new LiveOptionChainProvider(TestGlobals.DataCacheProvider, TestGlobals.MapFileProvider);
 
             var underlyingTickers = new[] { "SPY", "AAPL", "GOOG", "IBM" };

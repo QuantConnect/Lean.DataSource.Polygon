@@ -42,7 +42,8 @@ namespace QuantConnect.Tests.Polygon
         }
 
         [Test]
-        [Explicit("Tests are dependent on network and take long")]
+        [Explicit("Tests are dependent on network and take long. " +
+            "Also, this test will only pass if the subscribed securities are liquid enough to get data in the test run time.")]
         public void CanSubscribeAndUnsubscribe()
         {
             using var polygon = new PolygonDataQueueHandler(ApiKey);
@@ -89,7 +90,7 @@ namespace QuantConnect.Tests.Polygon
             polygon.Unsubscribe(configToUnsubscribe);
             Log.Trace($"Unsubscribing {configToUnsubscribe.Symbol}");
 
-            Thread.Sleep(2000);
+            Thread.Sleep(2 * 1000);
             // some messages could be inflight, but after a pause all APPL messages must have been consumed
             unsubscribedConfig = configToUnsubscribe;
 
@@ -120,8 +121,9 @@ namespace QuantConnect.Tests.Polygon
         [TestCase(Resolution.Second, 15)]
         [TestCase(Resolution.Minute, 3)]
         [TestCase(Resolution.Hour, 3)]
-        [Explicit("Tests are dependent on network and take long")]
-        public void StreamsDataForResolutionsHigherThanMinute(Resolution resolution, int period)
+        [Explicit("Tests are dependent on network and take long. " +
+            "Also, this test will only pass if the subscribed securities are liquid enough to get data in the test run time.")]
+        public void StreamsDataForDifferentResolutions(Resolution resolution, int period)
         {
             using var polygon = new PolygonDataQueueHandler(ApiKey);
 
@@ -144,8 +146,9 @@ namespace QuantConnect.Tests.Polygon
             // Run for the specified period
             Thread.Sleep(period * (int)timeSpan.TotalMilliseconds);
 
-            Log.Debug($"Received {receivedData.Count} data points");
+            Log.Trace($"Received {receivedData.Count} data points");
 
+            Assert.That(receivedData, Is.Not.Empty);
             foreach (var data in receivedData)
             {
                 Assert.That(data.EndTime - data.Time, Is.EqualTo(timeSpan));

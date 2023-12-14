@@ -306,12 +306,12 @@ namespace QuantConnect.Tests.Polygon
 
         private class ConfigurableRateLimitedPolygonHistoryProvider : PolygonDataQueueHandler
         {
-            protected override RateGate HistoryRateLimiter { get; }
+            protected override RateGate RestApiRateLimiter { get; }
 
             public ConfigurableRateLimitedPolygonHistoryProvider(string apiKey, RateGate rateGate)
                 : base(apiKey, false)
             {
-                HistoryRateLimiter = rateGate;
+                RestApiRateLimiter = rateGate;
             }
         }
     }

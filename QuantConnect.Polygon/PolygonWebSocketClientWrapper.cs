@@ -29,6 +29,7 @@ namespace QuantConnect.Polygon
         private static string BaseUrl = Config.Get("polygon-ws-url", "wss://socket.polygon.io");
 
         private readonly string _apiKey;
+        private PolygonSubscriptionPlan _subscriptionPlan;
         private readonly ISymbolMapper _symbolMapper;
         private readonly Action<string> _messageHandler;
 
@@ -48,12 +49,18 @@ namespace QuantConnect.Polygon
         /// Creates a new instance of the <see cref="PolygonWebSocketClientWrapper"/> class
         /// </summary>
         /// <param name="apiKey">The Polygon.io API key</param>
+        /// <param name="subscriptionPlan">Polygon subscription plan</param>
         /// <param name="symbolMapper">The symbol mapper</param>
         /// <param name="securityType">The security type</param>
         /// <param name="messageHandler">The message handler</param>
-        public PolygonWebSocketClientWrapper(string apiKey, ISymbolMapper symbolMapper, SecurityType securityType, Action<string> messageHandler)
+        public PolygonWebSocketClientWrapper(string apiKey,
+            PolygonSubscriptionPlan subscriptionPlan,
+            ISymbolMapper symbolMapper,
+            SecurityType securityType,
+            Action<string> messageHandler)
         {
             _apiKey = apiKey;
+            _subscriptionPlan = subscriptionPlan;
             _symbolMapper = symbolMapper;
             _supportedSecurityTypes = GetSupportedSecurityTypes(securityType);
             _messageHandler = messageHandler;
@@ -96,6 +103,11 @@ namespace QuantConnect.Polygon
 
         private void Subscribe(Symbol symbol, TickType tickType, bool subscribe)
         {
+            if (_subscriptionPlan == PolygonSubscriptionPlan.Basic)
+            {
+                throw new NotSupportedException("Basic plan does not support streaming data");
+            }
+
             var ticker = _symbolMapper.GetBrokerageSymbol(symbol);
             Send(JsonConvert.SerializeObject(new
             {
@@ -133,16 +145,35 @@ namespace QuantConnect.Polygon
 
         private string GetSubscriptionPrefix(SecurityType securityType, TickType tickType)
         {
+            if (tickType == TickType.OpenInterest)
+            {
+                throw new NotSupportedException("Open interest data is not supported");
+            }
+
+            if (_subscriptionPlan < PolygonSubscriptionPlan.Advanced && tickType != TickType.Trade)
+            {
+                throw new NotSupportedException("Plans below Advanced only support streaming trade data");
+            }
+
             switch (securityType)
             {
                 case SecurityType.Equity:
                 case SecurityType.Option:
                 case SecurityType.IndexOption:
-                    // Only support aggregated second data for options
-                    return "A";
+                    switch (_subscriptionPlan)
+                    {
+                        case PolygonSubscriptionPlan.Starter:
+                            return "A";
+                        case PolygonSubscriptionPlan.Developer:
+                            return "T";
+                        case PolygonSubscriptionPlan.Advanced:
+                            return tickType == TickType.Trade ? "T" : "Q";
+                        default:
+                            throw new Exception($"Unsupported subscription plan: {_subscriptionPlan}");
+                    }
 
                 default:
-                    throw new Exception($"Unsupported security type: {securityType}");
+                    throw new NotSupportedException($"Unsupported security type: {securityType}");
             }
         }
 

@@ -29,10 +29,11 @@ namespace QuantConnect.Polygon
 {
     public partial class PolygonDataQueueHandler : SynchronizingHistoryProvider
     {
-        private static string HistoryBaseUrl = Config.Get("polygon-api-url", "https://api.polygon.io/v2");
+        private static string RestApiBaseUrl = Config.Get("polygon-api-url", "https://api.polygon.io");
+
         private readonly int AggregateDataResponseLimit = Config.GetInt("polygon-aggregate-response-limit", 5000);
 
-        protected virtual RateGate HistoryRateLimiter => new(300, TimeSpan.FromSeconds(1));
+        protected virtual RateGate RestApiRateLimiter => new(300, TimeSpan.FromSeconds(1));
 
         private int _dataPointCount;
 
@@ -124,7 +125,7 @@ namespace QuantConnect.Polygon
             var start = Time.DateTimeToUnixTimeStampMilliseconds(request.StartTimeUtc.RoundDown(resolutionTimeSpan));
             var end = Time.DateTimeToUnixTimeStampMilliseconds(request.EndTimeUtc.RoundDown(resolutionTimeSpan));
 
-            var url = $"{HistoryBaseUrl}/aggs/ticker/{_symbolMapper.GetBrokerageSymbol(request.Symbol)}/range/1/{historyTimespan}/{start}/{end}" +
+            var url = $"{RestApiBaseUrl}/v2/aggs/ticker/{_symbolMapper.GetBrokerageSymbol(request.Symbol)}/range/1/{historyTimespan}/{start}/{end}" +
                 $"?&limit={AggregateDataResponseLimit}&adjusted={request.DataNormalizationMode != DataNormalizationMode.Raw}";
 
             while (!string.IsNullOrEmpty(url))
@@ -155,11 +156,11 @@ namespace QuantConnect.Polygon
         /// </summary>
         protected virtual T DownloadAndParseData<T>(string url)
         {
-            if (HistoryRateLimiter.IsRateLimited)
+            if (RestApiRateLimiter.IsRateLimited)
             {
-                Log.Trace("PolygonDataQueueHandler.DownloadAndParseData(): Polygon history requests are limited to 300 per second.");
+                Log.Trace("PolygonDataQueueHandler.DownloadAndParseData(): Rest API calls are limited; waiting to proceed.");
             }
-            HistoryRateLimiter.WaitToProceed();
+            RestApiRateLimiter.WaitToProceed();
 
             var result = url.DownloadData(new Dictionary<string, string> { { "Authorization", $"Bearer {_apiKey}" } });
             if (result == null)
@@ -169,13 +170,8 @@ namespace QuantConnect.Polygon
 
             // If the data download was not successful, log the reason
             var parsedResult = JObject.Parse(result);
-            var success = parsedResult["success"]?.Value<bool>() ?? false;
-            if (!success)
-            {
-                success = parsedResult["status"]?.ToString().ToUpperInvariant() == "OK";
-            }
 
-            if (!success)
+            if (parsedResult["status"]?.ToString().ToUpperInvariant() != "OK")
             {
                 Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No data for {url}. Reason: {result}");
                 return default;

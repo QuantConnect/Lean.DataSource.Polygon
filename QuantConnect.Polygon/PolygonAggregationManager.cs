@@ -25,19 +25,41 @@ namespace QuantConnect.Polygon
     /// </summary>
     public class PolygonAggregationManager : AggregationManager
     {
+        private PolygonSubscriptionPlan _subscriptionPlan;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PolygonAggregationManager"/> class
+        /// </summary>
+        /// <param name="subscriptionPlan">Polygon subscription plan</param>
+        public PolygonAggregationManager(PolygonSubscriptionPlan subscriptionPlan)
+        {
+            _subscriptionPlan = subscriptionPlan;
+        }
+
         /// <summary>
         /// Gets the consolidator to aggregate data for the given config
         /// </summary>
         protected override IDataConsolidator GetConsolidator(SubscriptionDataConfig config)
         {
-            if (config.Type != typeof(TradeBar))
+            if (_subscriptionPlan < PolygonSubscriptionPlan.Advanced)
             {
-                throw new ArgumentException($"Unsupported subscription data config type {config.Type}");
+                if (config.Type != typeof(TradeBar))
+                {
+                    throw new ArgumentException($"Unsupported subscription data config type {config.Type} " +
+                        $"for {_subscriptionPlan} Polygon.io subscription plan");
+                }
+
+                if (_subscriptionPlan < PolygonSubscriptionPlan.Developer)
+                {
+                    // Starter plan only supports streaming aggregated data.
+                    // We use the TradeBarConsolidator for TradeBar data given that we are aggregating trade bars
+                    // (that are already aggregated by Polygon) instead of ticks.
+                    return new TradeBarConsolidator(config.Resolution.ToTimeSpan());
+                }
             }
 
-            // We use the TradeBarConsolidator for TradeBar data given that we are aggregating trade bars
-            // (that are already aggregated by Polygon) instead of ticks.
-            return new TradeBarConsolidator(config.Resolution.ToTimeSpan());
+            // Use base's method, since we can fetch ticks with Developer and Advanced plans
+            return base.GetConsolidator(config);
         }
     }
 }

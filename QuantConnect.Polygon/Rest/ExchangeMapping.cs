@@ -1,10 +1,9 @@
-/*
+﻿/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
- *
  * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
@@ -14,17 +13,25 @@
  * limitations under the License.
 */
 
-using QuantConnect.Polygon;
+using Newtonsoft.Json;
 
-namespace QuantConnect.Tests.Polygon
+namespace QuantConnect.Polygon
 {
-    public class TestablePolygonDataQueueHandler : PolygonDataQueueHandler
+    /// <summary>
+    /// Models a Polygon.io exchange mapping
+    /// </summary>
+    public class ExchangeMapping
     {
-        public PolygonSubscriptionManager SubscriptionManager => _subscriptionManager;
+        /// <summary>
+        /// The exchange ID
+        /// </summary>
+        [JsonProperty("id")]
+        public int ID { get; set; }
 
-        public TestablePolygonDataQueueHandler(string apiKey, PolygonSubscriptionPlan subscriptionPlan, int maxSubscriptionsPerWebSocket)
-            : base(apiKey, subscriptionPlan, maxSubscriptionsPerWebSocket)
-        {
-        }
+        /// <summary>
+        /// The exchange code
+        /// </summary>
+        [JsonProperty("participant_id")]
+        public string Code { get; set; }
     }
 }

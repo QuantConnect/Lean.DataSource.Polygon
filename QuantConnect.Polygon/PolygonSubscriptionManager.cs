@@ -64,8 +64,8 @@ namespace QuantConnect.Polygon
         /// Initializes a new instance of the <see cref="PolygonSubscriptionManager"/> class
         /// </summary>
         /// <param name="securityTypes">The supported security types</param>
-        /// <param name="maxSubscriptionsPerWebSocket">The maximum allowed subscriptions per websocket connection</param>
-        /// <param name="messageHandler">The websocket message handler</param>
+        /// <param name="subscriptionPlan">Polygon subscription plan</param>
+        /// <param name="websSocketFactory">Function to create websockets</param>
         public PolygonSubscriptionManager(
             IEnumerable<SecurityType> securityTypes,
             int maxSubscriptionsPerWebSocket,
