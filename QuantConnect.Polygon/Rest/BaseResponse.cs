@@ -13,12 +13,25 @@
  * limitations under the License.
  */
 
+using Newtonsoft.Json;
+
 namespace QuantConnect.Polygon
 {
     /// <summary>
-    /// Models a Polygon.io REST API message containing the list of exchanges
+    /// Models a Polygon.io REST API base message
     /// </summary>
-    public class ExchangesResponse : BaseResultsResponse<ExchangeMapping>
+    public class BaseResponse
     {
+        /// <summary>
+        /// The status of the response
+        /// </summary>
+        [JsonProperty("status")]
+        public string Status { get; set; }
+
+        /// <summary>
+        /// The URL to the next page of results. This is null if there are no more results.
+        /// </summary>
+        [JsonProperty("next_url", NullValueHandling = NullValueHandling.Ignore)]
+        public string NextUrl { get; set; }
     }
 }

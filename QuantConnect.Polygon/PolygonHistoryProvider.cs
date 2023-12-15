@@ -14,7 +14,6 @@
 */
 
 using Newtonsoft.Json.Linq;
-using Newtonsoft.Json;
 using NodaTime;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
@@ -24,6 +23,7 @@ using QuantConnect.Logging;
 using QuantConnect.Configuration;
 using QuantConnect.Util;
 using static QuantConnect.StringExtensions;
+using QuantConnect.Data.Consolidators;
 
 namespace QuantConnect.Polygon
 {
@@ -31,7 +31,7 @@ namespace QuantConnect.Polygon
     {
         private static string RestApiBaseUrl = Config.Get("polygon-api-url", "https://api.polygon.io");
 
-        private readonly int AggregateDataResponseLimit = Config.GetInt("polygon-aggregate-response-limit", 5000);
+        private readonly int ApiResponseLimit = Config.GetInt("polygon-aggregate-response-limit", 5000);
 
         protected virtual RateGate RestApiRateLimiter => new(300, TimeSpan.FromSeconds(1));
 
@@ -83,101 +83,191 @@ namespace QuantConnect.Polygon
                 yield break;
             }
 
-            // check security type
-            if (!IsSecurityTypeSupported(request.Symbol.SecurityType))
+            if (!IsSupported(request.Symbol.SecurityType, request.TickType, request.Resolution))
             {
-                Log.Error($"PolygonDataQueueHandler.GetHistorys(): Unsupported security type: {request.Symbol.SecurityType}.");
                 yield break;
             }
 
-            // we only support minute, hour and daily resolution for option data
-            if (request.Resolution < Resolution.Minute)
+            IEnumerable<BaseData> history;
+
+            if (
+                // Basic and Starter plans only have access to aggregates
+                _subscriptionPlan < PolygonSubscriptionPlan.Developer ||
+                // For Developer and Advanced plans, if resolution is greater than tick, use the aggregates endpoint to make the requests faster
+                (request.TickType == TickType.Trade && request.Resolution > Resolution.Tick))
             {
-                Log.Error($"PolygonDataQueueHandler.GetHistorys(): Unsupported resolution: {request.Resolution}.");
-                yield break;
+                history = GetAggregates(request);
+                foreach (var data in history)
+                {
+                    Interlocked.Increment(ref _dataPointCount);
+                    yield return data;
+                }
             }
-
-            // check tick type
-            if (request.TickType != TickType.Trade)
+            else
             {
-                Log.Error($"PolygonDataQueueHandler.GetHistorys(): Unsupported tick type: {request.TickType}.");
-                yield break;
-            }
+                var config = request.ToSubscriptionDataConfig();
+                IDataConsolidator consolidator;
 
-            Log.Trace("PolygonDataQueueHandler.GetHistory(): Submitting request: " +
-                Invariant($"{request.Symbol.SecurityType}-{request.TickType}-{request.Symbol.Value}: {request.Resolution} {request.StartTimeUtc}->{request.EndTimeUtc}"));
+                // For Developer plan, assume checks were have already been done and the tick type is Trade
+                if (_subscriptionPlan == PolygonSubscriptionPlan.Developer || request.TickType == TickType.Trade)
+                {
+                    consolidator = request.Resolution != Resolution.Tick
+                        ? new TickConsolidator(request.Resolution.ToTimeSpan())
+                        : FilteredIdentityDataConsolidator.ForTickType(request.TickType);
+                    history = GetTrades(request);
+                }
+                else
+                {
+                    consolidator = request.Resolution != Resolution.Tick
+                        ? new TickQuoteBarConsolidator(request.Resolution.ToTimeSpan())
+                        : FilteredIdentityDataConsolidator.ForTickType(request.TickType);
+                    history = GetQuotes(request);
+                }
 
-            foreach (var tradeBar in GetTradeBars(request))
-            {
-                Interlocked.Increment(ref _dataPointCount);
+                BaseData? consolidatedData = null;
+                DataConsolidatedHandler onDataConsolidated = (s, e) =>
+                {
+                    consolidatedData = (BaseData)e;
+                };
+                consolidator.DataConsolidated += onDataConsolidated;
 
-                yield return tradeBar;
+                foreach (var data in history)
+                {
+                    consolidator.Update(data);
+                    if (consolidatedData != null)
+                    {
+                        Interlocked.Increment(ref _dataPointCount);
+                        yield return consolidatedData;
+                        consolidatedData = null;
+                    }
+                }
             }
         }
 
         /// <summary>
         /// Gets the trade bars for the specified history request
         /// </summary>
-        private IEnumerable<TradeBar> GetTradeBars(HistoryRequest request)
+        private IEnumerable<TradeBar> GetAggregates(HistoryRequest request)
         {
-            var historyTimespan = GetHistoryTimespan(request.Resolution);
             var resolutionTimeSpan = request.Resolution.ToTimeSpan();
+            // Aggregates API gets timestamps in milliseconds
             var start = Time.DateTimeToUnixTimeStampMilliseconds(request.StartTimeUtc.RoundDown(resolutionTimeSpan));
             var end = Time.DateTimeToUnixTimeStampMilliseconds(request.EndTimeUtc.RoundDown(resolutionTimeSpan));
+            var historyTimespan = GetHistoryTimespan(request.Resolution);
 
             var url = $"{RestApiBaseUrl}/v2/aggs/ticker/{_symbolMapper.GetBrokerageSymbol(request.Symbol)}/range/1/{historyTimespan}/{start}/{end}" +
-                $"?&limit={AggregateDataResponseLimit}&adjusted={request.DataNormalizationMode != DataNormalizationMode.Raw}";
+                $"?&limit={ApiResponseLimit}&adjusted={request.DataNormalizationMode != DataNormalizationMode.Raw}";
 
-            while (!string.IsNullOrEmpty(url))
+            // TODO: Download and parse data asynchronously
+            foreach (var response in DownloadAndParseData<AggregatesResponse>(url))
             {
-                var response = DownloadAndParseData<AggregatesResponse>(url);
                 if (response == null)
                 {
                     break;
                 }
 
-                var responseTradeBars = response.Results;
-
-                foreach (var responseBar in responseTradeBars)
+                foreach (var bar in response.Results)
                 {
-                    var utcTime = Time.UnixMillisecondTimeStampToDateTime(responseBar.Timestamp);
+                    var utcTime = Time.UnixMillisecondTimeStampToDateTime(bar.Timestamp);
                     var time = GetTickTime(request.Symbol, utcTime);
 
-                    yield return new TradeBar(time, request.Symbol, responseBar.Open, responseBar.High, responseBar.Low, responseBar.Close,
-                        responseBar.Volume);
+                    yield return new TradeBar(time, request.Symbol, bar.Open, bar.High, bar.Low, bar.Close,
+                        bar.Volume, resolutionTimeSpan);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets the trade ticks that will potentially be aggregated for the specified history request
+        /// </summary>
+        private IEnumerable<Tick> GetTrades(HistoryRequest request)
+        {
+            return GetTicks<TradesResponse, Trade>(request,
+                (time, symbol, responseTick) => new Tick(time, request.Symbol, string.Empty, GetExchangeCode(responseTick.ExchangeID),
+                    responseTick.Price, responseTick.Volume));
+        }
+
+        /// <summary>
+        /// Gets the quote ticks that will potentially be aggregated for the specified history request
+        /// </summary>
+        private IEnumerable<Tick> GetQuotes(HistoryRequest request)
+        {
+            return GetTicks<QuotesResponse, Quote>(request,
+                (time, symbol, responseTick) => new Tick(time, request.Symbol, string.Empty, GetExchangeCode(responseTick.ExchangeID),
+                    responseTick.BidSize, responseTick.BidPrice, responseTick.AskSize, responseTick.AskPrice));
+        }
+
+        private IEnumerable<Tick> GetTicks<TResponse, TTick>(HistoryRequest request, Func<DateTime, Symbol, TTick, Tick> tickFactory)
+            where TResponse : BaseResultsResponse<TTick>
+            where TTick : ResponseTick
+        {
+            var resolutionTimeSpan = request.Resolution.ToTimeSpan();
+            // Trades API gets timestamps in nanoseconds
+            var start = Time.DateTimeToUnixTimeStampNanoseconds(request.StartTimeUtc.RoundDown(resolutionTimeSpan));
+            var end = Time.DateTimeToUnixTimeStampNanoseconds(request.EndTimeUtc.RoundDown(resolutionTimeSpan));
+            var ticker = _symbolMapper.GetBrokerageSymbol(request.Symbol);
+
+            var tickTypeStr = request.TickType == TickType.Trade ? "trades" : "quotes";
+            var url = $"{RestApiBaseUrl}/v3/{tickTypeStr}/{ticker}?" +
+                $"timestamp.gte={start}&" +
+                $"timestamp.lt={end}&" +
+                "order=asc&" +
+                $"limit={ApiResponseLimit}";
+
+            // TODO: Download and parse data asynchronously
+            foreach (var response in DownloadAndParseData<TResponse>(url))
+            {
+                if (response == null)
+                {
+                    break;
                 }
 
-                url = response.NextUrl;
+                foreach (var tick in response.Results)
+                {
+                    var utcTime = Time.UnixNanosecondTimeStampToDateTime(tick.Timestamp);
+                    var time = GetTickTime(request.Symbol, utcTime);
+
+                    yield return tickFactory(time, request.Symbol, tick);
+                }
             }
         }
 
         /// <summary>
         /// Downloads data and tries to parse the JSON response data into the specified type
         /// </summary>
-        protected virtual T DownloadAndParseData<T>(string url)
+        protected virtual IEnumerable<T> DownloadAndParseData<T>(string url)
+            where T : BaseResponse
         {
-            if (RestApiRateLimiter.IsRateLimited)
+            while (!string.IsNullOrEmpty(url))
             {
-                Log.Trace("PolygonDataQueueHandler.DownloadAndParseData(): Rest API calls are limited; waiting to proceed.");
+                Log.Trace($"PolygonDataQueueHandler.DownloadAndParseData(): Downloading {url}");
+
+                if (RestApiRateLimiter.IsRateLimited)
+                {
+                    Log.Trace("PolygonDataQueueHandler.DownloadAndParseData(): Rest API calls are limited; waiting to proceed.");
+                }
+                RestApiRateLimiter.WaitToProceed();
+
+                var response = url.DownloadData(new Dictionary<string, string> { { "Authorization", $"Bearer {_apiKey}" } });
+                if (response == null)
+                {
+                    yield return default;
+                    yield break;
+                }
+
+                // If the data download was not successful, log the reason
+                var resultJson = JObject.Parse(response);
+                if (resultJson["status"]?.ToString().ToUpperInvariant() != "OK")
+                {
+                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No data for {url}. Reason: {response}");
+                    yield return default;
+                    yield break;
+                }
+
+                var result = resultJson.ToObject<T>();
+                yield return result;
+                url = result?.NextUrl;
             }
-            RestApiRateLimiter.WaitToProceed();
-
-            var result = url.DownloadData(new Dictionary<string, string> { { "Authorization", $"Bearer {_apiKey}" } });
-            if (result == null)
-            {
-                return default;
-            }
-
-            // If the data download was not successful, log the reason
-            var parsedResult = JObject.Parse(result);
-
-            if (parsedResult["status"]?.ToString().ToUpperInvariant() != "OK")
-            {
-                Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No data for {url}. Reason: {result}");
-                return default;
-            }
-
-            return result == null ? default : JsonConvert.DeserializeObject<T>(result);
         }
 
         /// <summary>
@@ -195,6 +285,9 @@ namespace QuantConnect.Polygon
 
                 case Resolution.Minute:
                     return "minute";
+
+                case Resolution.Second:
+                    return "second";
 
                 default:
                     throw new Exception($"Unsupported resolution: {resolution}.");

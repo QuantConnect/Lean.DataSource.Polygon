@@ -16,9 +16,9 @@
 namespace QuantConnect.Polygon
 {
     /// <summary>
-    /// Models a Polygon.io REST API message containing the list of exchanges
+    /// Models a Polygon.io REST API message containing a list of quote ticks
     /// </summary>
-    public class ExchangesResponse : BaseResultsResponse<ExchangeMapping>
+    public class QuotesResponse : BaseResultsResponse<Quote>
     {
     }
 }

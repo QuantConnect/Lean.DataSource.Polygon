@@ -27,13 +27,15 @@ using QuantConnect.Configuration;
 using System.Diagnostics;
 using System;
 using System.Linq;
+using System.Collections.Generic;
 
 namespace QuantConnect.Tests.Polygon
 {
     [TestFixture]
     public class PolygonHistoryTests
     {
-        private string _apiKey = Config.Get("polygon-api-key");
+        private readonly string _apiKey = Config.Get("polygon-api-key");
+        private readonly PolygonSubscriptionPlan _subscriptionPlan = Config.GetValue("polygon-subscription-plan", PolygonSubscriptionPlan.Advanced);
         private PolygonDataQueueHandler _historyProvider;
 
         [SetUp]
@@ -55,47 +57,56 @@ namespace QuantConnect.Tests.Polygon
         private static TestCaseData[] HistoricalTradeBarsTestCases()
         {
             var equitySymbol = Symbols.SPY;
-            var optionSymbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 429m, new DateTime(2023, 10, 06));
+            var optionSymbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 469m, new DateTime(2023, 12, 15));
+            var symbols = new[] { equitySymbol, optionSymbol };
+            var tickTypes = new[] { TickType.Trade, TickType.Quote };
 
-            return new[]
-            {
-                // Equity
-                new TestCaseData(equitySymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(100)),
-                new TestCaseData(equitySymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(200)),
-                new TestCaseData(equitySymbol, Resolution.Hour, TickType.Trade, TimeSpan.FromDays(365)),
-                new TestCaseData(equitySymbol, Resolution.Daily, TickType.Trade, TimeSpan.FromDays(3650)),
-
-                // Options
-                new TestCaseData(optionSymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(100)),
-                new TestCaseData(optionSymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(200)),
-                new TestCaseData(optionSymbol, Resolution.Hour, TickType.Trade, TimeSpan.FromDays(365)),
-                new TestCaseData(optionSymbol, Resolution.Daily, TickType.Trade, TimeSpan.FromDays(3650))
-            };
+            return symbols
+                .Select(symbol => tickTypes
+                    .Select(tickType => new[]
+                    {
+                        new TestCaseData(symbol, Resolution.Tick, TimeSpan.FromMinutes(5), tickType),
+                        new TestCaseData(symbol, Resolution.Second, TimeSpan.FromMinutes(30), tickType),
+                        new TestCaseData(symbol, Resolution.Minute, TimeSpan.FromDays(15), tickType),
+                        new TestCaseData(symbol, Resolution.Hour, TimeSpan.FromDays(180), tickType),
+                        new TestCaseData(symbol, Resolution.Daily, TimeSpan.FromDays(3650), tickType),
+                    })
+                    .SelectMany(x => x))
+                .SelectMany(x => x)
+                .ToArray();
         }
 
         [TestCaseSource(nameof(HistoricalTradeBarsTestCases))]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
-        public void GetsHistoricalTradeBars(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
+        public void GetsHistoricalData(Symbol symbol, Resolution resolution, TimeSpan period, TickType tickType)
         {
-            var request = CreateHistoryRequest(symbol, resolution, tickType, period);
-            var history = _historyProvider.GetHistory(request).ToList();
+            var requests = new List<HistoryRequest> { CreateHistoryRequest(symbol, resolution, tickType, period) };
 
-            Log.Trace("Data points retrieved: " + _historyProvider.DataPointCount);
+            var history = _historyProvider.GetHistory(requests, TimeZones.Utc).ToList();
 
+            Log.Trace("Data points retrieved: " + history.Count);
+
+            // Assert that we got some data
             Assert.That(history, Is.Not.Empty);
+            Assert.That(history.Count, Is.EqualTo(_historyProvider.DataPointCount));
 
-            foreach (var baseData in history)
+            if (resolution > Resolution.Tick)
             {
-                var bar = (TradeBar)baseData;
-                Log.Trace($"{bar.Time}: {bar.Symbol} - O={bar.Open}, H={bar.High}, L={bar.Low}, C={bar.Close}");
+                // No repeating bars
+                var timesArray = history.Select(x => x.Time).ToList();
+                Assert.That(timesArray.Distinct().Count(), Is.EqualTo(timesArray.Count));
+
+                // Resolution is respected
+                var bars = history.Select(x => x.AllData).SelectMany(x => x).OfType<IBaseDataBar>().ToList();
+                var timeSpan = resolution.ToTimeSpan();
+                Assert.That(bars, Is.All.Matches<IBaseDataBar>(x => x.EndTime - x.Time == timeSpan),
+                    $"All bars periods should be equal to {timeSpan} ({resolution})");
             }
-
-            // Ordered by time
-            Assert.That(history, Is.Ordered.By("Time"));
-
-            // No repeating bars
-            var timesArray = history.Select(x => x.Time).ToList();
-            Assert.That(timesArray.Distinct().Count(), Is.EqualTo(timesArray.Count));
+            else
+            {
+                // All data in the slice are ticks
+                Assert.That(history, Is.All.Matches((Slice x) => x.AllData.All(data => data.GetType() == typeof(Tick))));
+            }
         }
 
         [Test]
@@ -242,7 +253,11 @@ namespace QuantConnect.Tests.Polygon
 
         private static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
         {
-            var end = new DateTime(2023, 10, 6);
+            var end = new DateTime(2023, 12, 15, 16, 0, 0);
+            if (resolution == Resolution.Daily)
+            {
+                end = end.Date.AddDays(1);
+            }
             var dataType = LeanData.GetDataType(resolution, tickType);
 
             return new HistoryRequest(end.Subtract(period),
@@ -277,9 +292,9 @@ namespace QuantConnect.Tests.Polygon
                 CurrentHistoryRequest = request;
             }
 
-            protected override T DownloadAndParseData<T>(string url)
+            protected override IEnumerable<T> DownloadAndParseData<T>(string url)
             {
-                return JsonConvert.DeserializeObject<T>(DownloadData());
+                yield return JsonConvert.DeserializeObject<T>(DownloadData());
             }
 
             public string DownloadData()

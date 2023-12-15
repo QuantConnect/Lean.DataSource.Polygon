@@ -53,7 +53,7 @@ namespace QuantConnect.Tests.Polygon
         public void CanSubscribeAndUnsubscribe(PolygonSubscriptionPlan subscriptionPlan)
         {
             using var polygon = new PolygonDataQueueHandler(ApiKey, subscriptionPlan);
-            var unsusbscribed = false;
+            var unsubscribed = false;
 
             var configs = GetConfigs(Resolution.Second);
             if (subscriptionPlan < PolygonSubscriptionPlan.Advanced)
@@ -74,7 +74,7 @@ namespace QuantConnect.Tests.Polygon
 
                 dataFromEnumerator.Add((TradeBar)dataPoint);
 
-                if (unsusbscribed)
+                if (unsubscribed)
                 {
                     Assert.Fail("Should not receive data for unsubscribed symbols");
                 }
@@ -103,7 +103,7 @@ namespace QuantConnect.Tests.Polygon
             // some messages could be inflight, but after a pause all messages must have been consumed
             Thread.Sleep(2 * 1000);
 
-            unsusbscribed = true;
+            unsubscribed = true;
             var dataCount = dataFromEnumerator.Count;
 
             Assert.That(dataFromEnumerator, Is.Not.Empty.And.Count.LessThanOrEqualTo(seconds * configs.Count));

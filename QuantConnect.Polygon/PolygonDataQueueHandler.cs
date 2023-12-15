@@ -341,7 +341,7 @@ namespace QuantConnect.Polygon
         {
             var symbol = _symbolMapper.GetLeanSymbol(trade.Symbol);
             var time = GetTickTime(symbol, trade.Timestamp);
-            // TODO: What about trade.Conditions? How to we map them to Lean?
+            // TODO: Map trade.Conditions to Lean sale conditions
             var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(trade.ExchangeID), trade.Price, trade.Size);
             _dataAggregator.Update(tick);
         }
@@ -353,10 +353,10 @@ namespace QuantConnect.Polygon
         {
             var symbol = _symbolMapper.GetLeanSymbol(quote.Symbol);
             var time = GetTickTime(symbol, quote.Timestamp);
-            // TODO: What about quote.Conditions? How to we map them to Lean?
-            // TODO: Polygon's quotes have bid/ask exchange IDs, but Lean only has one exchange per tick
+            // TODO: Map trade.Conditions to Lean sale conditions
+            // Note: Polygon's quotes have bid/ask exchange IDs, but Lean only has one exchange per tick. We'll use the bid exchange.
             var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(quote.BidExchangeID),
-                quote.BidPrice, quote.BidSize, quote.AskPrice, quote.AskSize);
+                quote.BidSize, quote.BidPrice, quote.AskSize, quote.AskPrice);
             _dataAggregator.Update(tick);
         }
 
@@ -435,13 +435,14 @@ namespace QuantConnect.Polygon
         private List<ExchangeMapping> FetchExchangeMappings()
         {
             var url = $"{RestApiBaseUrl}/v3/reference/exchanges";
-            var response = DownloadAndParseData<ExchangesResponse>(url);
+            // This url is not paginated, so we expect a single response
+            var response = DownloadAndParseData<ExchangesResponse>(url).SingleOrDefault();
             if (response == null)
             {
                 throw new Exception($"Failed to download exchange mappings from {url}");
             }
 
-            return response.Results;
+            return response.Results.ToList();
         }
 
         /// <summary>
@@ -467,13 +468,6 @@ namespace QuantConnect.Polygon
         /// </summary>
         private bool CanSubscribe(SubscriptionDataConfig config)
         {
-            // Check supported security types
-            if (!IsSecurityTypeSupported(config.SecurityType))
-            {
-                Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Unsupported security type: {config.SecurityType}");
-                return false;
-            }
-
             // Basic plan does not support streaming data
             if (_subscriptionPlan == PolygonSubscriptionPlan.Basic)
             {
@@ -481,24 +475,44 @@ namespace QuantConnect.Polygon
                 return false;
             }
 
-            // Starter plan does not support streaming ticks
-            if (_subscriptionPlan < PolygonSubscriptionPlan.Developer && config.Resolution < Resolution.Second)
+            return
+                // Filter out universe symbols
+                config.Symbol.Value.IndexOfInvariant("universe", true) == -1 &&
+                IsSupported(config.SecurityType, config.TickType, config.Resolution);
+        }
+
+        private bool IsSupported(SecurityType securityType, TickType tickType, Resolution resolution)
+        {
+            // Check supported security types
+            if (!IsSecurityTypeSupported(securityType))
             {
-                Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Unsupported resolution: {config.Resolution} " +
+                Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported security type: {securityType}");
+                return false;
+            }
+
+            if (tickType == TickType.OpenInterest)
+            {
+                Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported tick type: {tickType}");
+                return false;
+            }
+
+            // Starter plan does not support ticks
+            if (_subscriptionPlan < PolygonSubscriptionPlan.Developer && resolution < Resolution.Second)
+            {
+                Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported resolution: {resolution} " +
                     $"for {_subscriptionPlan} subscription plan");
                 return false;
             }
 
-            // Only advanced plan supports streaming quotes
-            if (_subscriptionPlan < PolygonSubscriptionPlan.Advanced && config.TickType != TickType.Trade)
+            // Only advanced plan supports quotes
+            if (_subscriptionPlan < PolygonSubscriptionPlan.Advanced && tickType != TickType.Trade)
             {
-                Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Unsupported tick type: {config.TickType} " +
+                Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Unsupported tick type: {tickType} " +
                     $"for {_subscriptionPlan} subscription plan");
                 return false;
             }
 
-            // Filter out universe symbols
-            return config.Symbol.Value.IndexOfInvariant("universe", true) == -1;
+            return true;
         }
 
         /// <summary>

@@ -18,38 +18,32 @@ using Newtonsoft.Json;
 namespace QuantConnect.Polygon
 {
     /// <summary>
-    /// Models a Polygon.io REST API message containing a list of aggregates
+    /// Models a single trade tick from a Polygon.io REST API response
     /// </summary>
-    public class AggregatesResponse : BaseResultsResponse<SingleResponseAggregate>
+    public class Trade : ResponseTick
     {
         /// <summary>
-        /// The symbol that the aggregates are for
+        /// Trade timestamp in nanoseconds
         /// </summary>
-        [JsonProperty("ticker")]
-        public string Ticker { get; set; }
+        [JsonProperty("participant_timestamp")]
+        public override long Timestamp { get; set; }
 
         /// <summary>
-        /// The number of aggregates used to generate the response
+        /// The exchange ID
         /// </summary>
-        [JsonProperty("queryCount")]
-        public int QueryCount { get; set; }
+        [JsonProperty("exchange")]
+        public override int ExchangeID { get; set; }
 
         /// <summary>
-        /// The total number of results for the request
+        /// The price of the trade
         /// </summary>
-        [JsonProperty("resultsCount")]
-        public int ResultsCount { get; set; }
+        [JsonProperty("price")]
+        public decimal Price { get; set; }
 
         /// <summary>
-        /// Whether or not the data was adjusted for splits.
+        /// The size (volume) of the trade
         /// </summary>
-        [JsonProperty("adjusted")]
-        public bool Adjusted { get; set; }
-
-        /// <summary>
-        /// A request id assigned by the Polygon.io server.
-        /// </summary>
-        [JsonProperty("request_id")]
-        public string RequestId { get; set; }
+        [JsonProperty("size")]
+        public decimal Volume { get; set; }
     }
 }

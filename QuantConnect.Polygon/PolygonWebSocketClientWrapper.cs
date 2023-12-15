@@ -140,16 +140,6 @@ namespace QuantConnect.Polygon
 
         private string GetSubscriptionPrefix(SecurityType securityType, TickType tickType)
         {
-            if (tickType == TickType.OpenInterest)
-            {
-                throw new NotSupportedException("Open interest data is not supported");
-            }
-
-            if (_subscriptionPlan < PolygonSubscriptionPlan.Advanced && tickType != TickType.Trade)
-            {
-                throw new NotSupportedException("Plans below Advanced only support streaming trade data");
-            }
-
             switch (securityType)
             {
                 case SecurityType.Equity:

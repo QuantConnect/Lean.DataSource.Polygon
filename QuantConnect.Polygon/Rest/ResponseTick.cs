@@ -16,9 +16,18 @@
 namespace QuantConnect.Polygon
 {
     /// <summary>
-    /// Models a Polygon.io REST API message containing the list of exchanges
+    /// Models a single trade tick from a Polygon.io REST API response
     /// </summary>
-    public class ExchangesResponse : BaseResultsResponse<ExchangeMapping>
+    public abstract class ResponseTick
     {
+        /// <summary>
+        /// Trade timestamp in nanoseconds
+        /// </summary>
+        public abstract long Timestamp { get; set; }
+
+        /// <summary>
+        /// The exchange ID
+        /// </summary>
+        public abstract int ExchangeID { get; set; }
     }
 }
