@@ -32,7 +32,7 @@ namespace QuantConnect.Polygon
 
         private readonly int ApiResponseLimit = Config.GetInt("polygon-aggregate-response-limit", 5000);
 
-        protected virtual RateGate RestApiRateLimiter => new(300, TimeSpan.FromSeconds(1));
+        protected RateGate RestApiRateLimiter { get; set; } = new(300, TimeSpan.FromSeconds(1));
 
         private int _dataPointCount;
 
@@ -82,7 +82,7 @@ namespace QuantConnect.Polygon
                 yield break;
             }
 
-            if (!IsSupported(request.Symbol.SecurityType, request.TickType, request.Resolution))
+            if (!IsSupported(request.Symbol.SecurityType, request.DataType, request.TickType, request.Resolution))
             {
                 yield break;
             }

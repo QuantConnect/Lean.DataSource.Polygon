@@ -113,6 +113,12 @@ namespace QuantConnect.Polygon
             _dataAggregator = new PolygonAggregationManager(subscriptionPlan);
             _optionChainProvider = Composer.Instance.GetPart<IOptionChainProvider>();
 
+            // Basic plan has a limit of 5 API calls per minute
+            if (_subscriptionPlan == PolygonSubscriptionPlan.Basic)
+            {
+                RestApiRateLimiter = new RateGate(5, TimeSpan.FromMinutes(1));
+            }
+
             ValidateSubscription();
 
             // Initialize the exchange mappings
@@ -166,22 +172,31 @@ namespace QuantConnect.Polygon
             _subscribedEvent.Reset();
 
             // Subscribe
-            Log.Debug($"PolygonDataQueueHandler.Subscribe(): Subscribing to {dataConfig.Symbol} | {dataConfig.TickType}");
+            Log.Trace($"PolygonDataQueueHandler.Subscribe(): Subscribing to {dataConfig.Symbol} | {dataConfig.TickType}");
             _subscriptionManager.Subscribe(dataConfig);
 
             var events = new WaitHandle[] { _failedAuthenticationEvent, _successfulAuthenticationEvent, _subscribedEvent };
             var triggeredEventIndex = WaitHandle.WaitAny(events, TimeSpan.FromMinutes(1));
             if (triggeredEventIndex == WaitHandle.WaitTimeout)
             {
-                throw new TimeoutException("Timeout waiting for websocket to connect.");
+                throw new TimeoutException($"Timeout waiting for websocket to connect. Could not subscribe to {dataConfig.Symbol}");
             }
             // Authentication failed
-            else if (triggeredEventIndex == 0)
+            if (triggeredEventIndex == 0)
             {
                 throw new PolygonFailedAuthenticationException("Polygon WebSocket authentication failed");
             }
-            // On successful authentication or subscription, we just continue
+            // Authentication succeeded
+            if (triggeredEventIndex == 1)
+            {
+                // Now wait for the subscription to be confirmed
+                if (!_subscribedEvent.WaitOne(TimeSpan.FromMinutes(1)))
+                {
+                    throw new TimeoutException($"Timeout waiting for {dataConfig.Symbol} subscription confirmation.");
+                }
+            }
 
+            // If we're here, subscription was successful
             return enumerator;
         }
 
@@ -471,17 +486,17 @@ namespace QuantConnect.Polygon
             // Basic plan does not support streaming data
             if (_subscriptionPlan == PolygonSubscriptionPlan.Basic)
             {
-                Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Basic plan does not support streaming data.");
+                Log.Debug($"PolygonDataQueueHandler.CanSubscribe(): Basic plan does not support streaming data.");
                 return false;
             }
 
             return
                 // Filter out universe symbols
                 config.Symbol.Value.IndexOfInvariant("universe", true) == -1 &&
-                IsSupported(config.SecurityType, config.TickType, config.Resolution);
+                IsSupported(config.SecurityType, config.Type, config.TickType, config.Resolution);
         }
 
-        private bool IsSupported(SecurityType securityType, TickType tickType, Resolution resolution)
+        private bool IsSupported(SecurityType securityType, Type dataType, TickType tickType, Resolution resolution)
         {
             // Check supported security types
             if (!IsSecurityTypeSupported(securityType))
@@ -492,14 +507,14 @@ namespace QuantConnect.Polygon
 
             if (tickType == TickType.OpenInterest)
             {
-                Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported tick type: {tickType}");
+                Log.Debug($"PolygonDataQueueHandler.IsSupported(): Unsupported tick type: {tickType}");
                 return false;
             }
 
             // Starter plan does not support ticks
             if (_subscriptionPlan < PolygonSubscriptionPlan.Developer && resolution < Resolution.Second)
             {
-                Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported resolution: {resolution} " +
+                Log.Debug($"PolygonDataQueueHandler.IsSupported(): Unsupported resolution: {resolution} " +
                     $"for {_subscriptionPlan} subscription plan");
                 return false;
             }
@@ -507,8 +522,16 @@ namespace QuantConnect.Polygon
             // Only advanced plan supports quotes
             if (_subscriptionPlan < PolygonSubscriptionPlan.Advanced && tickType != TickType.Trade)
             {
-                Log.Trace($"PolygonDataQueueHandler.CanSubscribe(): Unsupported tick type: {tickType} " +
+                Log.Debug($"PolygonDataQueueHandler.IsSupported(): Unsupported tick type: {tickType} " +
                     $"for {_subscriptionPlan} subscription plan");
+                return false;
+            }
+
+            if (!dataType.IsAssignableFrom(typeof(TradeBar)) &&
+                !dataType.IsAssignableFrom(typeof(QuoteBar)) &&
+                !dataType.IsAssignableFrom(typeof(Tick)))
+            {
+                Log.Debug($"PolygonDataQueueHandler.IsSupported(): Unsupported data type: {dataType}");
                 return false;
             }
 
