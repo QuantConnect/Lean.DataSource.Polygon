@@ -25,7 +25,7 @@ namespace QuantConnect.Polygon
         /// <summary>
         /// The list of results
         /// </summary>
-        [JsonProperty("results")]
-        public IEnumerable<T> Results { get; set; }
+        [JsonProperty("results", NullValueHandling = NullValueHandling.Ignore, DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public IEnumerable<T> Results { get; set; } = Enumerable.Empty<T>();
     }
 }

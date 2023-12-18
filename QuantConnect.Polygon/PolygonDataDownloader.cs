@@ -94,10 +94,7 @@ namespace QuantConnect.Polygon
                     DataNormalizationMode.Raw,
                     tickType);
 
-            foreach (var baseData in _historyProvider.GetHistory(historyRequest))
-            {
-                yield return baseData;
-            }
+            return _historyProvider.GetHistory(historyRequest);
         }
 
         /// <summary>

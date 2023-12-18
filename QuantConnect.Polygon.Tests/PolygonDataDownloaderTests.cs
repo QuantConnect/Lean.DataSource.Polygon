@@ -17,9 +17,7 @@
 using NUnit.Framework;
 using QuantConnect.Logging;
 using QuantConnect.Polygon;
-using QuantConnect.Securities;
 using QuantConnect.Util;
-using Microsoft.CodeAnalysis;
 using System;
 using System.Linq;
 
@@ -36,49 +34,22 @@ namespace QuantConnect.Tests.Polygon
             Log.LogHandler = new CompositeLogHandler();
 
             _downloader = new PolygonDataDownloader();
-
         }
 
-        private static TestCaseData[] HistoricalTradeBarsTestCases()
-        {
-            var equitySymbol = Symbols.SPY;
-            var optionSymbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 429m, new DateTime(2023, 10, 06));
+        private static TestCaseData[] HistoricalDataTestCases => PolygonHistoryTests.HistoricalDataTestCases;
 
-            return new[]
-            {
-                // Equity
-                new TestCaseData(equitySymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(100)),
-                new TestCaseData(equitySymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(200)),
-                new TestCaseData(equitySymbol, Resolution.Hour, TickType.Trade, TimeSpan.FromDays(365)),
-                new TestCaseData(equitySymbol, Resolution.Daily, TickType.Trade, TimeSpan.FromDays(3650)),
-
-                // Options
-                new TestCaseData(optionSymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(100)),
-                new TestCaseData(optionSymbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(200)),
-                new TestCaseData(optionSymbol, Resolution.Hour, TickType.Trade, TimeSpan.FromDays(365)),
-                new TestCaseData(optionSymbol, Resolution.Daily, TickType.Trade, TimeSpan.FromDays(3650))
-            };
-        }
-
-        [TestCaseSource(nameof(HistoricalTradeBarsTestCases))]
+        [TestCaseSource(nameof(HistoricalDataTestCases))]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
-        public void DownloadsHistoricalData(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
+        public void DownloadsHistoricalData(Symbol symbol, Resolution resolution, TimeSpan period, TickType tickType)
         {
-            var end = new DateTime(2023, 10, 6);
-            var start = end.Subtract(period);
-            var parameters = new DataDownloaderGetParameters(symbol, resolution, start, end, tickType);
+            var request = PolygonHistoryTests.CreateHistoryRequest(symbol, resolution, tickType, period);
+
+            var parameters = new DataDownloaderGetParameters(symbol, resolution, request.StartTimeUtc, request.EndTimeUtc, tickType);
             var data = _downloader.Get(parameters).ToList();
 
             Log.Trace("Data points retrieved: " + data.Count);
 
-            Assert.That(data, Is.Not.Empty);
-
-            // Ordered by time
-            Assert.That(data, Is.Ordered.By("Time"));
-
-            // No repeating bars
-            var timesArray = data.Select(x => x.Time).ToList();
-            Assert.That(timesArray.Distinct().Count(), Is.EqualTo(timesArray.Count));
+            PolygonHistoryTests.AssertHistoricalDataResults(data, resolution);
         }
     }
 }

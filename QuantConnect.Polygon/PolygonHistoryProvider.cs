@@ -22,7 +22,6 @@ using QuantConnect.Lean.Engine.HistoricalData;
 using QuantConnect.Logging;
 using QuantConnect.Configuration;
 using QuantConnect.Util;
-using static QuantConnect.StringExtensions;
 using QuantConnect.Data.Consolidators;
 
 namespace QuantConnect.Polygon
@@ -242,11 +241,14 @@ namespace QuantConnect.Polygon
             {
                 Log.Trace($"PolygonDataQueueHandler.DownloadAndParseData(): Downloading {url}");
 
-                if (RestApiRateLimiter.IsRateLimited)
+                if (RestApiRateLimiter != null)
                 {
-                    Log.Trace("PolygonDataQueueHandler.DownloadAndParseData(): Rest API calls are limited; waiting to proceed.");
+                    if (RestApiRateLimiter.IsRateLimited)
+                    {
+                        Log.Trace("PolygonDataQueueHandler.DownloadAndParseData(): Rest API calls are limited; waiting to proceed.");
+                    }
+                    RestApiRateLimiter.WaitToProceed();
                 }
-                RestApiRateLimiter.WaitToProceed();
 
                 var response = url.DownloadData(new Dictionary<string, string> { { "Authorization", $"Bearer {_apiKey}" } });
                 if (response == null)

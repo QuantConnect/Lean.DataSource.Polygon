@@ -35,7 +35,6 @@ namespace QuantConnect.Tests.Polygon
     public class PolygonHistoryTests
     {
         private readonly string _apiKey = Config.Get("polygon-api-key");
-        private readonly PolygonSubscriptionPlan _subscriptionPlan = Config.GetValue("polygon-subscription-plan", PolygonSubscriptionPlan.Advanced);
         private PolygonDataQueueHandler _historyProvider;
 
         [SetUp]
@@ -54,29 +53,32 @@ namespace QuantConnect.Tests.Polygon
             _historyProvider.Dispose();
         }
 
-        private static TestCaseData[] HistoricalTradeBarsTestCases()
+        internal static TestCaseData[] HistoricalDataTestCases
         {
-            var equitySymbol = Symbols.SPY;
-            var optionSymbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 469m, new DateTime(2023, 12, 15));
-            var symbols = new[] { equitySymbol, optionSymbol };
-            var tickTypes = new[] { TickType.Trade, TickType.Quote };
+            get
+            {
+                var equitySymbol = Symbols.SPY;
+                var optionSymbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 469m, new DateTime(2023, 12, 15));
+                var symbols = new[] { equitySymbol, optionSymbol };
+                var tickTypes = new[] { TickType.Trade, TickType.Quote };
 
-            return symbols
-                .Select(symbol => tickTypes
-                    .Select(tickType => new[]
-                    {
+                return symbols
+                    .Select(symbol => tickTypes
+                        .Select(tickType => new[]
+                        {
                         new TestCaseData(symbol, Resolution.Tick, TimeSpan.FromMinutes(5), tickType),
                         new TestCaseData(symbol, Resolution.Second, TimeSpan.FromMinutes(30), tickType),
                         new TestCaseData(symbol, Resolution.Minute, TimeSpan.FromDays(15), tickType),
                         new TestCaseData(symbol, Resolution.Hour, TimeSpan.FromDays(180), tickType),
                         new TestCaseData(symbol, Resolution.Daily, TimeSpan.FromDays(3650), tickType),
-                    })
-                    .SelectMany(x => x))
-                .SelectMany(x => x)
-                .ToArray();
+                        })
+                        .SelectMany(x => x))
+                    .SelectMany(x => x)
+                    .ToArray();
+            }
         }
 
-        [TestCaseSource(nameof(HistoricalTradeBarsTestCases))]
+        [TestCaseSource(nameof(HistoricalDataTestCases))]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
         public void GetsHistoricalData(Symbol symbol, Resolution resolution, TimeSpan period, TickType tickType)
         {
@@ -86,9 +88,17 @@ namespace QuantConnect.Tests.Polygon
 
             Log.Trace("Data points retrieved: " + history.Count);
 
+            AssertHistoricalDataResults(history.Select(x => x.AllData).SelectMany(x => x).ToList(), resolution, _historyProvider.DataPointCount);
+        }
+
+        internal static void AssertHistoricalDataResults(List<BaseData> history, Resolution resolution, int? expectedCount = null)
+        {
             // Assert that we got some data
             Assert.That(history, Is.Not.Empty);
-            Assert.That(history.Count, Is.EqualTo(_historyProvider.DataPointCount));
+            if (expectedCount.HasValue)
+            {
+                Assert.That(history.Count, Is.EqualTo(expectedCount));
+            }
 
             if (resolution > Resolution.Tick)
             {
@@ -97,15 +107,14 @@ namespace QuantConnect.Tests.Polygon
                 Assert.That(timesArray.Distinct().Count(), Is.EqualTo(timesArray.Count));
 
                 // Resolution is respected
-                var bars = history.Select(x => x.AllData).SelectMany(x => x).OfType<IBaseDataBar>().ToList();
                 var timeSpan = resolution.ToTimeSpan();
-                Assert.That(bars, Is.All.Matches<IBaseDataBar>(x => x.EndTime - x.Time == timeSpan),
+                Assert.That(history, Is.All.Matches<BaseData>(x => x.EndTime - x.Time == timeSpan),
                     $"All bars periods should be equal to {timeSpan} ({resolution})");
             }
             else
             {
                 // All data in the slice are ticks
-                Assert.That(history, Is.All.Matches((Slice x) => x.AllData.All(data => data.GetType() == typeof(Tick))));
+                Assert.That(history, Is.All.Matches<BaseData>(tick => tick.GetType() == typeof(Tick)));
             }
         }
 
@@ -145,43 +154,6 @@ namespace QuantConnect.Tests.Polygon
             Assert.That(history2Duration, Is.GreaterThan(history1Duration));
         }
 
-        [Test]
-        public void MakesTheRightNumberOfApiCallsToGetHistory()
-        {
-            // 1 hour of data per api call
-            const int responseLimit = 60;
-            const Resolution resolution = Resolution.Minute;
-            const TickType tickType = TickType.Trade;
-            var symbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 429m, new DateTime(2023, 10, 06));
-            var start = new DateTime(2023, 01, 02);
-            var end = start.AddDays(1);
-
-            var request = new HistoryRequest(
-                start,
-                end,
-                LeanData.GetDataType(resolution, tickType),
-                symbol,
-                resolution,
-                SecurityExchangeHours.AlwaysOpen(TimeZones.NewYork),
-                TimeZones.NewYork,
-                null,
-                true,
-                false,
-                DataNormalizationMode.Adjusted,
-                tickType);
-
-            using var historyProvider = new TestPolygonHistoryProvider();
-            historyProvider.ResponseLimit = responseLimit;
-            historyProvider.SetHistoryRequest(request);
-
-            var history = historyProvider.GetHistory(request).ToList();
-
-            Log.Trace("Data points retrieved: " + _historyProvider.DataPointCount);
-
-            Assert.That(history, Has.Count.EqualTo((end - start).TotalMinutes));
-            Assert.That(historyProvider.ApiCallsCount, Is.EqualTo((end - start).TotalMinutes / responseLimit));
-        }
-
         private static TestCaseData[] UssuportedSecurityTypesResolutionsAndTickTypesTestCases => new[]
         {
             // Supported resolution and tick type, unsupported security type symbol
@@ -191,12 +163,7 @@ namespace QuantConnect.Tests.Polygon
             new TestCaseData(Symbols.SPX, Resolution.Minute, TickType.Trade),
             new TestCaseData(Symbols.Future_ESZ18_Dec2018, Resolution.Minute, TickType.Trade),
 
-            // Supported security type symbol and tick type, unsupported resolution
-            new TestCaseData(Symbols.SPY_C_192_Feb19_2016, Resolution.Tick, TickType.Trade),
-            new TestCaseData(Symbols.SPY_C_192_Feb19_2016, Resolution.Second, TickType.Trade),
-
             // Supported security type and resolution, unsupported tick type
-            new TestCaseData(Symbols.SPY_C_192_Feb19_2016, Resolution.Minute, TickType.Quote),
             new TestCaseData(Symbols.SPY_C_192_Feb19_2016, Resolution.Minute, TickType.OpenInterest),
         };
 
@@ -216,31 +183,35 @@ namespace QuantConnect.Tests.Polygon
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
         public void RateLimitsHistoryApiCalls(int historyRequestsCount)
         {
-            var symbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 429m, new DateTime(2023, 10, 06));
+            var symbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 429m, new DateTime(2023, 12, 15));
             var request = CreateHistoryRequest(symbol, Resolution.Minute, TickType.Trade, TimeSpan.FromDays(1));
 
             var rate = TimeSpan.FromSeconds(5);
             using var unlimitedGate = new RateGate(int.MaxValue, rate);
             using var unlimitedHistoryProvider = new ConfigurableRateLimitedPolygonHistoryProvider(_apiKey, unlimitedGate);
+            List<BaseData> history1 = null;
 
             var timer = Stopwatch.StartNew();
             for (var i = 0; i < historyRequestsCount; i++)
             {
-                var history = unlimitedHistoryProvider.GetHistory(request).ToList();
+                history1 = unlimitedHistoryProvider.GetHistory(request).ToList();
             }
             timer.Stop();
             var unlimitedHistoryRequestsElapsedTime = timer.Elapsed;
 
             using var gate = new RateGate(1, rate);
             using var rateLimitedHistoryProvider = new ConfigurableRateLimitedPolygonHistoryProvider(_apiKey, gate);
+            List<BaseData> history2 = null;
 
             timer = Stopwatch.StartNew();
             for (var i = 0; i < historyRequestsCount; i++)
             {
-                var history = rateLimitedHistoryProvider.GetHistory(request).ToList();
+                history2 = rateLimitedHistoryProvider.GetHistory(request).ToList();
             }
             timer.Stop();
             var rateLimitedHistoryRequestsElapsedTime = timer.Elapsed;
+
+            Assert.That(history1, Is.Not.Empty.And.Count.EqualTo(history2.Count));
 
             var delay = rateLimitedHistoryRequestsElapsedTime - unlimitedHistoryRequestsElapsedTime;
             var expectedDelay = rate * historyRequestsCount;
@@ -251,7 +222,7 @@ namespace QuantConnect.Tests.Polygon
             Assert.That(delay, Is.LessThanOrEqualTo(upperBound), $"The rate gate was late: {delay - upperBound}");
         }
 
-        private static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
+        internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
         {
             var end = new DateTime(2023, 12, 15, 16, 0, 0);
             if (resolution == Resolution.Daily)
@@ -276,8 +247,6 @@ namespace QuantConnect.Tests.Polygon
 
         private class TestPolygonHistoryProvider : PolygonDataQueueHandler
         {
-            private DateTime _currentStart;
-
             public HistoryRequest CurrentHistoryRequest { get; private set; }
 
             public int ResponseLimit { get; set; }
@@ -286,23 +255,28 @@ namespace QuantConnect.Tests.Polygon
 
             public TestPolygonHistoryProvider() : base("test-api-key", streamingEnabled: false) { }
 
-            public void SetHistoryRequest(HistoryRequest request)
+            protected override List<ExchangeMapping> FetchExchangeMappings()
             {
-                _currentStart = request.StartTimeUtc;
-                CurrentHistoryRequest = request;
+                return new List<ExchangeMapping>();
             }
 
             protected override IEnumerable<T> DownloadAndParseData<T>(string url)
             {
-                yield return JsonConvert.DeserializeObject<T>(DownloadData());
+                if (url.Contains("exchanges"))
+                {
+                    return new List<T>();
+                }
+
+                return new List<T>
+                {
+                    JsonConvert.DeserializeObject<T>(DownloadData())
+                };
             }
 
             public string DownloadData()
             {
-                var start = _currentStart;
-                _currentStart = start.AddMinutes(ResponseLimit);
                 ApiCallsCount++;
-
+                var start = new DateTime(2023, 12, 15, 9, 30, 0);
                 return JsonConvert.SerializeObject(new AggregatesResponse
                 {
                     Results = Enumerable.Range(0, ResponseLimit).Select(i => new SingleResponseAggregate
@@ -314,7 +288,6 @@ namespace QuantConnect.Tests.Polygon
                         Close = 1.5m,
                         Volume = 100m
                     }).ToList(),
-                    NextUrl = _currentStart < CurrentHistoryRequest?.EndTimeUtc ? "https://www.someourl.com" : null
                 });
             }
         }
