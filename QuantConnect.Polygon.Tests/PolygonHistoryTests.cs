@@ -63,16 +63,19 @@ namespace QuantConnect.Tests.Polygon
                 var tickTypes = new[] { TickType.Trade, TickType.Quote };
 
                 return symbols
-                    .Select(symbol => tickTypes
-                        .Select(tickType => new[]
-                        {
-                        new TestCaseData(symbol, Resolution.Tick, TimeSpan.FromMinutes(5), tickType),
-                        new TestCaseData(symbol, Resolution.Second, TimeSpan.FromMinutes(30), tickType),
-                        new TestCaseData(symbol, Resolution.Minute, TimeSpan.FromDays(15), tickType),
-                        new TestCaseData(symbol, Resolution.Hour, TimeSpan.FromDays(180), tickType),
-                        new TestCaseData(symbol, Resolution.Daily, TimeSpan.FromDays(3650), tickType),
-                        })
-                        .SelectMany(x => x))
+                    .Select(symbol => new[]
+                    {
+                        // Trades
+                        new TestCaseData(symbol, Resolution.Tick, TimeSpan.FromMinutes(5), TickType.Trade),
+                        new TestCaseData(symbol, Resolution.Second, TimeSpan.FromMinutes(30), TickType.Trade),
+                        new TestCaseData(symbol, Resolution.Minute, TimeSpan.FromDays(15), TickType.Trade),
+                        new TestCaseData(symbol, Resolution.Hour, TimeSpan.FromDays(180), TickType.Trade),
+                        new TestCaseData(symbol, Resolution.Daily, TimeSpan.FromDays(3650), TickType.Trade),
+
+                        // Quotes (Only Tick and Second resolutions are supported)
+                        new TestCaseData(symbol, Resolution.Tick, TimeSpan.FromMinutes(5), TickType.Quote),
+                        new TestCaseData(symbol, Resolution.Second, TimeSpan.FromMinutes(5), TickType.Quote),
+                    })
                     .SelectMany(x => x)
                     .ToArray();
             }
@@ -165,6 +168,11 @@ namespace QuantConnect.Tests.Polygon
 
             // Supported security type and resolution, unsupported tick type
             new TestCaseData(Symbols.SPY_C_192_Feb19_2016, Resolution.Minute, TickType.OpenInterest),
+
+            // Supported security type unsupported resolution and tick type combination
+            new TestCaseData(Symbols.SPY, Resolution.Minute, TickType.Quote),
+            new TestCaseData(Symbols.SPY, Resolution.Hour, TickType.Quote),
+            new TestCaseData(Symbols.SPY, Resolution.Daily, TickType.Quote),
         };
 
         [TestCaseSource(nameof(UssuportedSecurityTypesResolutionsAndTickTypesTestCases))]
@@ -262,11 +270,6 @@ namespace QuantConnect.Tests.Polygon
 
             protected override IEnumerable<T> DownloadAndParseData<T>(string url)
             {
-                if (url.Contains("exchanges"))
-                {
-                    return new List<T>();
-                }
-
                 return new List<T>
                 {
                     JsonConvert.DeserializeObject<T>(DownloadData())

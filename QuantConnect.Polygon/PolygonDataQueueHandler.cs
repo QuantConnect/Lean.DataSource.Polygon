@@ -432,7 +432,7 @@ namespace QuantConnect.Polygon
         /// <summary>
         /// Gets the exchange code mappings from Polygon.io to be cached and used when fetching tick data
         /// </summary>
-        private List<ExchangeMapping> FetchExchangeMappings()
+        protected virtual List<ExchangeMapping> FetchExchangeMappings()
         {
             var url = $"{RestApiBaseUrl}/v3/reference/exchanges";
             // This url is not paginated, so we expect a single response

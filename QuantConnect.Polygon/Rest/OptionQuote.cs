@@ -13,19 +13,19 @@
  * limitations under the License.
  */
 
+using Newtonsoft.Json;
+
 namespace QuantConnect.Polygon
 {
     /// <summary>
-    /// Models a Polygon.io REST API message containing a list of quote ticks
+    /// Models a single option quote tick from a Polygon.io REST API response
     /// </summary>
-    public class QuotesResponse : BaseResultsResponse<Quote>
+    public class OptionQuote : Quote
     {
-    }
-
-    /// <summary>
-    /// Models a Polygon.io REST API message containing a list of option quote ticks
-    /// </summary>
-    public class OptionQuotesResponse : BaseResultsResponse<OptionQuote>
-    {
+        /// <summary>
+        /// Quote timestamp in nanoseconds
+        /// </summary>
+        [JsonProperty("sip_timestamp")]
+        public override long Timestamp { get; set; }
     }
 }

@@ -23,7 +23,7 @@ namespace QuantConnect.Polygon
     public class Quote : ResponseTick
     {
         /// <summary>
-        /// Trade timestamp in nanoseconds
+        /// Quote timestamp in nanoseconds
         /// </summary>
         [JsonProperty("participant_timestamp")]
         public override long Timestamp { get; set; }

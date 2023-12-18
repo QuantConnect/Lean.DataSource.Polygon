@@ -89,6 +89,14 @@ namespace QuantConnect.Polygon
 
             IEnumerable<BaseData> history;
 
+            // Quote data can only be fetched from Polygon from their Quote Tick endpoint,
+            // which would be too slow for anything above second resolution or long time spans.
+            if (request.TickType == TickType.Quote && request.Resolution > Resolution.Second)
+            {
+                Log.Error("PolygonDataQueueHandler.GetHistory(): Quote data above second resolution is not supported.");
+                yield break;
+            }
+
             if (
                 // Basic and Starter plans only have access to aggregates
                 _subscriptionPlan < PolygonSubscriptionPlan.Developer ||
@@ -191,9 +199,16 @@ namespace QuantConnect.Polygon
         /// </summary>
         private IEnumerable<Tick> GetQuotes(HistoryRequest request)
         {
-            return GetTicks<QuotesResponse, Quote>(request,
-                (time, symbol, responseTick) => new Tick(time, request.Symbol, string.Empty, GetExchangeCode(responseTick.ExchangeID),
-                    responseTick.BidSize, responseTick.BidPrice, responseTick.AskSize, responseTick.AskPrice));
+            Tick makeTick<T>(DateTime time, Symbol symbol, T responseTick) where T : Quote =>
+                new Tick(time, request.Symbol, string.Empty, GetExchangeCode(responseTick.ExchangeID),
+                    responseTick.BidSize, responseTick.BidPrice, responseTick.AskSize, responseTick.AskPrice);
+
+            if (request.Symbol.SecurityType == SecurityType.Option)
+            {
+                return GetTicks<OptionQuotesResponse, OptionQuote>(request, makeTick);
+            }
+
+            return GetTicks<QuotesResponse, Quote>(request, makeTick);
         }
 
         private IEnumerable<Tick> GetTicks<TResponse, TTick>(HistoryRequest request, Func<DateTime, Symbol, TTick, Tick> tickFactory)
