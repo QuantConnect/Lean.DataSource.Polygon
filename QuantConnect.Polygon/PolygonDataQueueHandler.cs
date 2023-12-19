@@ -37,6 +37,10 @@ namespace QuantConnect.Polygon
     /// <summary>
     /// Polygon.io implementation of <see cref="IDataQueueHandler"/> and <see cref="IHistoryProvider"/>
     /// </summary>
+    /// <remarks>
+    /// Polygon.io equities documentation: https://polygon.io/docs/stocks/getting-started
+    /// Polygon.io options documentation: https://polygon.io/docs/options/getting-started
+    /// </remarks>
     public partial class PolygonDataQueueHandler : IDataQueueHandler, IDataQueueUniverseProvider
     {
         private static readonly ReadOnlyCollection<SecurityType> _supportedSecurityTypes = Array.AsReadOnly(new[]
