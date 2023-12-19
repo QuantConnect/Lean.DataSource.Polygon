@@ -62,7 +62,6 @@ namespace QuantConnect.Polygon
             {
                 var history = GetHistory(request);
                 var subscription = CreateSubscription(request, history);
-
                 subscriptions.Add(subscription);
             }
 
@@ -87,8 +86,6 @@ namespace QuantConnect.Polygon
                 yield break;
             }
 
-            IEnumerable<BaseData> history;
-
             // Quote data can only be fetched from Polygon from their Quote Tick endpoint,
             // which would be too slow for anything above second resolution or long time spans.
             if (request.TickType == TickType.Quote && request.Resolution > Resolution.Second)
@@ -103,7 +100,7 @@ namespace QuantConnect.Polygon
                 // For Developer and Advanced plans, if resolution is greater than tick, use the aggregates endpoint to make the requests faster
                 (request.TickType == TickType.Trade && request.Resolution > Resolution.Tick))
             {
-                history = GetAggregates(request);
+                var history = GetAggregates(request);
                 foreach (var data in history)
                 {
                     Interlocked.Increment(ref _dataPointCount);
@@ -114,6 +111,7 @@ namespace QuantConnect.Polygon
             {
                 var config = request.ToSubscriptionDataConfig();
                 IDataConsolidator consolidator;
+                IEnumerable<BaseData> history;
 
                 // For Developer plan, assume checks were have already been done and the tick type is Trade
                 if (_subscriptionPlan == PolygonSubscriptionPlan.Developer || request.TickType == TickType.Trade)
@@ -148,6 +146,8 @@ namespace QuantConnect.Polygon
                         consolidatedData = null;
                     }
                 }
+
+                consolidator.DataConsolidated -= onDataConsolidated;
             }
         }
 
@@ -191,7 +191,7 @@ namespace QuantConnect.Polygon
         {
             return GetTicks<TradesResponse, Trade>(request,
                 (time, symbol, responseTick) => new Tick(time, request.Symbol, string.Empty, GetExchangeCode(responseTick.ExchangeID),
-                    responseTick.Price, responseTick.Volume));
+                    responseTick.Volume, responseTick.Price));
         }
 
         /// <summary>

@@ -361,7 +361,7 @@ namespace QuantConnect.Polygon
             var symbol = _symbolMapper.GetLeanSymbol(trade.Symbol);
             var time = GetTickTime(symbol, trade.Timestamp);
             // TODO: Map trade.Conditions to Lean sale conditions
-            var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(trade.ExchangeID), trade.Price, trade.Size);
+            var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(trade.ExchangeID), trade.Size, trade.Price);
             _dataAggregator.Update(tick);
         }
 
