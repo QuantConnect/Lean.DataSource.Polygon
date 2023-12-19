@@ -458,7 +458,7 @@ namespace QuantConnect.Polygon
             var response = DownloadAndParseData<ExchangesResponse>(url).SingleOrDefault();
             if (response == null)
             {
-                throw new Exception($"Failed to download exchange mappings from {url}");
+                throw new Exception($"Failed to download exchange mappings from {url}. Make sure your API key is valid.");
             }
 
             return response.Results.ToList();
