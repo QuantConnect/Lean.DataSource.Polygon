@@ -15,20 +15,15 @@
 */
 
 using NUnit.Framework;
-using QuantConnect.Data;
-using QuantConnect.Data.Market;
-using QuantConnect.Logging;
 using QuantConnect.Polygon;
-using QuantConnect.Securities;
 using QuantConnect.Util;
 using Microsoft.CodeAnalysis;
-using Newtonsoft.Json;
 using QuantConnect.Configuration;
-using System.Diagnostics;
 using System;
 using System.Linq;
 using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Interfaces;
+using System.Collections.Generic;
 
 namespace QuantConnect.Tests.Polygon
 {
@@ -76,6 +71,11 @@ namespace QuantConnect.Tests.Polygon
             public TestablePolygonDataQueueHandler(string apiKey)
                 : base(apiKey, streamingEnabled: false)
             {
+            }
+
+            protected override List<ExchangeMapping> FetchExchangeMappings()
+            {
+                return new List<ExchangeMapping>();
             }
         }
     }

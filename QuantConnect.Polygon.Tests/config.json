@@ -2,12 +2,13 @@
   "data-folder": "../../../../Lean/Data/",
   "data-directory": "../../../../Lean/Data/",
 
-  "job-user-id": "",
+  "job-user-id": "0",
   "api-access-token": "",
   "job-organization-id": "",
 
   "polygon-api-key": "",
-  "polygon-api-url": "https://api.polygon.io/v2",
+  "polygon-subscription-plan": "Advanced",
+  "polygon-api-url": "https://api.polygon.io",
   "polygon-ws-url": "wss://socket.polygon.io",
   // For launchpad:
   //"polygon-ws-url": "wss://launchpad.polygon.io"
