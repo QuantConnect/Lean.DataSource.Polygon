@@ -23,28 +23,15 @@ using QuantConnect.Logging;
 
 namespace QuantConnect.Tests.Polygon
 {
-    [TestFixture]
+    [SetUpFixture]
     public class TestSetup
     {
-        [Test, TestCaseSource(nameof(TestParameters))]
-        public void TestSetupCase(TestCaseData[] _)
-        {
-        }
-
-        private static void SetUp()
+        [OneTimeSetUp]
+        public void GlobalSetup()
         {
             Log.LogHandler = new CompositeLogHandler();
             Log.Trace("TestSetup(): starting...");
             ReloadConfiguration();
-        }
-
-        private static TestCaseData[] TestParameters
-        {
-            get
-            {
-                SetUp();
-                return new[] { new TestCaseData() };
-            }
         }
 
         private static void ReloadConfiguration()
