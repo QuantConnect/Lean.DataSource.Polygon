@@ -254,7 +254,7 @@ namespace QuantConnect.Polygon
         {
             while (!string.IsNullOrEmpty(url))
             {
-                Log.Trace($"PolygonDataQueueHandler.DownloadAndParseData(): Downloading {url}");
+                Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): Downloading {url}");
 
                 if (RestApiRateLimiter != null)
                 {
