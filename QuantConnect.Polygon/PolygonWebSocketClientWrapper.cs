@@ -15,6 +15,7 @@
 
 using System.Collections.ObjectModel;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using QuantConnect.Brokerages;
 using QuantConnect.Configuration;
 using QuantConnect.Logging;
@@ -32,8 +33,18 @@ namespace QuantConnect.Polygon
         private PolygonSubscriptionPlan _subscriptionPlan;
         private readonly ISymbolMapper _symbolMapper;
         private readonly Action<string> _messageHandler;
+        private volatile bool _authenticated;
 
-        private List<SecurityType> _supportedSecurityTypes;
+        private object _lock = new();
+
+        private readonly List<SecurityType> _supportedSecurityTypes;
+
+        private readonly Dictionary<Symbol, List<TickType>> _subscriptions;
+
+        /// <summary>
+        /// On Authenticated event
+        /// </summary>
+        public event EventHandler Authenticated;
 
         /// <summary>
         /// Gets the security types supported by this websocket client
@@ -43,7 +54,16 @@ namespace QuantConnect.Polygon
         /// <summary>
         /// The number of current subscriptions for this websocket
         /// </summary>
-        public int SubscriptionsCount { get; private set; }
+        public int SubscriptionsCount
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _subscriptions.Sum(kvp => kvp.Value.Count);
+                }
+            }
+        }
 
         /// <summary>
         /// Creates a new instance of the <see cref="PolygonWebSocketClientWrapper"/> class
@@ -64,6 +84,7 @@ namespace QuantConnect.Polygon
             _symbolMapper = symbolMapper;
             _supportedSecurityTypes = GetSupportedSecurityTypes(securityType);
             _messageHandler = messageHandler;
+            _subscriptions = new Dictionary<Symbol, List<TickType>>();
 
             var url = GetWebSocketUrl(securityType);
             Initialize(url);
@@ -72,6 +93,7 @@ namespace QuantConnect.Polygon
             Closed += OnClosed;
             Message += OnMessage;
             Error += OnError;
+            Authenticated += OnAuthenticated;
         }
 
         /// <summary>
@@ -87,7 +109,7 @@ namespace QuantConnect.Polygon
             }
 
             Subscribe(symbol, tickType, true);
-            SubscriptionsCount++;
+            AddSubscription(symbol, tickType);
         }
 
         /// <summary>
@@ -98,7 +120,7 @@ namespace QuantConnect.Polygon
         public void Unsubscribe(Symbol symbol, TickType tickType)
         {
             Subscribe(symbol, tickType, false);
-            SubscriptionsCount--;
+            RemoveSubscription(symbol, tickType);
         }
 
         private void Subscribe(Symbol symbol, TickType tickType, bool subscribe)
@@ -111,6 +133,34 @@ namespace QuantConnect.Polygon
             }));
         }
 
+        private void AddSubscription(Symbol symbol, TickType tickType)
+        {
+            lock (_lock)
+            {
+                if (!_subscriptions.TryGetValue(symbol, out var tickTypes))
+                {
+                    tickTypes = new List<TickType>();
+                    _subscriptions[symbol] = tickTypes;
+                }
+                tickTypes.Add(tickType);
+            }
+        }
+
+        private void RemoveSubscription(Symbol symbol, TickType tickType)
+        {
+            lock (_lock)
+            {
+                if (_subscriptions.TryGetValue(symbol, out var tickTypes))
+                {
+                    tickTypes.Remove(tickType);
+                    if (tickTypes.Count == 0)
+                    {
+                        _subscriptions.Remove(symbol);
+                    }
+                }
+            }
+        }
+
         private void OnError(object? sender, WebSocketError e)
         {
             Log.Error($"PolygonWebSocketClientWrapper.OnError(): {e.Message}");
@@ -119,11 +169,24 @@ namespace QuantConnect.Polygon
         private void OnMessage(object? sender, WebSocketMessage webSocketMessage)
         {
             var e = (TextMessage)webSocketMessage.Data;
+
+            if (!_authenticated)
+            {
+                // Find the authentication message
+                var authenticationMessage = JArray.Parse(e.Message)
+                    .FirstOrDefault(message => message["ev"].ToString() == "status" && message["status"].ToString() == "auth_success");
+                if (authenticationMessage != null)
+                {
+                    Authenticated?.Invoke(this, EventArgs.Empty);
+                }
+            }
+
             _messageHandler?.Invoke(e.Message);
         }
 
         private void OnClosed(object? sender, WebSocketCloseData e)
         {
+            _authenticated = false;
             Log.Trace($"PolygonWebSocketClientWrapper.OnClosed(): {string.Join(", ", _supportedSecurityTypes)} - {e.Reason}");
         }
 
@@ -136,6 +199,22 @@ namespace QuantConnect.Polygon
                 action = "auth",
                 @params = _apiKey
             }));
+        }
+
+        private void OnAuthenticated(object? sender, EventArgs e)
+        {
+            _authenticated = true;
+            Log.Trace($"PolygonWebSocketClientWrapper.OnAuthenticated(): {string.Join(", ", _supportedSecurityTypes)} - authenticated");
+
+            // TODO: Lock _subscriptions
+            foreach (var kvp in _subscriptions)
+            {
+                foreach (var tickType in kvp.Value)
+                {
+                    Log.Trace($"PolygonWebSocketClientWrapper.OnAuthenticated(): {string.Join(", ", _supportedSecurityTypes)} - resubscribing {kvp.Key} - {tickType}");
+                    Subscribe(kvp.Key, tickType, true);
+                }
+            }
         }
 
         private string GetSubscriptionPrefix(SecurityType securityType, TickType tickType)
