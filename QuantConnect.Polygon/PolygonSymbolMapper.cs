@@ -23,11 +23,7 @@ namespace QuantConnect.Polygon
     /// </summary>
     public class PolygonSymbolMapper : ISymbolMapper
     {
-        private readonly Dictionary<string, Symbol> _leanSymbolsByPolygonSymbol = new();
-        private readonly Dictionary<Symbol, string> _polygonSymbolsByLeanSymbol = new();
-
-        private readonly object _leanToPolygonSymbolMapLock = new();
-        private readonly object _polygonToLeanSymbolMapLock = new();
+        private readonly Dictionary<string, Symbol> _leanSymbolsCache= new();
 
         /// <summary>
         /// Converts a Lean symbol instance to a brokerage symbol
@@ -41,29 +37,17 @@ namespace QuantConnect.Polygon
                 throw new ArgumentException($"Invalid symbol: {(symbol == null ? "null" : symbol.ToString())}");
             }
 
-            lock (_leanToPolygonSymbolMapLock)
+            switch (symbol.SecurityType)
             {
-                if (!_polygonSymbolsByLeanSymbol.TryGetValue(symbol, out var polygonSymbol))
-                {
-                    switch (symbol.SecurityType)
-                    {
-                        case SecurityType.Equity:
-                            polygonSymbol = symbol.Value.Replace(" ", "");
-                            break;
+                case SecurityType.Equity:
+                    return symbol.Value.Replace(" ", "");
 
-                        case SecurityType.Option:
-                        case SecurityType.IndexOption:
-                            polygonSymbol = $"O:{symbol.Value.Replace(" ", "")}";
-                            break;
+                case SecurityType.Option:
+                case SecurityType.IndexOption:
+                    return $"O:{symbol.Value.Replace(" ", "")}";
 
-                        default:
-                            throw new Exception($"PolygonSymbolMapper.GetBrokerageSymbol(): unsupported security type: {symbol.SecurityType}");
-                    }
-
-                    _polygonSymbolsByLeanSymbol[symbol] = polygonSymbol;
-                }
-
-                return polygonSymbol;
+                default:
+                    throw new Exception($"PolygonSymbolMapper.GetBrokerageSymbol(): unsupported security type: {symbol.SecurityType}");
             }
         }
 
@@ -129,12 +113,23 @@ namespace QuantConnect.Polygon
         /// <returns>The corresponding Lean symbol</returns>
         public Symbol GetLeanSymbol(string polygonSymbol)
         {
-            if (polygonSymbol.StartsWith("O:"))
+            lock (_leanSymbolsCache)
             {
-                return GetLeanOptionSymbol(polygonSymbol);
-            }
+                if (!_leanSymbolsCache.TryGetValue(polygonSymbol, out var symbol))
+                {
+                    if (polygonSymbol.StartsWith("O:"))
+                    {
+                        symbol = GetLeanOptionSymbol(polygonSymbol);
+                    }
+                    else
+                    {
+                        symbol = GetLeanSymbol(polygonSymbol, SecurityType.Equity, Market.USA);
+                    }
+                    _leanSymbolsCache[polygonSymbol] = symbol;
+                }
 
-            return GetLeanSymbol(polygonSymbol, SecurityType.Equity, Market.USA);
+                return symbol;
+            }
         }
 
         /// <summary>
@@ -142,28 +137,22 @@ namespace QuantConnect.Polygon
         /// </summary>
         /// <param name="polygonSymbol">The polygon symbol</param>
         /// <returns>The corresponding Lean option symbol</returns>
-        public Symbol GetLeanOptionSymbol(string polygonSymbol)
+        private Symbol GetLeanOptionSymbol(string polygonSymbol)
         {
-            lock (_polygonToLeanSymbolMapLock)
-            {
-                if (!_leanSymbolsByPolygonSymbol.TryGetValue(polygonSymbol, out var symbol))
-                {
-                    // Polygon option symbol format, without the "O:" prefix, is similar to OSI option symbol format
-                    // But they don't have a fixed number of characters for the underlying ticker, so we need to parse it
-                    // starting from the end of the string: strike -> option right -> expiration date -> underlying ticker.
-                    // Reference: https://polygon.io/blog/how-to-read-a-stock-options-ticker
-                    var strike = Int64.Parse(polygonSymbol.Substring(polygonSymbol.Length - 8)) / 1000m;
-                    var optionRight = polygonSymbol.Substring(polygonSymbol.Length - 9, 1) == "C" ? OptionRight.Call : OptionRight.Put;
-                    var expirationDate = DateTime.ParseExact(polygonSymbol.Substring(polygonSymbol.Length - 15, 6), "yyMMdd", CultureInfo.InvariantCulture);
-                    var underlyingTicker = polygonSymbol.Substring(2, polygonSymbol.Length - 15 - 2);
+            // Polygon option symbol format, without the "O:" prefix, is similar to OSI option symbol format
+            // But they don't have a fixed number of characters for the underlying ticker, so we need to parse it
+            // starting from the end of the string: strike -> option right -> expiration date -> underlying ticker.
+            // Reference: https://polygon.io/blog/how-to-read-a-stock-options-ticker
+            var strike = Int64.Parse(polygonSymbol.Substring(polygonSymbol.Length - 8)) / 1000m;
+            var optionRight = polygonSymbol.Substring(polygonSymbol.Length - 9, 1) == "C" ? OptionRight.Call : OptionRight.Put;
+            var expirationDate = DateTime.ParseExact(polygonSymbol.Substring(polygonSymbol.Length - 15, 6), "yyMMdd", CultureInfo.InvariantCulture);
+            var underlyingTicker = polygonSymbol.Substring(2, polygonSymbol.Length - 15 - 2);
 
-                    symbol = Symbol.CreateOption(Symbol.Create(underlyingTicker, SecurityType.Equity, Market.USA), Market.USA, OptionStyle.American,
-                        optionRight, strike, expirationDate);
-                    _leanSymbolsByPolygonSymbol[polygonSymbol] = symbol;
-                }
+            var symbol = Symbol.CreateOption(Symbol.Create(underlyingTicker, SecurityType.Equity, Market.USA), Market.USA, OptionStyle.American,
+                optionRight, strike, expirationDate);
+            _leanSymbolsCache[polygonSymbol] = symbol;
 
-                return symbol;
-            }
+            return symbol;
         }
     }
 }

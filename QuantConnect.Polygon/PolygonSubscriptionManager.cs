@@ -51,7 +51,7 @@ namespace QuantConnect.Polygon
         /// <summary>
         /// Gets the total number of subscriptions
         /// </summary>
-        public int TotalSubscriptionsCount
+        internal int TotalSubscriptionsCount
         {
             get
             {

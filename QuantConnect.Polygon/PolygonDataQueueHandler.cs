@@ -120,6 +120,7 @@ namespace QuantConnect.Polygon
             // Basic plan has a limit of 5 API calls per minute
             if (_subscriptionPlan == PolygonSubscriptionPlan.Basic)
             {
+                RestApiRateLimiter?.DisposeSafely();
                 RestApiRateLimiter = new RateGate(5, TimeSpan.FromMinutes(1));
             }
 
@@ -425,20 +426,24 @@ namespace QuantConnect.Polygon
         /// </summary>
         private DateTime GetTickTime(Symbol symbol, DateTime utcTime)
         {
-            if (!_symbolExchangeTimeZones.TryGetValue(symbol, out var exchangeTimeZone))
+            DateTimeZone exchangeTimeZone;
+            lock (_symbolExchangeTimeZones)
             {
-                // read the exchange time zone from market-hours-database
-                if (_marketHoursDatabase.TryGetEntry(symbol.ID.Market, symbol, symbol.SecurityType, out var entry))
+                if (!_symbolExchangeTimeZones.TryGetValue(symbol, out exchangeTimeZone))
                 {
-                    exchangeTimeZone = entry.ExchangeHours.TimeZone;
-                }
-                // If there is no entry for the given Symbol, default to New York
-                else
-                {
-                    exchangeTimeZone = TimeZones.NewYork;
-                }
+                    // read the exchange time zone from market-hours-database
+                    if (_marketHoursDatabase.TryGetEntry(symbol.ID.Market, symbol, symbol.SecurityType, out var entry))
+                    {
+                        exchangeTimeZone = entry.ExchangeHours.TimeZone;
+                    }
+                    // If there is no entry for the given Symbol, default to New York
+                    else
+                    {
+                        exchangeTimeZone = TimeZones.NewYork;
+                    }
 
-                _symbolExchangeTimeZones.Add(symbol, exchangeTimeZone);
+                    _symbolExchangeTimeZones.Add(symbol, exchangeTimeZone);
+                }
             }
 
             return utcTime.ConvertFromUtc(exchangeTimeZone);

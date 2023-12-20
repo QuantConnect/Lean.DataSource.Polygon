@@ -23,8 +23,14 @@ namespace QuantConnect.Tests.Polygon
     [TestFixture]
     public class PolygonSymbolMapperTests
     {
-        private static TestCaseData[] PolygonToLeanOptionSymbolConversionTestCases => new TestCaseData[]
+        private static TestCaseData[] PolygonToLeanSymbolConversionTestCases => new TestCaseData[]
         {
+            // Equity
+            new TestCaseData("SPY", Symbols.SPY),
+            new TestCaseData("AAPL", Symbols.AAPL),
+            new TestCaseData("IBM", Symbols.IBM),
+
+            // Options
             new TestCaseData("O:SPY160219C00192000", Symbols.SPY_C_192_Feb19_2016),
             new TestCaseData("O:SPY160219P00192000", Symbols.SPY_P_192_Feb19_2016),
             new TestCaseData("O:AAPL231020C00080550",
@@ -33,11 +39,11 @@ namespace QuantConnect.Tests.Polygon
                 Symbol.CreateOption(Symbols.AAPL, Market.USA, OptionStyle.American, OptionRight.Put, 80.55m, new DateTime(2023, 10, 20)))
         };
 
-        [TestCaseSource(nameof(PolygonToLeanOptionSymbolConversionTestCases))]
-        public void ConvertsPolygonOptionSymbolToLeanSymbol(string polygonSymbol, Symbol leanSymbol)
+        [TestCaseSource(nameof(PolygonToLeanSymbolConversionTestCases))]
+        public void ConvertsPolygonSymbolToLeanSymbol(string polygonSymbol, Symbol leanSymbol)
         {
             var mapper = new PolygonSymbolMapper();
-            var convertedSymbol = mapper.GetLeanOptionSymbol(polygonSymbol);
+            var convertedSymbol = mapper.GetLeanSymbol(polygonSymbol);
             Assert.That(convertedSymbol, Is.EqualTo(leanSymbol));
         }
     }

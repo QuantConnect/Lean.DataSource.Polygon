@@ -40,8 +40,6 @@ namespace QuantConnect.Tests.Polygon
         [SetUp]
         public void SetUp()
         {
-            Log.LogHandler = new CompositeLogHandler();
-
             _historyProvider = new PolygonDataQueueHandler(_apiKey, streamingEnabled: false);
             _historyProvider.Initialize(new HistoryProviderInitializeParameters(null, null, null, null, null, null, null, false, null, null));
 

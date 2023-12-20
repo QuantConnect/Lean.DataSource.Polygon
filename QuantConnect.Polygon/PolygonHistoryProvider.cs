@@ -148,6 +148,7 @@ namespace QuantConnect.Polygon
                 }
 
                 consolidator.DataConsolidated -= onDataConsolidated;
+                consolidator.DisposeSafely();
             }
         }
 
@@ -165,7 +166,6 @@ namespace QuantConnect.Polygon
             var url = $"{RestApiBaseUrl}/v2/aggs/ticker/{_symbolMapper.GetBrokerageSymbol(request.Symbol)}/range/1/{historyTimespan}/{start}/{end}" +
                 $"?&limit={ApiResponseLimit}&adjusted={request.DataNormalizationMode != DataNormalizationMode.Raw}";
 
-            // TODO: Download and parse data asynchronously
             foreach (var response in DownloadAndParseData<AggregatesResponse>(url))
             {
                 if (response == null)
@@ -228,7 +228,6 @@ namespace QuantConnect.Polygon
                 "order=asc&" +
                 $"limit={ApiResponseLimit}";
 
-            // TODO: Download and parse data asynchronously
             foreach (var response in DownloadAndParseData<TResponse>(url))
             {
                 if (response == null)
@@ -268,7 +267,6 @@ namespace QuantConnect.Polygon
                 var response = url.DownloadData(new Dictionary<string, string> { { "Authorization", $"Bearer {_apiKey}" } });
                 if (response == null)
                 {
-                    yield return default;
                     yield break;
                 }
 
@@ -277,7 +275,6 @@ namespace QuantConnect.Polygon
                 if (resultJson["status"]?.ToString().ToUpperInvariant() != "OK")
                 {
                     Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No data for {url}. Reason: {response}");
-                    yield return default;
                     yield break;
                 }
 

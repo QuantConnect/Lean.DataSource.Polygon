@@ -206,13 +206,15 @@ namespace QuantConnect.Polygon
             _authenticated = true;
             Log.Trace($"PolygonWebSocketClientWrapper.OnAuthenticated(): {string.Join(", ", _supportedSecurityTypes)} - authenticated");
 
-            // TODO: Lock _subscriptions
-            foreach (var kvp in _subscriptions)
+            lock (_lock)
             {
-                foreach (var tickType in kvp.Value)
+                foreach (var kvp in _subscriptions)
                 {
-                    Log.Trace($"PolygonWebSocketClientWrapper.OnAuthenticated(): {string.Join(", ", _supportedSecurityTypes)} - resubscribing {kvp.Key} - {tickType}");
-                    Subscribe(kvp.Key, tickType, true);
+                    foreach (var tickType in kvp.Value)
+                    {
+                        Log.Trace($"PolygonWebSocketClientWrapper.OnAuthenticated(): {string.Join(", ", _supportedSecurityTypes)} - resubscribing {kvp.Key} - {tickType}");
+                        Subscribe(kvp.Key, tickType, true);
+                    }
                 }
             }
         }

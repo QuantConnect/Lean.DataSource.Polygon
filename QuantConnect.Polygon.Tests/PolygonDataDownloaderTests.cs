@@ -31,9 +31,13 @@ namespace QuantConnect.Tests.Polygon
         [SetUp]
         public void SetUp()
         {
-            Log.LogHandler = new CompositeLogHandler();
-
             _downloader = new PolygonDataDownloader();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _downloader.DisposeSafely();
         }
 
         private static TestCaseData[] HistoricalDataTestCases => PolygonHistoryTests.HistoricalDataTestCases;

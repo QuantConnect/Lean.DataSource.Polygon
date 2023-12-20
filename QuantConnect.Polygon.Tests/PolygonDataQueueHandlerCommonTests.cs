@@ -21,7 +21,6 @@ using NUnit.Framework;
 using QuantConnect.Configuration;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
-using QuantConnect.Logging;
 using QuantConnect.Polygon;
 using QuantConnect.Util;
 
@@ -32,13 +31,6 @@ namespace QuantConnect.Tests.Polygon
     public class PolygonDataQueueHandlerCommonTests
     {
         private readonly string _apiKey = Config.Get("polygon-api-key");
-
-        [SetUp]
-        public void Setup()
-        {
-            Log.DebuggingEnabled = Config.GetBool("debug-mode");
-            Log.LogHandler = new CompositeLogHandler();
-        }
 
         [Test]
         public void IsConnectedReturnsTrueOnlyAfterAWebSocketConnectionIsOpen()

@@ -34,13 +34,6 @@ namespace QuantConnect.Tests.Polygon
     {
         protected readonly string ApiKey = Config.Get("polygon-api-key");
 
-        [SetUp]
-        public void Setup()
-        {
-            Log.DebuggingEnabled = Config.GetBool("debug-mode", true);
-            Log.LogHandler = new CompositeLogHandler();
-        }
-
         // With each subscription plan, different streaming methods will be used:
         //  - Starter: Only resolutions >= second and trade data will be streamed, using aggregated second bars
         //  - Developer: All resolutions and trade data only will be streamed, using trade ticks
