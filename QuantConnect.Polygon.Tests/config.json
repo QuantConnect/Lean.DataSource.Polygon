@@ -1,0 +1,18 @@
+{
+  "data-folder": "../../../../Lean/Data/",
+  "data-directory": "../../../../Lean/Data/",
+
+  "job-user-id": "0",
+  "api-access-token": "",
+  "job-organization-id": "",
+
+  "polygon-api-key": "",
+  "polygon-subscription-plan": "Advanced",
+  "polygon-api-url": "https://api.polygon.io",
+  "polygon-ws-url": "wss://socket.polygon.io",
+  // For launchpad:
+  //"polygon-ws-url": "wss://launchpad.polygon.io"
+
+  "polygon-max-websocket-connections": 1,
+  "polygon-max-options-subscriptions-per-websocket": -1
+}
