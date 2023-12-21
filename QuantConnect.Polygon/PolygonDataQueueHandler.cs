@@ -112,9 +112,15 @@ namespace QuantConnect.Polygon
         public PolygonDataQueueHandler(string apiKey, PolygonSubscriptionPlan subscriptionPlan,
             int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
         {
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                throw new PolygonAuthenticationException("Missing Polygon.io API key");
+            }
+
             _apiKey = apiKey;
             _subscriptionPlan = subscriptionPlan;
             _dataAggregator = new PolygonAggregationManager(subscriptionPlan);
+            _restClient = new RestClient(RestApiBaseUrl);
             _optionChainProvider = Composer.Instance.GetPart<IOptionChainProvider>();
 
             // Basic plan has a limit of 5 API calls per minute
@@ -189,7 +195,7 @@ namespace QuantConnect.Polygon
             // Authentication failed
             if (triggeredEventIndex == 0)
             {
-                throw new PolygonFailedAuthenticationException("Polygon WebSocket authentication failed");
+                throw new PolygonAuthenticationException("Polygon WebSocket authentication failed");
             }
             // Authentication succeeded
             if (triggeredEventIndex == 1)
@@ -288,6 +294,9 @@ namespace QuantConnect.Polygon
                 _subscriptionManager?.DisposeSafely();
                 _dataAggregator.DisposeSafely();
                 RestApiRateLimiter.DisposeSafely();
+                _failedAuthenticationEvent.DisposeSafely();
+                _successfulAuthenticationEvent.DisposeSafely();
+                _subscribedEvent.DisposeSafely();
 
                 _disposed = true;
             }
@@ -458,12 +467,13 @@ namespace QuantConnect.Polygon
         /// </summary>
         protected virtual List<ExchangeMapping> FetchExchangeMappings()
         {
-            var url = $"{RestApiBaseUrl}/v3/reference/exchanges";
             // This url is not paginated, so we expect a single response
-            var response = DownloadAndParseData<ExchangesResponse>(url).SingleOrDefault();
+            const string uri = "v3/reference/exchanges";
+            var request = new RestRequest(uri, Method.GET);
+            var response = DownloadAndParseData<ExchangesResponse>(request).SingleOrDefault();
             if (response == null)
             {
-                throw new Exception($"Failed to download exchange mappings from {url}. Make sure your API key is valid.");
+                throw new Exception($"Failed to download exchange mappings from {uri}. Make sure your API key is valid.");
             }
 
             return response.Results.ToList();

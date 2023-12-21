@@ -28,6 +28,7 @@ using System.Diagnostics;
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using RestSharp;
 
 namespace QuantConnect.Tests.Polygon
 {
@@ -266,7 +267,7 @@ namespace QuantConnect.Tests.Polygon
                 return new List<ExchangeMapping>();
             }
 
-            protected override IEnumerable<T> DownloadAndParseData<T>(string url)
+            protected override IEnumerable<T> DownloadAndParseData<T>(RestRequest restRequest)
             {
                 return new List<T>
                 {

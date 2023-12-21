@@ -57,7 +57,7 @@ namespace QuantConnect.Tests.Polygon
             using var polygon = new PolygonDataQueueHandler("invalidapikey");
 
             var config = GetConfigs()[0];
-            Assert.Throws<PolygonFailedAuthenticationException>(() =>
+            Assert.Throws<PolygonAuthenticationException>(() =>
             {
                 polygon.Subscribe(config, (sender, args) => { });
             });

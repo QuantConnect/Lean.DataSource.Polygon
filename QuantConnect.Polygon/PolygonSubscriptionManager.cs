@@ -130,7 +130,7 @@ namespace QuantConnect.Polygon
                 var webSocket = GetWebSocket(symbol.SecurityType);
                 if (webSocket != null)
                 {
-                    webSocket.Unsubscribe(symbol, TickType.Trade);
+                    webSocket.Unsubscribe(symbol, tickType);
                 }
             }
 
@@ -148,7 +148,7 @@ namespace QuantConnect.Polygon
 
         private bool ConnectWebSocket(PolygonWebSocketClientWrapper webSocket)
         {
-            var authenticatedEvent = new AutoResetEvent(false);
+            using var authenticatedEvent = new AutoResetEvent(false);
             EventHandler<WebSocketMessage> callback = (sender, e) =>
             {
                 var data = (TextMessage)e.Data;
@@ -186,7 +186,6 @@ namespace QuantConnect.Polygon
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool IsWebSocketFull(PolygonWebSocketClientWrapper websocket)
         {
-            var securityTypes = websocket.SupportedSecurityTypes;
             return _maxSubscriptionsPerWebSocket > 0 && websocket.SubscriptionsCount >= _maxSubscriptionsPerWebSocket;
         }
     }

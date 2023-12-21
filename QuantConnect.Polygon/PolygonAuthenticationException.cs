@@ -18,23 +18,23 @@ namespace QuantConnect.Polygon
     /// <summary>
     /// Defines an exception generated on a failed authentication to Polygon services
     /// </summary>
-    public class PolygonFailedAuthenticationException : Exception
+    public class PolygonAuthenticationException : Exception
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="PolygonFailedAuthenticationException"/> class
+        /// Initializes a new instance of the <see cref="PolygonAuthenticationException"/> class
         /// </summary>
         /// <param name="message">The error message</param>
-        public PolygonFailedAuthenticationException(string message)
+        public PolygonAuthenticationException(string message)
             : base(message)
         {
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="PolygonFailedAuthenticationException"/> class
+        /// Initializes a new instance of the <see cref="PolygonAuthenticationException"/> class
         /// </summary>
         /// <param name="message">The error message</param>
         /// <param name="inner">The inner exception being wrapped</param>
-        public PolygonFailedAuthenticationException(string message, Exception inner)
+        public PolygonAuthenticationException(string message, Exception inner)
             : base(message, inner)
         {
         }
