@@ -170,15 +170,12 @@ namespace QuantConnect.Polygon
         {
             var e = (TextMessage)webSocketMessage.Data;
 
-            if (!_authenticated)
+            // Find the authentication message
+            var authenticationMessage = JArray.Parse(e.Message)
+                .FirstOrDefault(message => message["ev"].ToString() == "status" && message["status"].ToString() == "auth_success");
+            if (authenticationMessage != null)
             {
-                // Find the authentication message
-                var authenticationMessage = JArray.Parse(e.Message)
-                    .FirstOrDefault(message => message["ev"].ToString() == "status" && message["status"].ToString() == "auth_success");
-                if (authenticationMessage != null)
-                {
-                    Authenticated?.Invoke(this, EventArgs.Empty);
-                }
+                Authenticated?.Invoke(this, EventArgs.Empty);
             }
 
             _messageHandler?.Invoke(e.Message);
