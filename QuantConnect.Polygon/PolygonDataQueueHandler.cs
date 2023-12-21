@@ -512,6 +512,8 @@ namespace QuantConnect.Polygon
             return
                 // Filter out universe symbols
                 config.Symbol.Value.IndexOfInvariant("universe", true) == -1 &&
+                // Filter out canonical options
+                !config.Symbol.IsCanonical() &&
                 IsSupported(config.SecurityType, config.Type, config.TickType, config.Resolution);
         }
 
