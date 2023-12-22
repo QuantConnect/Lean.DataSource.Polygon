@@ -41,6 +41,8 @@ namespace QuantConnect.Polygon
 
         private readonly List<string> _subscriptions;
 
+        private Dictionary<TickType, string> _prefixes;
+
         /// <summary>
         /// On Authenticated event
         /// </summary>
@@ -82,6 +84,7 @@ namespace QuantConnect.Polygon
             _supportedSecurityTypes = GetSupportedSecurityTypes(securityType);
             _messageHandler = messageHandler;
             _subscriptions = new List<string>();
+            _prefixes = new Dictionary<TickType, string>();
 
             var url = GetWebSocketUrl(securityType);
             Initialize(url);
@@ -100,6 +103,29 @@ namespace QuantConnect.Polygon
         /// <param name="tickType">Type of tick data</param>
         public void Subscribe(SubscriptionDataConfig config, out bool usingAggregates)
         {
+            var ticker = _symbolMapper.GetBrokerageSymbol(config.Symbol);
+
+            // If prefix is already known, use it
+            if (_prefixes.TryGetValue(config.TickType, out var prefix))
+            {
+                var subscriptionTicker = MakeSubscriptionTicker(prefix, ticker);
+                Subscribe(subscriptionTicker, true);
+                AddSubscription(subscriptionTicker);
+                usingAggregates = prefix == "A";
+
+                Log.Trace($"PolygonWebSocketClientWrapper.Subscribe(): Subscribed to {subscriptionTicker}");
+            }
+            else
+            {
+                TrySubscribe(ticker, config.TickType, config.Resolution, out usingAggregates);
+            }
+        }
+
+        /// <summary>
+        /// Tries to subscribe to the given symbol and tick type by trying all possible prefixes
+        /// </summary>
+        private void TrySubscribe(string ticker, TickType tickType, Resolution resolution, out bool usingAggregates)
+        {
             // We'll try subscribing assuming the highest subscription plan and work our way down if we get an error
             using var subscribedEvent = new ManualResetEventSlim(false);
             using var errorEvent = new ManualResetEventSlim(false);
@@ -107,7 +133,7 @@ namespace QuantConnect.Polygon
             void ProcessMessage(object? _, WebSocketMessage wsMessage)
             {
                 var jsonMessage = JArray.Parse(((TextMessage)wsMessage.Data).Message)[0];
-                var eventType = jsonMessage["ev"].ToString();
+                var eventType = jsonMessage["ev"]?.ToString() ?? string.Empty;
                 if (eventType != "status")
                 {
                     return;
@@ -115,52 +141,53 @@ namespace QuantConnect.Polygon
 
                 var status = jsonMessage["status"]?.ToString() ?? string.Empty;
                 var message = jsonMessage["message"]?.ToString() ?? string.Empty;
-                if (status.Contains("error", StringComparison.InvariantCultureIgnoreCase))
+                if (status.Contains("success", StringComparison.InvariantCultureIgnoreCase) &&
+                    message.Contains("subscribed to", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    subscribedEvent.Set();
+                }
+                else
                 {
                     Log.Debug($"PolygonWebSocketClientWrapper.Subscribe(): error: '{message}'.");
                     errorEvent.Set();
-                }
-                else if (status.Contains("success", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    if (message.Contains("subscribed to", StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        subscribedEvent.Set();
-                    }
                 }
             }
 
             Message += ProcessMessage;
 
-            var symbol = config.Symbol;
-            var ticker = _symbolMapper.GetBrokerageSymbol(symbol);
             var waitHandles = new WaitHandle[] { subscribedEvent.WaitHandle, errorEvent.WaitHandle };
             var subscribed = false;
 
-            foreach (var prefix in GetSubscriptionPefixes(config.TickType, config.Resolution))
+            foreach (var protentialPrefix in GetSubscriptionPefixes(tickType, resolution))
             {
                 subscribedEvent.Reset();
                 errorEvent.Reset();
 
-                var subscriptionTicker = MakeSubscriptionTicker(prefix, ticker);
+                var subscriptionTicker = MakeSubscriptionTicker(protentialPrefix, ticker);
                 Subscribe(subscriptionTicker, true);
 
                 // Wait for the subscribed event or error event
                 var index = WaitHandle.WaitAny(waitHandles, TimeSpan.FromSeconds(30));
+
+                // Quickly try the next prefix if we get an error
+                if (index == 1)
+                {
+                    continue;
+                }
+
                 // Check for timeout
                 if (index == WaitHandle.WaitTimeout)
                 {
                     throw new TimeoutException($"PolygonWebSocketClientWrapper.Subscribe(): Timeout waiting for subscription confirmation for {subscriptionTicker}");
                 }
 
-                if (index == 0)
-                {
-                    Log.Trace($"PolygonWebSocketClientWrapper.Subscribe(): Subscribed to {subscriptionTicker}");
-                    // Subscription was successful
-                    AddSubscription(subscriptionTicker);
-                    usingAggregates = prefix == "A";
-                    subscribed = true;
-                    break;
-                }
+                Log.Trace($"PolygonWebSocketClientWrapper.Subscribe(): Subscribed to {subscriptionTicker}");
+                // Subscription was successful
+                AddSubscription(subscriptionTicker);
+                _prefixes[tickType] = protentialPrefix;
+                usingAggregates = protentialPrefix == "A";
+                subscribed = true;
+                break;
             }
 
             Message -= ProcessMessage;
@@ -168,7 +195,7 @@ namespace QuantConnect.Polygon
             if (!subscribed)
             {
                 throw new Exception($"PolygonWebSocketClientWrapper.Subscribe(): Failed to subscribe to {ticker}. " +
-                    $"Make sure your subscription plan allows streaming {config.TickType.ToString().ToLowerInvariant()} data.");
+                    $"Make sure your subscription plan allows streaming {tickType.ToString().ToLowerInvariant()} data.");
             }
 
             usingAggregates = false;
@@ -181,9 +208,10 @@ namespace QuantConnect.Polygon
         /// <param name="tickType">Type of tick data</param>
         public void Unsubscribe(Symbol symbol, TickType tickType)
         {
+            var baseTicker = _symbolMapper.GetBrokerageSymbol(symbol);
             foreach (var prefix in GetSubscriptionPefixes(tickType))
             {
-                var ticker = MakeSubscriptionTicker(prefix, _symbolMapper.GetBrokerageSymbol(symbol));
+                var ticker = MakeSubscriptionTicker(prefix, baseTicker);
                 lock (_lock)
                 {
                     if (RemoveSubscription(ticker))
@@ -207,8 +235,14 @@ namespace QuantConnect.Polygon
         /// <summary>
         /// Gets a list of Polygon WebSocket prefixes supported for the given tick type and resolution
         /// </summary>
-        private static IEnumerable<string> GetSubscriptionPefixes(TickType tickType, Resolution resolution = Resolution.Minute)
+        private IEnumerable<string> GetSubscriptionPefixes(TickType tickType, Resolution resolution = Resolution.Minute)
         {
+            if (_prefixes.TryGetValue(tickType, out var prefix))
+            {
+                yield return prefix;
+                yield break;
+            }
+
             if (tickType == TickType.Trade)
             {
                 yield return "T";

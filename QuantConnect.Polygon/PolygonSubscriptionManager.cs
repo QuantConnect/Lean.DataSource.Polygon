@@ -118,7 +118,7 @@ namespace QuantConnect.Polygon
 
                 var config = _subscriptionsDataConfigs.Single(x => x.Symbol == symbol && x.TickType == tickType);
                 webSocket.Subscribe(config, out var usingAggregates);
-                UsingAggregates |= usingAggregates;
+                UsingAggregates = usingAggregates;
             }
 
             return true;
