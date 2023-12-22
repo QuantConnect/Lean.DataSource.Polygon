@@ -62,10 +62,6 @@ namespace QuantConnect.Polygon
         private readonly MarketHoursDatabase _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
         private readonly Dictionary<Symbol, DateTimeZone> _symbolExchangeTimeZones = new();
 
-        private readonly ManualResetEvent _successfulAuthenticationEvent = new(false);
-        private readonly ManualResetEvent _failedAuthenticationEvent = new(false);
-        private readonly ManualResetEvent _subscribedEvent = new(false);
-
         private IOptionChainProvider _optionChainProvider;
 
         private bool _disposed;
@@ -76,9 +72,7 @@ namespace QuantConnect.Polygon
         /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
         /// </summary>
         public PolygonDataQueueHandler()
-            : this(Config.Get("polygon-api-key"),
-                Config.GetValue("polygon-subscription-plan", PolygonSubscriptionPlan.Advanced),
-                Config.GetInt("polygon-max-subscriptions-per-websocket", -1))
+            : this(Config.Get("polygon-api-key"), Config.GetInt("polygon-max-subscriptions-per-websocket", -1))
         {
         }
 
@@ -86,16 +80,12 @@ namespace QuantConnect.Polygon
         /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
         /// </summary>
         /// <param name="apiKey">The Polygon API key for authentication</param>
-        /// <param name="subscriptionPlan">Polygon subscription plan</param>
         /// <param name="streamingEnabled">
         /// Whether this handle will be used for streaming data.
         /// If false, the handler is supposed to be used as a history provider only.
         /// </param>
-        public PolygonDataQueueHandler(string apiKey, PolygonSubscriptionPlan? subscriptionPlan = null, bool streamingEnabled = true)
-            : this(apiKey,
-                subscriptionPlan ?? Config.GetValue("polygon-subscription-plan", PolygonSubscriptionPlan.Advanced),
-                Config.GetInt("polygon-max-subscriptions-per-websocket", -1),
-                streamingEnabled)
+        public PolygonDataQueueHandler(string apiKey, bool streamingEnabled = true)
+            : this(apiKey, Config.GetInt("polygon-max-subscriptions-per-websocket", -1), streamingEnabled)
         {
         }
 
@@ -103,14 +93,12 @@ namespace QuantConnect.Polygon
         /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
         /// </summary>
         /// <param name="apiKey">The Polygon.io API key for authentication</param>
-        /// <param name="subscriptionPlan">Polygon subscription plan</param>
         /// <param name="maxSubscriptionsPerWebSocket">The maximum number of subscriptions allowed per websocket</param>
         /// <param name="streamingEnabled">
         /// Whether this handle will be used for streaming data.
         /// If false, the handler is supposed to be used as a history provider only.
         /// </param>
-        public PolygonDataQueueHandler(string apiKey, PolygonSubscriptionPlan subscriptionPlan,
-            int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
+        public PolygonDataQueueHandler(string apiKey, int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
             {
@@ -118,17 +106,9 @@ namespace QuantConnect.Polygon
             }
 
             _apiKey = apiKey;
-            _subscriptionPlan = subscriptionPlan;
-            _dataAggregator = new PolygonAggregationManager(subscriptionPlan);
+            _dataAggregator = new PolygonAggregationManager();
             _restClient = new RestClient(RestApiBaseUrl);
             _optionChainProvider = Composer.Instance.GetPart<IOptionChainProvider>();
-
-            // Basic plan has a limit of 5 API calls per minute
-            if (_subscriptionPlan == PolygonSubscriptionPlan.Basic)
-            {
-                RestApiRateLimiter?.DisposeSafely();
-                RestApiRateLimiter = new RateGate(5, TimeSpan.FromMinutes(1));
-            }
 
             ValidateSubscription();
 
@@ -141,7 +121,7 @@ namespace QuantConnect.Polygon
                 _subscriptionManager = new PolygonSubscriptionManager(
                     _supportedSecurityTypes,
                     maxSubscriptionsPerWebSocket,
-                    (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _subscriptionPlan, _symbolMapper, securityType, OnMessage));
+                    (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage));
             }
         }
 
@@ -174,40 +154,15 @@ namespace QuantConnect.Polygon
                 return null;
             }
 
+            Log.Trace($"PolygonDataQueueHandler.Subscribe(): Subscribing to {dataConfig.Symbol} | {dataConfig.TickType}");
+
+            _subscriptionManager.AddSubscriptionDataConfig(dataConfig);
+            _subscriptionManager.Subscribe(dataConfig);
+            _subscriptionManager.RemoveSubscriptionDataConfig(dataConfig);
+
+            _dataAggregator.SetUsingAggregates(_subscriptionManager.UsingAggregates);
             var enumerator = _dataAggregator.Add(dataConfig, newDataAvailableHandler);
 
-            // On first subscription per websocket, authentication is performed.
-            // Let's make sure authentication is successful:
-            _successfulAuthenticationEvent.Reset();
-            _failedAuthenticationEvent.Reset();
-            _subscribedEvent.Reset();
-
-            // Subscribe
-            Log.Trace($"PolygonDataQueueHandler.Subscribe(): Subscribing to {dataConfig.Symbol} | {dataConfig.TickType}");
-            _subscriptionManager.Subscribe(dataConfig);
-
-            var events = new WaitHandle[] { _failedAuthenticationEvent, _successfulAuthenticationEvent, _subscribedEvent };
-            var triggeredEventIndex = WaitHandle.WaitAny(events, TimeSpan.FromMinutes(1));
-            if (triggeredEventIndex == WaitHandle.WaitTimeout)
-            {
-                throw new TimeoutException($"Timeout waiting for websocket to connect. Could not subscribe to {dataConfig.Symbol}");
-            }
-            // Authentication failed
-            if (triggeredEventIndex == 0)
-            {
-                throw new PolygonAuthenticationException("Polygon WebSocket authentication failed");
-            }
-            // Authentication succeeded
-            if (triggeredEventIndex == 1)
-            {
-                // Now wait for the subscription to be confirmed
-                if (!_subscribedEvent.WaitOne(TimeSpan.FromMinutes(1)))
-                {
-                    throw new TimeoutException($"Timeout waiting for {dataConfig.Symbol} subscription confirmation.");
-                }
-            }
-
-            // If we're here, subscription was successful
             return enumerator;
         }
 
@@ -294,9 +249,6 @@ namespace QuantConnect.Polygon
                 _subscriptionManager?.DisposeSafely();
                 _dataAggregator.DisposeSafely();
                 RestApiRateLimiter.DisposeSafely();
-                _failedAuthenticationEvent.DisposeSafely();
-                _successfulAuthenticationEvent.DisposeSafely();
-                _subscribedEvent.DisposeSafely();
 
                 _disposed = true;
             }
@@ -338,10 +290,6 @@ namespace QuantConnect.Polygon
 
                     case "Q":
                         ProcessQuote(parsedMessage.ToObject<QuoteMessage>());
-                        break;
-
-                    case "status":
-                        ProcessStatusMessage(parsedMessage);
                         break;
 
                     default:
@@ -387,37 +335,6 @@ namespace QuantConnect.Polygon
             var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(quote.BidExchangeID),
                 quote.BidSize, quote.BidPrice, quote.AskSize, quote.AskPrice);
             _dataAggregator.Update(tick);
-        }
-
-        /// <summary>
-        /// Processes status message
-        /// </summary>
-        private void ProcessStatusMessage(JToken jStatusMessage)
-        {
-            var jstatus = jStatusMessage["status"];
-            if (jstatus != null && jstatus.Type == JTokenType.String)
-            {
-                var status = jstatus.ToString();
-                if (status.Contains("auth_failed", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    var errorMessage = jStatusMessage["message"]?.ToString() ?? string.Empty;
-                    Log.Error($"PolygonDataQueueHandler(): authentication failed: '{errorMessage}'.");
-                    _failedAuthenticationEvent.Set();
-                }
-                else if (status.Contains("auth_success", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    Log.Trace($"PolygonDataQueueHandler(): successful authentication.");
-                    _successfulAuthenticationEvent.Set();
-                }
-                else if (status.Contains("success", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    var statusMessage = jStatusMessage["message"]?.ToString() ?? string.Empty;
-                    if (statusMessage.Contains("subscribed to", StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        _subscribedEvent.Set();
-                    }
-                }
-            }
         }
 
         /// <summary>
@@ -502,13 +419,6 @@ namespace QuantConnect.Polygon
         /// </summary>
         private bool CanSubscribe(SubscriptionDataConfig config)
         {
-            // Basic plan does not support streaming data
-            if (_subscriptionPlan == PolygonSubscriptionPlan.Basic)
-            {
-                Log.Debug($"PolygonDataQueueHandler.CanSubscribe(): Basic plan does not support streaming data.");
-                return false;
-            }
-
             return
                 // Filter out universe symbols
                 config.Symbol.Value.IndexOfInvariant("universe", true) == -1 &&
@@ -528,23 +438,7 @@ namespace QuantConnect.Polygon
 
             if (tickType == TickType.OpenInterest)
             {
-                Log.Debug($"PolygonDataQueueHandler.IsSupported(): Unsupported tick type: {tickType}");
-                return false;
-            }
-
-            // Starter plan does not support ticks
-            if (_subscriptionPlan < PolygonSubscriptionPlan.Developer && resolution < Resolution.Second)
-            {
-                Log.Debug($"PolygonDataQueueHandler.IsSupported(): Unsupported resolution: {resolution} " +
-                    $"for {_subscriptionPlan} subscription plan");
-                return false;
-            }
-
-            // Only advanced plan supports quotes
-            if (_subscriptionPlan < PolygonSubscriptionPlan.Advanced && tickType != TickType.Trade)
-            {
-                Log.Debug($"PolygonDataQueueHandler.IsSupported(): Unsupported tick type: {tickType} " +
-                    $"for {_subscriptionPlan} subscription plan");
+                Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported tick type: {tickType}");
                 return false;
             }
 
@@ -552,8 +446,22 @@ namespace QuantConnect.Polygon
                 !dataType.IsAssignableFrom(typeof(QuoteBar)) &&
                 !dataType.IsAssignableFrom(typeof(Tick)))
             {
-                Log.Debug($"PolygonDataQueueHandler.IsSupported(): Unsupported data type: {dataType}");
+                Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported data type: {dataType}");
                 return false;
+            }
+
+            if (resolution < Resolution.Second)
+            {
+                Log.Trace("PolygonDataQueueHandler.IsSupported(): " +
+                    $"Subscription for {securityType}-{dataType}-{tickType}-{resolution} will be attempted. " +
+                    $"An Advanced Polygon.io subscription plan is required to stream tick data.");
+            }
+
+            if (tickType == TickType.Quote)
+            {
+                Log.Trace("PolygonDataQueueHandler.IsSupported(): " +
+                    $"Subscription for {securityType}-{dataType}-{tickType}-{resolution} will be attempted. " +
+                    $"An Advanced Polygon.io subscription plan is required to stream quote data.");
             }
 
             return true;

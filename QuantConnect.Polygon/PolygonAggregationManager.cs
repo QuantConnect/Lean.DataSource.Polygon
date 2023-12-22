@@ -24,15 +24,16 @@ namespace QuantConnect.Polygon
     /// </summary>
     public class PolygonAggregationManager : AggregationManager
     {
-        private PolygonSubscriptionPlan _subscriptionPlan;
+        private bool _usingAggregates;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="PolygonAggregationManager"/> class
+        /// Signals whether aggregated bars are being streamed instead of ticks
+        /// so the consolidator to use can get trade bars as inputs instead of ticks.
         /// </summary>
-        /// <param name="subscriptionPlan">Polygon subscription plan</param>
-        public PolygonAggregationManager(PolygonSubscriptionPlan subscriptionPlan)
+        /// <param name="useAggregates">Whether aggregated bars are being streamed instead of ticks</param>
+        public void SetUsingAggregates(bool useAggregates)
         {
-            _subscriptionPlan = subscriptionPlan;
+            _usingAggregates = useAggregates;
         }
 
         /// <summary>
@@ -45,21 +46,12 @@ namespace QuantConnect.Polygon
                 throw new ArgumentException($"Unsupported subscription tick type {config.TickType}");
             }
 
-            if (_subscriptionPlan < PolygonSubscriptionPlan.Advanced)
+            if (_usingAggregates)
             {
-                if (config.TickType != TickType.Trade)
-                {
-                    throw new ArgumentException($"Unsupported subscription data config type {config.TickType} " +
-                        $"for {_subscriptionPlan} Polygon.io subscription plan");
-                }
-
-                if (_subscriptionPlan < PolygonSubscriptionPlan.Developer)
-                {
-                    // Starter plan only supports streaming aggregated data.
-                    // We use the TradeBarConsolidator for TradeBar data given that we are aggregating trade bars
-                    // (that are already aggregated by Polygon) instead of ticks.
-                    return new TradeBarConsolidator(config.Resolution.ToTimeSpan());
-                }
+                // Starter plan only supports streaming aggregated data.
+                // We use the TradeBarConsolidator for TradeBar data given that we are aggregating trade bars
+                // (that are already aggregated by Polygon) instead of ticks.
+                return new TradeBarConsolidator(config.Resolution.ToTimeSpan());
             }
 
             // Use base's method, since we can fetch ticks with Developer and Advanced plans

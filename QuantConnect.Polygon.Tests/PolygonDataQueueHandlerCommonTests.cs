@@ -67,9 +67,7 @@ namespace QuantConnect.Tests.Polygon
         public void RespectsMaximumWebSocketConnectionsAndSubscriptions(
             [Values(1, 2, 3, 4, 5)] int maxSubscriptionsPerWebSocket)
         {
-            using var polygon = new TestablePolygonDataQueueHandler(Config.Get("polygon-api-key"),
-                Config.GetValue("polygon-subscription-plan", PolygonSubscriptionPlan.Starter),
-                maxSubscriptionsPerWebSocket);
+            using var polygon = new TestablePolygonDataQueueHandler(Config.Get("polygon-api-key"), maxSubscriptionsPerWebSocket);
             var configs = GetConfigs();
 
             var i = 0;

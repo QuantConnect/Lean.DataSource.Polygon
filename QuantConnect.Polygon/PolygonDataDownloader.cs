@@ -34,19 +34,10 @@ namespace QuantConnect.Polygon
         /// </summary>
         /// <param name="apiKey">The Polygon.io API key</param>
         /// <param name="subscriptionPlan">Polygon subscription plan</param>
-        public PolygonDataDownloader(string apiKey, PolygonSubscriptionPlan subscriptionPlan)
-        {
-            _historyProvider = new PolygonDataQueueHandler(apiKey, subscriptionPlan, false);
-            _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PolygonDataDownloader"/>
-        /// </summary>
-        /// <param name="apiKey">The Polygon.io API key</param>
         public PolygonDataDownloader(string apiKey)
-            : this(apiKey, Config.GetValue("polygon-subscription-plan", PolygonSubscriptionPlan.Advanced))
         {
+            _historyProvider = new PolygonDataQueueHandler(apiKey, false);
+            _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
         }
 
         /// <summary>

@@ -13,12 +13,14 @@
  * limitations under the License.
 */
 
-using System.Collections.ObjectModel;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using QuantConnect.Brokerages;
 using QuantConnect.Configuration;
+using QuantConnect.Data;
 using QuantConnect.Logging;
+using System.Collections.ObjectModel;
+using System.Runtime.CompilerServices;
 
 namespace QuantConnect.Polygon
 {
@@ -30,16 +32,14 @@ namespace QuantConnect.Polygon
         private static string BaseUrl = Config.Get("polygon-ws-url", "wss://socket.polygon.io");
 
         private readonly string _apiKey;
-        private PolygonSubscriptionPlan _subscriptionPlan;
         private readonly ISymbolMapper _symbolMapper;
         private readonly Action<string> _messageHandler;
-        private volatile bool _authenticated;
 
         private object _lock = new();
 
         private readonly List<SecurityType> _supportedSecurityTypes;
 
-        private readonly Dictionary<Symbol, List<TickType>> _subscriptions;
+        private readonly List<string> _subscriptions;
 
         /// <summary>
         /// On Authenticated event
@@ -60,7 +60,7 @@ namespace QuantConnect.Polygon
             {
                 lock (_lock)
                 {
-                    return _subscriptions.Sum(kvp => kvp.Value.Count);
+                    return _subscriptions.Count;
                 }
             }
         }
@@ -69,22 +69,19 @@ namespace QuantConnect.Polygon
         /// Creates a new instance of the <see cref="PolygonWebSocketClientWrapper"/> class
         /// </summary>
         /// <param name="apiKey">The Polygon.io API key</param>
-        /// <param name="subscriptionPlan">Polygon subscription plan</param>
         /// <param name="symbolMapper">The symbol mapper</param>
         /// <param name="securityType">The security type</param>
         /// <param name="messageHandler">The message handler</param>
         public PolygonWebSocketClientWrapper(string apiKey,
-            PolygonSubscriptionPlan subscriptionPlan,
             ISymbolMapper symbolMapper,
             SecurityType securityType,
             Action<string> messageHandler)
         {
             _apiKey = apiKey;
-            _subscriptionPlan = subscriptionPlan;
             _symbolMapper = symbolMapper;
             _supportedSecurityTypes = GetSupportedSecurityTypes(securityType);
             _messageHandler = messageHandler;
-            _subscriptions = new Dictionary<Symbol, List<TickType>>();
+            _subscriptions = new List<string>();
 
             var url = GetWebSocketUrl(securityType);
             Initialize(url);
@@ -101,15 +98,80 @@ namespace QuantConnect.Polygon
         /// </summary>
         /// <param name="symbol">The symbol</param>
         /// <param name="tickType">Type of tick data</param>
-        public void Subscribe(Symbol symbol, TickType tickType)
+        public void Subscribe(SubscriptionDataConfig config, out bool usingAggregates)
         {
-            if (_subscriptionPlan == PolygonSubscriptionPlan.Basic)
+            // We'll try subscribing assuming the highest subscription plan and work our way down if we get an error
+            using var subscribedEvent = new ManualResetEventSlim(false);
+            using var errorEvent = new ManualResetEventSlim(false);
+
+            void ProcessMessage(object? _, WebSocketMessage wsMessage)
             {
-                throw new NotSupportedException("Basic plan does not support streaming data");
+                var jsonMessage = JArray.Parse(((TextMessage)wsMessage.Data).Message)[0];
+                var eventType = jsonMessage["ev"].ToString();
+                if (eventType != "status")
+                {
+                    return;
+                }
+
+                var status = jsonMessage["status"]?.ToString() ?? string.Empty;
+                var message = jsonMessage["message"]?.ToString() ?? string.Empty;
+                if (status.Contains("error", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    Log.Debug($"PolygonWebSocketClientWrapper.Subscribe(): error: '{message}'.");
+                    errorEvent.Set();
+                }
+                else if (status.Contains("success", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    if (message.Contains("subscribed to", StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        subscribedEvent.Set();
+                    }
+                }
             }
 
-            Subscribe(symbol, tickType, true);
-            AddSubscription(symbol, tickType);
+            Message += ProcessMessage;
+
+            var symbol = config.Symbol;
+            var ticker = _symbolMapper.GetBrokerageSymbol(symbol);
+            var waitHandles = new WaitHandle[] { subscribedEvent.WaitHandle, errorEvent.WaitHandle };
+            var subscribed = false;
+
+            foreach (var prefix in GetSubscriptionPefixes(config.TickType, config.Resolution))
+            {
+                subscribedEvent.Reset();
+                errorEvent.Reset();
+
+                var subscriptionTicker = MakeSubscriptionTicker(prefix, ticker);
+                Subscribe(subscriptionTicker, true);
+
+                // Wait for the subscribed event or error event
+                var index = WaitHandle.WaitAny(waitHandles, TimeSpan.FromSeconds(30));
+                // Check for timeout
+                if (index == WaitHandle.WaitTimeout)
+                {
+                    throw new TimeoutException($"PolygonWebSocketClientWrapper.Subscribe(): Timeout waiting for subscription confirmation for {subscriptionTicker}");
+                }
+
+                if (index == 0)
+                {
+                    Log.Trace($"PolygonWebSocketClientWrapper.Subscribe(): Subscribed to {subscriptionTicker}");
+                    // Subscription was successful
+                    AddSubscription(subscriptionTicker);
+                    usingAggregates = prefix == "A";
+                    subscribed = true;
+                    break;
+                }
+            }
+
+            Message -= ProcessMessage;
+
+            if (!subscribed)
+            {
+                throw new Exception($"PolygonWebSocketClientWrapper.Subscribe(): Failed to subscribe to {ticker}. " +
+                    $"Make sure your subscription plan allows streaming {config.TickType.ToString().ToLowerInvariant()} data.");
+            }
+
+            usingAggregates = false;
         }
 
         /// <summary>
@@ -119,45 +181,70 @@ namespace QuantConnect.Polygon
         /// <param name="tickType">Type of tick data</param>
         public void Unsubscribe(Symbol symbol, TickType tickType)
         {
-            Subscribe(symbol, tickType, false);
-            RemoveSubscription(symbol, tickType);
-        }
-
-        private void Subscribe(Symbol symbol, TickType tickType, bool subscribe)
-        {
-            var ticker = _symbolMapper.GetBrokerageSymbol(symbol);
-            Send(JsonConvert.SerializeObject(new
+            foreach (var prefix in GetSubscriptionPefixes(tickType))
             {
-                action = subscribe ? "subscribe" : "unsubscribe",
-                @params = $"{GetSubscriptionPrefix(symbol.SecurityType, tickType)}.{ticker}"
-            }));
-        }
-
-        private void AddSubscription(Symbol symbol, TickType tickType)
-        {
-            lock (_lock)
-            {
-                if (!_subscriptions.TryGetValue(symbol, out var tickTypes))
+                var ticker = MakeSubscriptionTicker(prefix, _symbolMapper.GetBrokerageSymbol(symbol));
+                lock (_lock)
                 {
-                    tickTypes = new List<TickType>();
-                    _subscriptions[symbol] = tickTypes;
+                    if (RemoveSubscription(ticker))
+                    {
+                        Subscribe(ticker, false);
+                        break;
+                    }
                 }
-                tickTypes.Add(tickType);
             }
         }
 
-        private void RemoveSubscription(Symbol symbol, TickType tickType)
+        private void Subscribe(string ticker, bool subscribe)
+        {
+            Send(JsonConvert.SerializeObject(new
+            {
+                action = subscribe ? "subscribe" : "unsubscribe",
+                @params = ticker
+            }));
+        }
+
+        /// <summary>
+        /// Gets a list of Polygon WebSocket prefixes supported for the given tick type and resolution
+        /// </summary>
+        private static IEnumerable<string> GetSubscriptionPefixes(TickType tickType, Resolution resolution = Resolution.Minute)
+        {
+            if (tickType == TickType.Trade)
+            {
+                yield return "T";
+                if (resolution > Resolution.Tick)
+                {
+                    yield return "A";
+                }
+            }
+            else
+            {
+                yield return "Q";
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static string MakeSubscriptionTicker(string prefix, string ticker)
+        {
+            return $"{prefix}.{ticker}";
+        }
+
+        private void AddSubscription(string ticker)
         {
             lock (_lock)
             {
-                if (_subscriptions.TryGetValue(symbol, out var tickTypes))
+                if (!_subscriptions.Contains(ticker))
                 {
-                    tickTypes.Remove(tickType);
-                    if (tickTypes.Count == 0)
-                    {
-                        _subscriptions.Remove(symbol);
-                    }
+                    _subscriptions.Add(ticker);
                 }
+            }
+        }
+
+        private bool RemoveSubscription(string ticker)
+        {
+            lock (_lock)
+            {
+               return _subscriptions.Remove(ticker);
             }
         }
 
@@ -183,7 +270,6 @@ namespace QuantConnect.Polygon
 
         private void OnClosed(object? sender, WebSocketCloseData e)
         {
-            _authenticated = false;
             Log.Trace($"PolygonWebSocketClientWrapper.OnClosed(): {string.Join(", ", _supportedSecurityTypes)} - {e.Reason}");
         }
 
@@ -200,43 +286,15 @@ namespace QuantConnect.Polygon
 
         private void OnAuthenticated(object? sender, EventArgs e)
         {
-            _authenticated = true;
             Log.Trace($"PolygonWebSocketClientWrapper.OnAuthenticated(): {string.Join(", ", _supportedSecurityTypes)} - authenticated");
 
             lock (_lock)
             {
-                foreach (var kvp in _subscriptions)
+                foreach (var ticker in _subscriptions)
                 {
-                    foreach (var tickType in kvp.Value)
-                    {
-                        Log.Trace($"PolygonWebSocketClientWrapper.OnAuthenticated(): {string.Join(", ", _supportedSecurityTypes)} - resubscribing {kvp.Key} - {tickType}");
-                        Subscribe(kvp.Key, tickType, true);
-                    }
+                    Log.Trace($"PolygonWebSocketClientWrapper.OnAuthenticated(): {string.Join(", ", _supportedSecurityTypes)} - resubscribing {ticker}");
+                    Subscribe(ticker, true);
                 }
-            }
-        }
-
-        private string GetSubscriptionPrefix(SecurityType securityType, TickType tickType)
-        {
-            switch (securityType)
-            {
-                case SecurityType.Equity:
-                case SecurityType.Option:
-                case SecurityType.IndexOption:
-                    switch (_subscriptionPlan)
-                    {
-                        case PolygonSubscriptionPlan.Starter:
-                            return "A";
-                        case PolygonSubscriptionPlan.Developer:
-                            return "T";
-                        case PolygonSubscriptionPlan.Advanced:
-                            return tickType == TickType.Trade ? "T" : "Q";
-                        default:
-                            throw new Exception($"Unsupported subscription plan: {_subscriptionPlan}");
-                    }
-
-                default:
-                    throw new NotSupportedException($"Unsupported security type: {securityType}");
             }
         }
 
