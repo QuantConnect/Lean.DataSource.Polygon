@@ -65,6 +65,12 @@ namespace QuantConnect.Polygon
 
         private bool _disposed;
 
+        private bool _unsupportedSecurityTypeMessageLogged;
+        private bool _unsupportedTickTypeMessagedLogged;
+        private bool _unsupportedDataTypeMessageLogged;
+        private bool _potentialUnsupportedResolutionMessageLogged;
+        private bool _potentialUnsupportedTickTypeMessageLogged;
+
         protected virtual ITimeProvider TimeProvider => RealTimeProvider.Instance;
 
         /// <summary>
@@ -155,9 +161,7 @@ namespace QuantConnect.Polygon
 
             Log.Trace($"PolygonDataQueueHandler.Subscribe(): Subscribing to {dataConfig.Symbol} | {dataConfig.TickType}");
 
-            _subscriptionManager.AddSubscriptionDataConfig(dataConfig);
             _subscriptionManager.Subscribe(dataConfig);
-            _subscriptionManager.RemoveSubscriptionDataConfig(dataConfig);
 
             _dataAggregator.SetUsingAggregates(_subscriptionManager.UsingAggregates);
             var enumerator = _dataAggregator.Add(dataConfig, newDataAvailableHandler);
@@ -431,13 +435,21 @@ namespace QuantConnect.Polygon
             // Check supported security types
             if (!IsSecurityTypeSupported(securityType))
             {
-                Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported security type: {securityType}");
+                if (!_unsupportedSecurityTypeMessageLogged)
+                {
+                    Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported security type: {securityType}");
+                    _unsupportedSecurityTypeMessageLogged = true;
+                }
                 return false;
             }
 
             if (tickType == TickType.OpenInterest)
             {
-                Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported tick type: {tickType}");
+                if (!_unsupportedTickTypeMessagedLogged)
+                {
+                    Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported tick type: {tickType}");
+                    _unsupportedTickTypeMessagedLogged = true;
+                }
                 return false;
             }
 
@@ -445,22 +457,28 @@ namespace QuantConnect.Polygon
                 !dataType.IsAssignableFrom(typeof(QuoteBar)) &&
                 !dataType.IsAssignableFrom(typeof(Tick)))
             {
-                Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported data type: {dataType}");
+                if (!_unsupportedDataTypeMessageLogged)
+                {
+                    Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported data type: {dataType}");
+                    _unsupportedDataTypeMessageLogged = true;
+                }
                 return false;
             }
 
-            if (resolution < Resolution.Second)
+            if (resolution < Resolution.Second && !_potentialUnsupportedResolutionMessageLogged)
             {
                 Log.Trace("PolygonDataQueueHandler.IsSupported(): " +
                     $"Subscription for {securityType}-{dataType}-{tickType}-{resolution} will be attempted. " +
                     $"An Advanced Polygon.io subscription plan is required to stream tick data.");
+                _potentialUnsupportedResolutionMessageLogged = true;
             }
 
-            if (tickType == TickType.Quote)
+            if (tickType == TickType.Quote && !_potentialUnsupportedTickTypeMessageLogged)
             {
                 Log.Trace("PolygonDataQueueHandler.IsSupported(): " +
                     $"Subscription for {securityType}-{dataType}-{tickType}-{resolution} will be attempted. " +
                     $"An Advanced Polygon.io subscription plan is required to stream quote data.");
+                _potentialUnsupportedTickTypeMessageLogged = true;
             }
 
             return true;

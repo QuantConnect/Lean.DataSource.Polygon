@@ -94,6 +94,19 @@ namespace QuantConnect.Polygon
         }
 
         /// <summary>
+        /// Increment number of subscribers for current <see cref="TickType"/>
+        /// </summary>
+        /// <param name="config">defines the subscription configuration data.</param>
+        public new void Subscribe(SubscriptionDataConfig config)
+        {
+            // We only store the subscription data config here to make it available
+            // for the Subscribe(IEnumerable<Symbol> symbols, TickType tickType) method
+            _subscriptionsDataConfigs.Add(config);
+            base.Subscribe(config);
+            _subscriptionsDataConfigs.Remove(config);
+        }
+
+        /// <summary>
         /// Subscribes to the symbols
         /// </summary>
         /// <param name="symbols">Symbols to subscribe</param>
@@ -143,23 +156,6 @@ namespace QuantConnect.Polygon
             }
 
             return true;
-        }
-
-        /// <summary>
-        /// Adds a new subscription data config which will be used by the Subscribe method
-        /// </summary>
-        /// <param name="config"></param>
-        internal void AddSubscriptionDataConfig(SubscriptionDataConfig config)
-        {
-            _subscriptionsDataConfigs.Add(config);
-        }
-
-        /// <summary>
-        /// Removes a subscription data config after Subscription happens
-        /// </summary>
-        internal void RemoveSubscriptionDataConfig(SubscriptionDataConfig config)
-        {
-            _subscriptionsDataConfigs.Remove(config);
         }
 
         /// <summary>
