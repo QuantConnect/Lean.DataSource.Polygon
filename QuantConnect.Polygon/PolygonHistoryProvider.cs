@@ -97,77 +97,56 @@ namespace QuantConnect.Polygon
                 yield break;
             }
 
-            IDataConsolidator consolidator = null;
-            IEnumerable<BaseData> history;
-            var gettingAggregates = false;
-
-            try
+            // Use the trade aggregates API for resolutions above tick for fastest results
+            if (request.TickType == TickType.Trade && request.Resolution > Resolution.Tick)
             {
-                // Use the trade aggregates API for resolutions above tick for fastest results
-                if (request.TickType == TickType.Trade && request.Resolution > Resolution.Tick)
-                {
-                    history = GetAggregates(request);
-                    gettingAggregates = true;
-                }
-                else if (request.TickType == TickType.Trade)
-                {
-                    consolidator = request.Resolution != Resolution.Tick
-                        ? new TickConsolidator(request.Resolution.ToTimeSpan())
-                        : FilteredIdentityDataConsolidator.ForTickType(request.TickType);
-                    history = GetTrades(request);
-                }
-                else
-                {
-                    consolidator = request.Resolution != Resolution.Tick
-                        ? new TickQuoteBarConsolidator(request.Resolution.ToTimeSpan())
-                        : FilteredIdentityDataConsolidator.ForTickType(request.TickType);
-                    history = GetQuotes(request);
-                }
-            }
-            catch (PolygonForbiddenResourceException)
-            {
-                if (request.TickType == TickType.Quote)
-                {
-                    Log.Error("PolygonDataQueueHandler.GetHistory(): Quote data is not available for your Polygon subscription plan.");
-                    yield break;
-                }
-
-                history = GetAggregates(request);
-                gettingAggregates = true;
-            }
-
-            if (gettingAggregates)
-            {
-                foreach (var data in history)
+                foreach (var data in GetAggregates(request))
                 {
                     Interlocked.Increment(ref _dataPointCount);
                     yield return data;
                 }
+
+                yield break;
+            }
+
+            IDataConsolidator consolidator;
+            IEnumerable<BaseData> history;
+
+            if (request.TickType == TickType.Trade)
+            {
+                consolidator = request.Resolution != Resolution.Tick
+                    ? new TickConsolidator(request.Resolution.ToTimeSpan())
+                    : FilteredIdentityDataConsolidator.ForTickType(request.TickType);
+                history = GetTrades(request);
             }
             else
             {
-
-                BaseData? consolidatedData = null;
-                DataConsolidatedHandler onDataConsolidated = (s, e) =>
-                {
-                    consolidatedData = (BaseData)e;
-                };
-                consolidator.DataConsolidated += onDataConsolidated;
-
-                foreach (var data in history)
-                {
-                    consolidator.Update(data);
-                    if (consolidatedData != null)
-                    {
-                        Interlocked.Increment(ref _dataPointCount);
-                        yield return consolidatedData;
-                        consolidatedData = null;
-                    }
-                }
-
-                consolidator.DataConsolidated -= onDataConsolidated;
-                consolidator.DisposeSafely();
+                consolidator = request.Resolution != Resolution.Tick
+                    ? new TickQuoteBarConsolidator(request.Resolution.ToTimeSpan())
+                    : FilteredIdentityDataConsolidator.ForTickType(request.TickType);
+                history = GetQuotes(request);
             }
+
+            BaseData? consolidatedData = null;
+            DataConsolidatedHandler onDataConsolidated = (s, e) =>
+            {
+                consolidatedData = (BaseData)e;
+            };
+            consolidator.DataConsolidated += onDataConsolidated;
+
+            foreach (var data in history)
+            {
+                consolidator.Update(data);
+                if (consolidatedData != null)
+                {
+                    Interlocked.Increment(ref _dataPointCount);
+                    yield return consolidatedData;
+                    consolidatedData = null;
+                }
+            }
+
+            consolidator.DataConsolidated -= onDataConsolidated;
+            consolidator.DisposeSafely();
         }
 
         /// <summary>
@@ -279,23 +258,19 @@ namespace QuantConnect.Polygon
                     yield break;
                 }
 
-                if (response.StatusCode == HttpStatusCode.Forbidden)
-                {
-                    throw new PolygonForbiddenResourceException("Not authorized");
-                }
-
                 // If the data download was not successful, log the reason
                 var resultJson = JObject.Parse(response.Content);
                 if (resultJson["status"]?.ToString().ToUpperInvariant() != "OK")
                 {
-                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No data for {request.Resource}. Reason: {response}");
+                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No data for {request.Resource}. Reason: {response.Content}");
                     yield break;
                 }
 
                 var result = resultJson.ToObject<T>();
                 if (result == null)
                 {
-                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): Unable to parse response for {request.Resource}. Response: {response}");
+                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): Unable to parse response for {request.Resource}. " +
+                        $"Response: {response.Content}");
                     yield break;
                 }
 
