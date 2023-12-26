@@ -50,8 +50,7 @@ namespace QuantConnect.Polygon
             SecurityType.IndexOption
         });
 
-        private string _apiKey;
-        private PolygonSubscriptionPlan _subscriptionPlan;
+        private readonly string _apiKey;
 
         private readonly PolygonAggregationManager _dataAggregator;
 

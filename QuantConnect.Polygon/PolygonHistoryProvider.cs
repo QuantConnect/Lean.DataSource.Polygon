@@ -13,6 +13,7 @@
  * limitations under the License.
 */
 
+using System.Net;
 using Newtonsoft.Json.Linq;
 using NodaTime;
 using RestSharp;
@@ -96,27 +97,19 @@ namespace QuantConnect.Polygon
                 yield break;
             }
 
-            if (
-                // Basic and Starter plans only have access to aggregates
-                _subscriptionPlan < PolygonSubscriptionPlan.Developer ||
-                // For Developer and Advanced plans, if resolution is greater than tick, use the aggregates endpoint to make the requests faster
-                (request.TickType == TickType.Trade && request.Resolution > Resolution.Tick))
-            {
-                var history = GetAggregates(request);
-                foreach (var data in history)
-                {
-                    Interlocked.Increment(ref _dataPointCount);
-                    yield return data;
-                }
-            }
-            else
-            {
-                var config = request.ToSubscriptionDataConfig();
-                IDataConsolidator consolidator;
-                IEnumerable<BaseData> history;
+            IDataConsolidator consolidator = null;
+            IEnumerable<BaseData> history;
+            var gettingAggregates = false;
 
-                // For Developer plan, assume checks were have already been done and the tick type is Trade
-                if (_subscriptionPlan == PolygonSubscriptionPlan.Developer || request.TickType == TickType.Trade)
+            try
+            {
+                // Use the trade aggregates API for resolutions above tick for fastest results
+                if (request.TickType == TickType.Trade && request.Resolution > Resolution.Tick)
+                {
+                    history = GetAggregates(request);
+                    gettingAggregates = true;
+                }
+                else if (request.TickType == TickType.Trade)
                 {
                     consolidator = request.Resolution != Resolution.Tick
                         ? new TickConsolidator(request.Resolution.ToTimeSpan())
@@ -130,6 +123,29 @@ namespace QuantConnect.Polygon
                         : FilteredIdentityDataConsolidator.ForTickType(request.TickType);
                     history = GetQuotes(request);
                 }
+            }
+            catch (PolygonForbiddenResourceException)
+            {
+                if (request.TickType == TickType.Quote)
+                {
+                    Log.Error("PolygonDataQueueHandler.GetHistory(): Quote data is not available for your Polygon subscription plan.");
+                    yield break;
+                }
+
+                history = GetAggregates(request);
+                gettingAggregates = true;
+            }
+
+            if (gettingAggregates)
+            {
+                foreach (var data in history)
+                {
+                    Interlocked.Increment(ref _dataPointCount);
+                    yield return data;
+                }
+            }
+            else
+            {
 
                 BaseData? consolidatedData = null;
                 DataConsolidatedHandler onDataConsolidated = (s, e) =>
@@ -243,7 +259,7 @@ namespace QuantConnect.Polygon
         {
             while (request != null)
             {
-                Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): Downloading {request}");
+                Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): Downloading {request.Resource}");
 
                 if (RestApiRateLimiter != null)
                 {
@@ -259,22 +275,27 @@ namespace QuantConnect.Polygon
                 var response = _restClient.Execute(request);
                 if (response == null)
                 {
-                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No response for {request}");
+                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No response for {request.Resource}");
                     yield break;
+                }
+
+                if (response.StatusCode == HttpStatusCode.Forbidden)
+                {
+                    throw new PolygonForbiddenResourceException("Not authorized");
                 }
 
                 // If the data download was not successful, log the reason
                 var resultJson = JObject.Parse(response.Content);
                 if (resultJson["status"]?.ToString().ToUpperInvariant() != "OK")
                 {
-                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No data for {request}. Reason: {response}");
+                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No data for {request.Resource}. Reason: {response}");
                     yield break;
                 }
 
                 var result = resultJson.ToObject<T>();
                 if (result == null)
                 {
-                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): Unable to parse response for {request}. Response: {response}");
+                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): Unable to parse response for {request.Resource}. Response: {response}");
                     yield break;
                 }
 

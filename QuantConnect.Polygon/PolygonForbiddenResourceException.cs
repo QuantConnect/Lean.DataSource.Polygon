@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -11,38 +11,32 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
 namespace QuantConnect.Polygon
 {
     /// <summary>
-    /// Polygon Subscription Plan
+    /// Defines an exception generated recieving a forbidden response from Polygon
     /// </summary>
-    /// <remarks>Values most always be sorted in ascending order from most basic (cheaper) to most advanced (most expensive) plan</remarks>
-    public enum PolygonSubscriptionPlan
+    public class PolygonForbiddenResourceException : Exception
     {
         /// <summary>
-        /// Basic plan.
-        /// This has access to aggregated bar historic data, but not streaming data.
+        /// Initializes a new instance of the <see cref="PolygonForbiddenResourceException"/> class
         /// </summary>
-        Basic,
+        /// <param name="message">The error message</param>
+        public PolygonForbiddenResourceException(string message)
+            : base(message)
+        {
+        }
 
         /// <summary>
-        /// Starter plan.
-        /// This has access to streaming aggregated bar data, but not tick data.
+        /// Initializes a new instance of the <see cref="PolygonForbiddenResourceException"/> class
         /// </summary>
-        Starter,
-
-        /// <summary>
-        /// Developer plan.
-        /// This has access to streaming tick trade data, but not quotes.
-        /// </summary>
-        Developer,
-
-        /// <summary>
-        /// Advanced plan.
-        /// This has access to streaming tick trade and quote data.
-        /// </summary>
-        Advanced
+        /// <param name="message">The error message</param>
+        /// <param name="inner">The inner exception being wrapped</param>
+        public PolygonForbiddenResourceException(string message, Exception inner)
+            : base(message, inner)
+        {
+        }
     }
 }
