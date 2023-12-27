@@ -94,9 +94,9 @@ namespace QuantConnect.Polygon
         }
 
         /// <summary>
-        /// Increment number of subscribers for current <see cref="TickType"/>
+        /// Subscribes the specified configuration to the data feed
         /// </summary>
-        /// <param name="config">defines the subscription configuration data.</param>
+        /// <param name="config">The subscription data configuration to subscribe</param>
         public new void Subscribe(SubscriptionDataConfig config)
         {
             // We only store the subscription data config here to make it available

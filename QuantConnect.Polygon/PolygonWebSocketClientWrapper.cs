@@ -237,6 +237,7 @@ namespace QuantConnect.Polygon
         /// </summary>
         private IEnumerable<string> GetSubscriptionPefixes(SecurityType securityType ,TickType tickType, Resolution resolution = Resolution.Minute)
         {
+            // If we already know the prefix, return it and don't try any others
             if (_prefixes.TryGetValue((securityType, tickType), out var prefix))
             {
                 yield return prefix;
@@ -246,6 +247,7 @@ namespace QuantConnect.Polygon
             if (tickType == TickType.Trade)
             {
                 yield return "T";
+                // Only use aggregates if resolution is not tick
                 if (resolution > Resolution.Tick)
                 {
                     yield return "A";
