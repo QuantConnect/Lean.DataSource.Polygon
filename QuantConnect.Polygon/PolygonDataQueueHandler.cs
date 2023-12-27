@@ -62,6 +62,17 @@ namespace QuantConnect.Polygon
         private readonly Dictionary<Symbol, DateTimeZone> _symbolExchangeTimeZones = new();
 
         private IOptionChainProvider _optionChainProvider;
+        private IOptionChainProvider OptionChainProvider
+        {
+            get
+            {
+                if (_optionChainProvider == null)
+                {
+                    _optionChainProvider = Composer.Instance.GetPart<IOptionChainProvider>();
+                }
+                return _optionChainProvider;
+            }
+        }
 
         private bool _disposed;
 
@@ -113,7 +124,6 @@ namespace QuantConnect.Polygon
             _apiKey = apiKey;
             _dataAggregator = new PolygonAggregationManager();
             _restClient = new RestClient(RestApiBaseUrl);
-            _optionChainProvider = Composer.Instance.GetPart<IOptionChainProvider>();
 
             ValidateSubscription();
 
@@ -192,7 +202,7 @@ namespace QuantConnect.Polygon
         /// <returns>Future/Option chain associated with the Symbol provided</returns>
         public IEnumerable<Symbol> LookupSymbols(Symbol symbol, bool includeExpired, string securityCurrency = null)
         {
-            if (_optionChainProvider == null)
+            if (OptionChainProvider == null)
             {
                 return Enumerable.Empty<Symbol>();
             }
@@ -204,7 +214,7 @@ namespace QuantConnect.Polygon
 
             Log.Trace($"PolygonDataQueueHandler.LookupSymbols(): Requesting symbol list for {symbol}");
 
-            var symbols = _optionChainProvider.GetOptionContractList(symbol, TimeProvider.GetUtcNow().Date).ToList();
+            var symbols = OptionChainProvider.GetOptionContractList(symbol, TimeProvider.GetUtcNow().Date).ToList();
 
             // Try to remove options contracts that have expired
             if (!includeExpired)
