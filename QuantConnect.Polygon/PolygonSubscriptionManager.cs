@@ -34,6 +34,13 @@ namespace QuantConnect.Polygon
         private List<PolygonWebSocketClientWrapper> _webSockets;
         private object _lock = new();
 
+        private List<SubscriptionDataConfig> _subscriptionsDataConfigs = new();
+
+        /// <summary>
+        /// Indicates whether data is being streamed using aggregates or ticks
+        /// </summary>
+        internal bool UsingAggregates { get; private set; }
+
         /// <summary>
         /// Whether or not there is at least one open socket
         /// </summary>
@@ -66,7 +73,7 @@ namespace QuantConnect.Polygon
         /// Initializes a new instance of the <see cref="PolygonSubscriptionManager"/> class
         /// </summary>
         /// <param name="securityTypes">The supported security types</param>
-        /// <param name="subscriptionPlan">Polygon subscription plan</param>
+        /// <param name="maxSubscriptionsPerWebSocket">Maximum number of subscriptions allowed per websocket</param>
         /// <param name="websSocketFactory">Function to create websockets</param>
         public PolygonSubscriptionManager(
             IEnumerable<SecurityType> securityTypes,
@@ -87,6 +94,19 @@ namespace QuantConnect.Polygon
         }
 
         /// <summary>
+        /// Subscribes the specified configuration to the data feed
+        /// </summary>
+        /// <param name="config">The subscription data configuration to subscribe</param>
+        public new void Subscribe(SubscriptionDataConfig config)
+        {
+            // We only store the subscription data config here to make it available
+            // for the Subscribe(IEnumerable<Symbol> symbols, TickType tickType) method
+            _subscriptionsDataConfigs.Add(config);
+            base.Subscribe(config);
+            _subscriptionsDataConfigs.Remove(config);
+        }
+
+        /// <summary>
         /// Subscribes to the symbols
         /// </summary>
         /// <param name="symbols">Symbols to subscribe</param>
@@ -104,13 +124,14 @@ namespace QuantConnect.Polygon
                         $"[MaxSymbolsPerWebSocket={_maxSubscriptionsPerWebSocket}");
                 }
 
-                if (!webSocket.IsOpen && !ConnectWebSocket(webSocket))
+                if (!webSocket.IsOpen)
                 {
-                    // Could not connect or authenticate
-                    return false;
+                    ConnectWebSocket(webSocket);
                 }
 
-                webSocket.Subscribe(symbol, tickType);
+                var config = _subscriptionsDataConfigs.Single(x => x.Symbol == symbol && x.TickType == tickType);
+                webSocket.Subscribe(config, out var usingAggregates);
+                UsingAggregates = usingAggregates;
             }
 
             return true;
@@ -146,17 +167,31 @@ namespace QuantConnect.Polygon
             return _webSockets.FirstOrDefault(x => x.SupportedSecurityTypes.Contains(securityType));
         }
 
-        private bool ConnectWebSocket(PolygonWebSocketClientWrapper webSocket)
+        private void ConnectWebSocket(PolygonWebSocketClientWrapper webSocket)
         {
             using var authenticatedEvent = new AutoResetEvent(false);
+            using var failedAuthenticationEvent = new AutoResetEvent(false);
+
             EventHandler<WebSocketMessage> callback = (sender, e) =>
             {
                 var data = (TextMessage)e.Data;
-                // Find the authentication message
-                var authenticationMessage = JArray.Parse(data.Message)
-                    .FirstOrDefault(message => message["ev"].ToString() == "status" && message["status"].ToString() == "auth_success");
-                if (authenticationMessage != null)
+                var jsonMessage = JArray.Parse(data.Message)[0];
+                var eventType = jsonMessage["ev"].ToString();
+                if (eventType != "status")
                 {
+                    return;
+                }
+
+                var status = jsonMessage["status"]?.ToString() ?? string.Empty;
+                var message = jsonMessage["message"]?.ToString() ?? string.Empty;
+                if (status.Contains("auth_failed", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    Log.Trace($"PolygonSubscriptionManager.ConnectWebSocket(): Failed authentication: {message}.");
+                    failedAuthenticationEvent.Set();
+                }
+                else if (status.Contains("auth_success", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    Log.Trace($"PolygonSubscriptionManager.ConnectWebSocket(): successful authentication.");
                     authenticatedEvent.Set();
                 }
             };
@@ -164,10 +199,20 @@ namespace QuantConnect.Polygon
             webSocket.Message += callback;
             webSocket.Connect();
 
-            var result = authenticatedEvent.WaitOne(TimeSpan.FromSeconds(60));
+            var result = WaitHandle.WaitAny(new [] { failedAuthenticationEvent, authenticatedEvent  }, TimeSpan.FromSeconds(60));
             webSocket.Message -= callback;
 
-            return result;
+            if (result == WaitHandle.WaitTimeout)
+            {
+                throw new TimeoutException("Timeout waiting for websocket to connect.");
+            }
+
+            if (result == 0)
+            {
+                throw new PolygonAuthenticationException("Failed to authenticate websocket. Make sure your API key is valid and has the right permissions.");
+            }
+
+            Log.Trace($"PolygonSubscriptionManager.ConnectWebSocket(): Successfully connected websocket.");
         }
 
         /// <summary>

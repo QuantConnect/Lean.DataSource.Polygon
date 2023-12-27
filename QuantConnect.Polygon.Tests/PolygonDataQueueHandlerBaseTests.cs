@@ -38,21 +38,15 @@ namespace QuantConnect.Tests.Polygon
         //  - Starter: Only resolutions >= second and trade data will be streamed, using aggregated second bars
         //  - Developer: All resolutions and trade data only will be streamed, using trade ticks
         //  - Advanced: All resolutions and both trade and quote data will be streamed, using trade and quote ticks
-        [TestCase(PolygonSubscriptionPlan.Starter)]
-        [TestCase(PolygonSubscriptionPlan.Developer)]
-        [TestCase(PolygonSubscriptionPlan.Advanced)]
+        [Test]
         [Explicit("Tests are dependent on network and take long. " +
             "Also, this test will only pass if the subscribed securities are liquid enough to get data in the test run time.")]
-        public void CanSubscribeAndUnsubscribe(PolygonSubscriptionPlan subscriptionPlan)
+        public void CanSubscribeAndUnsubscribe()
         {
-            using var polygon = new PolygonDataQueueHandler(ApiKey, subscriptionPlan);
+            using var polygon = new PolygonDataQueueHandler(ApiKey);
             var unsubscribed = false;
 
             var configs = GetConfigs(Resolution.Second);
-            if (subscriptionPlan < PolygonSubscriptionPlan.Advanced)
-            {
-                configs = configs.Where(config => config.TickType == TickType.Trade).ToList();
-            }
             Assert.That(configs, Is.Not.Empty);
 
             var dataFromEnumerator = new List<TradeBar>();
@@ -136,7 +130,7 @@ namespace QuantConnect.Tests.Polygon
             "Also, this test will only pass if the subscribed securities are liquid enough to get data in the test run time.")]
         public void StreamsDataForDifferentResolutions(Resolution resolution, int period)
         {
-            using var polygon = new PolygonDataQueueHandler(ApiKey, PolygonSubscriptionPlan.Advanced);
+            using var polygon = new PolygonDataQueueHandler(ApiKey);
 
             var configs = GetConfigs(resolution);
             var receivedData = new List<BaseData>();

@@ -22,8 +22,8 @@ namespace QuantConnect.Tests.Polygon
     {
         public PolygonSubscriptionManager SubscriptionManager => _subscriptionManager;
 
-        public TestablePolygonDataQueueHandler(string apiKey, PolygonSubscriptionPlan subscriptionPlan, int maxSubscriptionsPerWebSocket)
-            : base(apiKey, subscriptionPlan, maxSubscriptionsPerWebSocket)
+        public TestablePolygonDataQueueHandler(string apiKey, int maxSubscriptionsPerWebSocket)
+            : base(apiKey, maxSubscriptionsPerWebSocket)
         {
         }
     }

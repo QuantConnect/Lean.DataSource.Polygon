@@ -13,6 +13,7 @@
  * limitations under the License.
 */
 
+using System.Net;
 using Newtonsoft.Json.Linq;
 using NodaTime;
 using RestSharp;
@@ -96,62 +97,56 @@ namespace QuantConnect.Polygon
                 yield break;
             }
 
-            if (
-                // Basic and Starter plans only have access to aggregates
-                _subscriptionPlan < PolygonSubscriptionPlan.Developer ||
-                // For Developer and Advanced plans, if resolution is greater than tick, use the aggregates endpoint to make the requests faster
-                (request.TickType == TickType.Trade && request.Resolution > Resolution.Tick))
+            // Use the trade aggregates API for resolutions above tick for fastest results
+            if (request.TickType == TickType.Trade && request.Resolution > Resolution.Tick)
             {
-                var history = GetAggregates(request);
-                foreach (var data in history)
+                foreach (var data in GetAggregates(request))
                 {
                     Interlocked.Increment(ref _dataPointCount);
                     yield return data;
                 }
+
+                yield break;
+            }
+
+            IDataConsolidator consolidator;
+            IEnumerable<BaseData> history;
+
+            if (request.TickType == TickType.Trade)
+            {
+                consolidator = request.Resolution != Resolution.Tick
+                    ? new TickConsolidator(request.Resolution.ToTimeSpan())
+                    : FilteredIdentityDataConsolidator.ForTickType(request.TickType);
+                history = GetTrades(request);
             }
             else
             {
-                var config = request.ToSubscriptionDataConfig();
-                IDataConsolidator consolidator;
-                IEnumerable<BaseData> history;
-
-                // For Developer plan, assume checks were have already been done and the tick type is Trade
-                if (_subscriptionPlan == PolygonSubscriptionPlan.Developer || request.TickType == TickType.Trade)
-                {
-                    consolidator = request.Resolution != Resolution.Tick
-                        ? new TickConsolidator(request.Resolution.ToTimeSpan())
-                        : FilteredIdentityDataConsolidator.ForTickType(request.TickType);
-                    history = GetTrades(request);
-                }
-                else
-                {
-                    consolidator = request.Resolution != Resolution.Tick
-                        ? new TickQuoteBarConsolidator(request.Resolution.ToTimeSpan())
-                        : FilteredIdentityDataConsolidator.ForTickType(request.TickType);
-                    history = GetQuotes(request);
-                }
-
-                BaseData? consolidatedData = null;
-                DataConsolidatedHandler onDataConsolidated = (s, e) =>
-                {
-                    consolidatedData = (BaseData)e;
-                };
-                consolidator.DataConsolidated += onDataConsolidated;
-
-                foreach (var data in history)
-                {
-                    consolidator.Update(data);
-                    if (consolidatedData != null)
-                    {
-                        Interlocked.Increment(ref _dataPointCount);
-                        yield return consolidatedData;
-                        consolidatedData = null;
-                    }
-                }
-
-                consolidator.DataConsolidated -= onDataConsolidated;
-                consolidator.DisposeSafely();
+                consolidator = request.Resolution != Resolution.Tick
+                    ? new TickQuoteBarConsolidator(request.Resolution.ToTimeSpan())
+                    : FilteredIdentityDataConsolidator.ForTickType(request.TickType);
+                history = GetQuotes(request);
             }
+
+            BaseData? consolidatedData = null;
+            DataConsolidatedHandler onDataConsolidated = (s, e) =>
+            {
+                consolidatedData = (BaseData)e;
+            };
+            consolidator.DataConsolidated += onDataConsolidated;
+
+            foreach (var data in history)
+            {
+                consolidator.Update(data);
+                if (consolidatedData != null)
+                {
+                    Interlocked.Increment(ref _dataPointCount);
+                    yield return consolidatedData;
+                    consolidatedData = null;
+                }
+            }
+
+            consolidator.DataConsolidated -= onDataConsolidated;
+            consolidator.DisposeSafely();
         }
 
         /// <summary>
@@ -243,7 +238,7 @@ namespace QuantConnect.Polygon
         {
             while (request != null)
             {
-                Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): Downloading {request}");
+                Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): Downloading {request.Resource}");
 
                 if (RestApiRateLimiter != null)
                 {
@@ -259,7 +254,7 @@ namespace QuantConnect.Polygon
                 var response = _restClient.Execute(request);
                 if (response == null)
                 {
-                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No response for {request}");
+                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No response for {request.Resource}");
                     yield break;
                 }
 
@@ -267,14 +262,15 @@ namespace QuantConnect.Polygon
                 var resultJson = JObject.Parse(response.Content);
                 if (resultJson["status"]?.ToString().ToUpperInvariant() != "OK")
                 {
-                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No data for {request}. Reason: {response}");
+                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No data for {request.Resource}. Reason: {response.Content}");
                     yield break;
                 }
 
                 var result = resultJson.ToObject<T>();
                 if (result == null)
                 {
-                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): Unable to parse response for {request}. Response: {response}");
+                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): Unable to parse response for {request.Resource}. " +
+                        $"Response: {response.Content}");
                     yield break;
                 }
 
