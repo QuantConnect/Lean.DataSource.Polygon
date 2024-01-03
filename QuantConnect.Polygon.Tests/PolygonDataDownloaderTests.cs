@@ -55,5 +55,20 @@ namespace QuantConnect.Tests.Polygon
 
             PolygonHistoryTests.AssertHistoricalDataResults(data, resolution);
         }
+
+        [Test]
+        [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
+        public void DownloadsDataFromCanonicalOptionSymbol()
+        {
+            var parameters = new DataDownloaderGetParameters(Symbol.CreateCanonicalOption(Symbols.SPY), Resolution.Minute,
+                new DateTime(2024, 01, 02), new DateTime(2024, 01, 03), TickType.Quote);
+            var data = _downloader.Get(parameters).ToList();
+
+            Log.Trace("Data points retrieved: " + data.Count);
+
+            PolygonHistoryTests.AssertHistoricalDataResults(data, parameters.Resolution);
+
+            // Assert more! (e.g. check if the data is actually option data and has multiple options (the chain))
+        }
     }
 }
