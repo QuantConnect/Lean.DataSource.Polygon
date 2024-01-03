@@ -41,7 +41,7 @@ namespace QuantConnect.Polygon
     /// Polygon.io equities documentation: https://polygon.io/docs/stocks/getting-started
     /// Polygon.io options documentation: https://polygon.io/docs/options/getting-started
     /// </remarks>
-    public partial class PolygonDataQueueHandler : IDataQueueHandler, IDataQueueUniverseProvider
+    public partial class PolygonDataQueueHandler : IDataQueueHandler
     {
         private static readonly ReadOnlyCollection<SecurityType> _supportedSecurityTypes = Array.AsReadOnly(new[]
         {
@@ -60,19 +60,6 @@ namespace QuantConnect.Polygon
         private readonly PolygonSymbolMapper _symbolMapper = new();
         private readonly MarketHoursDatabase _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
         private readonly Dictionary<Symbol, DateTimeZone> _symbolExchangeTimeZones = new();
-
-        private IOptionChainProvider _optionChainProvider;
-        private IOptionChainProvider OptionChainProvider
-        {
-            get
-            {
-                if (_optionChainProvider == null)
-                {
-                    _optionChainProvider = Composer.Instance.GetPart<IOptionChainProvider>();
-                }
-                return _optionChainProvider;
-            }
-        }
 
         private bool _disposed;
 
@@ -195,68 +182,6 @@ namespace QuantConnect.Polygon
         {
             _subscriptionManager.Unsubscribe(dataConfig);
             _dataAggregator.Remove(dataConfig);
-        }
-
-        #endregion
-
-        #region IDataQueueUniverseProvider
-
-        /// <summary>
-        /// Method returns a collection of symbols that are available at the broker.
-        /// </summary>
-        /// <param name="symbol">Symbol to search option chain for</param>
-        /// <param name="includeExpired">Include expired contracts</param>
-        /// <param name="securityCurrency">Expected security currency(if any)</param>
-        /// <returns>Future/Option chain associated with the Symbol provided</returns>
-        public IEnumerable<Symbol> LookupSymbols(Symbol symbol, bool includeExpired, string securityCurrency = null)
-        {
-            if (OptionChainProvider == null)
-            {
-                return Enumerable.Empty<Symbol>();
-            }
-
-            if (!IsSecurityTypeSupported(symbol.SecurityType))
-            {
-                throw new ArgumentException($"Unsupported security type {symbol.SecurityType}");
-            }
-
-            Log.Trace($"PolygonDataQueueHandler.LookupSymbols(): Requesting symbol list for {symbol}");
-
-            var symbols = OptionChainProvider.GetOptionContractList(symbol, TimeProvider.GetUtcNow().Date).ToList();
-
-            // Try to remove options contracts that have expired
-            if (!includeExpired)
-            {
-                var removedSymbols = new List<Symbol>();
-                symbols.RemoveAll(x =>
-                {
-                    var expired = x.ID.Date < GetTickTime(x, TimeProvider.GetUtcNow()).Date;
-                    if (expired)
-                    {
-                        removedSymbols.Add(x);
-                    }
-                    return expired;
-                });
-
-                if (removedSymbols.Count > 0)
-                {
-                    Log.Trace($@"PolygonDataQueueHandler.LookupSymbols(): Removed contract(s) for having expiry in the past: {
-                        string.Join(",", removedSymbols.Select(x => x.Value))}");
-                }
-            }
-
-            Log.Trace($"PolygonDataQueueHandler.LookupSymbols(): Returning {symbols.Count} contract(s) for {symbol}");
-
-            return symbols;
-        }
-
-        /// <summary>
-        /// Returns whether selection can take place or not.
-        /// </summary>
-        /// <returns>True if selection can take place</returns>
-        public bool CanPerformSelection()
-        {
-            return IsConnected;
         }
 
         #endregion
