@@ -82,7 +82,15 @@ namespace QuantConnect.Polygon
         private bool _potentialUnsupportedResolutionMessageLogged;
         private bool _potentialUnsupportedTickTypeMessageLogged;
 
-        protected virtual ITimeProvider TimeProvider => RealTimeProvider.Instance;
+        /// <summary>
+        /// The time provider instance. Used for improved testability
+        /// </summary>
+        protected virtual ITimeProvider TimeProvider { get; } = RealTimeProvider.Instance;
+
+        /// <summary>
+        /// The rest client instance
+        /// </summary>
+        protected virtual PolygonRestApiClient RestApiClient { get; set; }
 
         /// <summary>
         /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
@@ -123,7 +131,7 @@ namespace QuantConnect.Polygon
 
             _apiKey = apiKey;
             _dataAggregator = new PolygonAggregationManager();
-            _restClient = new RestClient(RestApiBaseUrl);
+            RestApiClient = new PolygonRestApiClient(_apiKey);
 
             ValidateSubscription();
 
@@ -261,7 +269,7 @@ namespace QuantConnect.Polygon
             {
                 _subscriptionManager?.DisposeSafely();
                 _dataAggregator.DisposeSafely();
-                RestApiRateLimiter.DisposeSafely();
+                RestApiClient.DisposeSafely();
 
                 _disposed = true;
             }
@@ -400,7 +408,7 @@ namespace QuantConnect.Polygon
             // This url is not paginated, so we expect a single response
             const string uri = "v3/reference/exchanges";
             var request = new RestRequest(uri, Method.GET);
-            var response = DownloadAndParseData<ExchangesResponse>(request).SingleOrDefault();
+            var response = RestApiClient.DownloadAndParseData<ExchangesResponse>(request).SingleOrDefault();
             if (response == null)
             {
                 throw new Exception($"Failed to download exchange mappings from {uri}. Make sure your API key is valid.");

@@ -182,7 +182,7 @@ namespace QuantConnect.Tests.Polygon
             var history = historyProvider.GetHistory(request).ToList();
 
             Assert.That(history, Is.Empty);
-            Assert.That(historyProvider.ApiCallsCount, Is.EqualTo(0));
+            Assert.That(historyProvider.TestRestApiClient.ApiCallsCount, Is.EqualTo(0));
         }
 
         [TestCase(5)]
@@ -252,22 +252,21 @@ namespace QuantConnect.Tests.Polygon
                 tickType);
         }
 
-        private class TestPolygonHistoryProvider : PolygonDataQueueHandler
+        private class TestPolygonRestApiClient : PolygonRestApiClient
         {
-            public HistoryRequest CurrentHistoryRequest { get; private set; }
-
             public int ResponseLimit { get; set; }
 
             public int ApiCallsCount { get; private set; }
 
-            public TestPolygonHistoryProvider() : base("test-api-key", streamingEnabled: false) { }
+            public TestPolygonRestApiClient() : base(string.Empty) { }
 
-            protected override List<ExchangeMapping> FetchExchangeMappings()
+            public void SetRateLimiter(RateGate rateGate)
             {
-                return new List<ExchangeMapping>();
+                RateLimiter?.DisposeSafely();
+                RateLimiter = rateGate;
             }
 
-            protected override IEnumerable<T> DownloadAndParseData<T>(RestRequest restRequest)
+            public override IEnumerable<T> DownloadAndParseData<T>(RestRequest request)
             {
                 return new List<T>
                 {
@@ -275,7 +274,7 @@ namespace QuantConnect.Tests.Polygon
                 };
             }
 
-            public string DownloadData()
+            private string DownloadData()
             {
                 ApiCallsCount++;
                 var start = new DateTime(2023, 12, 15, 9, 30, 0);
@@ -294,12 +293,30 @@ namespace QuantConnect.Tests.Polygon
             }
         }
 
+        private class TestPolygonHistoryProvider : PolygonDataQueueHandler
+        {
+            public TestPolygonRestApiClient TestRestApiClient => RestApiClient as TestPolygonRestApiClient;
+
+            public TestPolygonHistoryProvider()
+                : base("test-api-key", streamingEnabled: false)
+            {
+                RestApiClient.DisposeSafely();
+                RestApiClient = new TestPolygonRestApiClient();
+            }
+
+            protected override List<ExchangeMapping> FetchExchangeMappings()
+            {
+                return new List<ExchangeMapping>();
+            }
+        }
+
         private class ConfigurableRateLimitedPolygonHistoryProvider : PolygonDataQueueHandler
         {
             public ConfigurableRateLimitedPolygonHistoryProvider(string apiKey, RateGate rateGate)
                 : base(apiKey, streamingEnabled: false)
             {
-                RestApiRateLimiter = rateGate;
+                RestApiClient.RateLimiter.DisposeSafely();
+                RestApiClient.RateLimiter = rateGate;
             }
         }
     }

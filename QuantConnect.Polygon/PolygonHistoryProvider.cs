@@ -13,8 +13,6 @@
  * limitations under the License.
 */
 
-using System.Net;
-using Newtonsoft.Json.Linq;
 using NodaTime;
 using RestSharp;
 using QuantConnect.Data;
@@ -22,7 +20,6 @@ using QuantConnect.Data.Market;
 using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.HistoricalData;
 using QuantConnect.Logging;
-using QuantConnect.Configuration;
 using QuantConnect.Util;
 using QuantConnect.Data.Consolidators;
 
@@ -30,14 +27,6 @@ namespace QuantConnect.Polygon
 {
     public partial class PolygonDataQueueHandler : SynchronizingHistoryProvider
     {
-        private static string RestApiBaseUrl = Config.Get("polygon-api-url", "https://api.polygon.io");
-
-        private readonly int ApiResponseLimit = Config.GetInt("polygon-aggregate-response-limit", 5000);
-
-        private readonly RestClient _restClient;
-
-        protected RateGate RestApiRateLimiter { get; set; } = new(300, TimeSpan.FromSeconds(1));
-
         private int _dataPointCount;
 
         /// <summary>
@@ -84,7 +73,8 @@ namespace QuantConnect.Polygon
                 throw new PolygonAuthenticationException("History calls for Polygon.io require an API key.");
             }
 
-            if (!IsSupported(request.Symbol.SecurityType, request.DataType, request.TickType, request.Resolution))
+            if (request.Symbol.IsCanonical() ||
+                !IsSupported(request.Symbol.SecurityType, request.DataType, request.TickType, request.Resolution))
             {
                 yield break;
             }
@@ -161,12 +151,11 @@ namespace QuantConnect.Polygon
             var end = Time.DateTimeToUnixTimeStampMilliseconds(request.EndTimeUtc.RoundDown(resolutionTimeSpan));
             var historyTimespan = GetHistoryTimespan(request.Resolution);
 
-            var uri = $"{RestApiBaseUrl}/v2/aggs/ticker/{ticker}/range/1/{historyTimespan}/{start}/{end}";
+            var uri = $"v2/aggs/ticker/{ticker}/range/1/{historyTimespan}/{start}/{end}";
             var restRequest = new RestRequest(uri, Method.GET);
-            restRequest.AddQueryParameter("limit", ApiResponseLimit.ToString());
             restRequest.AddQueryParameter("adjusted", (request.DataNormalizationMode != DataNormalizationMode.Raw).ToString());
 
-            foreach (var bar in DownloadAndParseData<AggregatesResponse>(restRequest).SelectMany(response => response.Results))
+            foreach (var bar in RestApiClient.DownloadAndParseData<AggregatesResponse>(restRequest).SelectMany(response => response.Results))
             {
                 var utcTime = Time.UnixMillisecondTimeStampToDateTime(bar.Timestamp);
                 var time = GetTickTime(request.Symbol, utcTime);
@@ -219,64 +208,13 @@ namespace QuantConnect.Polygon
             restRequest.AddQueryParameter("timestamp.gte", start.ToString());
             restRequest.AddQueryParameter("timestamp.lt", end.ToString());
             restRequest.AddQueryParameter("order", "asc");
-            restRequest.AddQueryParameter("limit", ApiResponseLimit.ToString());
 
-            foreach (var tick in DownloadAndParseData<TResponse>(restRequest).SelectMany(response => response.Results))
+            foreach (var tick in RestApiClient.DownloadAndParseData<TResponse>(restRequest).SelectMany(response => response.Results))
             {
                 var utcTime = Time.UnixNanosecondTimeStampToDateTime(tick.Timestamp);
                 var time = GetTickTime(request.Symbol, utcTime);
 
                 yield return tickFactory(time, request.Symbol, tick);
-            }
-        }
-
-        /// <summary>
-        /// Downloads data and tries to parse the JSON response data into the specified type
-        /// </summary>
-        protected virtual IEnumerable<T> DownloadAndParseData<T>(RestRequest? request)
-            where T : BaseResponse
-        {
-            while (request != null)
-            {
-                Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): Downloading {request.Resource}");
-
-                if (RestApiRateLimiter != null)
-                {
-                    if (RestApiRateLimiter.IsRateLimited)
-                    {
-                        Log.Trace("PolygonDataQueueHandler.DownloadAndParseData(): Rest API calls are limited; waiting to proceed.");
-                    }
-                    RestApiRateLimiter.WaitToProceed();
-                }
-
-                request.AddHeader("Authorization", $"Bearer {_apiKey}");
-
-                var response = _restClient.Execute(request);
-                if (response == null)
-                {
-                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No response for {request.Resource}");
-                    yield break;
-                }
-
-                // If the data download was not successful, log the reason
-                var resultJson = JObject.Parse(response.Content);
-                if (resultJson["status"]?.ToString().ToUpperInvariant() != "OK")
-                {
-                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): No data for {request.Resource}. Reason: {response.Content}");
-                    yield break;
-                }
-
-                var result = resultJson.ToObject<T>();
-                if (result == null)
-                {
-                    Log.Debug($"PolygonDataQueueHandler.DownloadAndParseData(): Unable to parse response for {request.Resource}. " +
-                        $"Response: {response.Content}");
-                    yield break;
-                }
-
-                yield return result;
-
-                request = result.NextUrl != null ? new RestRequest(result.NextUrl, Method.GET) : null;
             }
         }
 
