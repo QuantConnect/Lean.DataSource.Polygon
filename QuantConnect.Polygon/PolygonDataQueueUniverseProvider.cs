@@ -24,21 +24,6 @@ namespace QuantConnect.Polygon
         private IOptionChainProvider _optionChainProvider;
 
         /// <summary>
-        /// Gets the <see cref="IOptionChainProvider"/> instance used to get the option chain for a given symbol
-        /// </summary>
-        private IOptionChainProvider OptionChainProvider
-        {
-            get
-            {
-                if (_optionChainProvider == null)
-                {
-                    _optionChainProvider = Composer.Instance.GetPart<IOptionChainProvider>();
-                }
-                return _optionChainProvider;
-            }
-        }
-
-        /// <summary>
         /// Method returns a collection of symbols that are available at the broker.
         /// </summary>
         /// <param name="symbol">Symbol to search option chain for</param>
@@ -47,19 +32,15 @@ namespace QuantConnect.Polygon
         /// <returns>Future/Option chain associated with the Symbol provided</returns>
         public IEnumerable<Symbol> LookupSymbols(Symbol symbol, bool includeExpired, string securityCurrency = null)
         {
-            if (OptionChainProvider == null)
-            {
-                return Enumerable.Empty<Symbol>();
-            }
-
-            if (!IsSecurityTypeSupported(symbol.SecurityType))
+            if ((symbol.SecurityType.IsOption() && symbol.SecurityType == SecurityType.FutureOption) ||
+                (symbol.HasUnderlying && symbol.Underlying.SecurityType != SecurityType.Equity && symbol.Underlying.SecurityType != SecurityType.Index))
             {
                 throw new ArgumentException($"Unsupported security type {symbol.SecurityType}");
             }
 
             Log.Trace($"PolygonDataQueueHandler.LookupSymbols(): Requesting symbol list for {symbol}");
 
-            var symbols = OptionChainProvider.GetOptionContractList(symbol, TimeProvider.GetUtcNow().Date).ToList();
+            var symbols = _optionChainProvider.GetOptionContractList(symbol, TimeProvider.GetUtcNow().Date).ToList();
 
             // Try to remove options contracts that have expired
             if (!includeExpired)

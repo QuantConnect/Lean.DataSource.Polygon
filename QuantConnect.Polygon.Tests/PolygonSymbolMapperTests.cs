@@ -46,5 +46,15 @@ namespace QuantConnect.Tests.Polygon
             var convertedSymbol = mapper.GetLeanSymbol(polygonSymbol);
             Assert.That(convertedSymbol, Is.EqualTo(leanSymbol));
         }
+
+        [TestCase("SPY", SecurityType.Option, ExpectedResult = SecurityType.Equity)]
+        [TestCase("SPX", SecurityType.IndexOption, ExpectedResult = SecurityType.Index)]
+        public SecurityType ConvertsOptionSymbolWithCorrectUnderlyingSecurityType(string ticker, SecurityType optionType)
+        {
+            var mapper = new PolygonSymbolMapper();
+            var symbol = mapper.GetLeanSymbol(ticker, optionType, Market.USA, new DateTime(2024, 01, 03), 400m, OptionRight.Call);
+
+            return symbol.Underlying.SecurityType;
+        }
     }
 }

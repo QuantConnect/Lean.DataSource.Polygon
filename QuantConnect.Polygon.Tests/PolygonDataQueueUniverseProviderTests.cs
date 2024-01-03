@@ -22,7 +22,6 @@ using QuantConnect.Configuration;
 using System;
 using System.Linq;
 using QuantConnect.Lean.Engine.DataFeeds;
-using QuantConnect.Interfaces;
 using System.Collections.Generic;
 
 namespace QuantConnect.Tests.Polygon
@@ -36,9 +35,6 @@ namespace QuantConnect.Tests.Polygon
         [SetUp]
         public void SetUp()
         {
-            var optionChainProvider = new BacktestingOptionChainProvider(TestGlobals.DataCacheProvider, TestGlobals.MapFileProvider);
-            Composer.Instance.AddPart<IOptionChainProvider>(optionChainProvider);
-
             _polygon = new TestablePolygonDataQueueHandler(_apiKey);
         }
 
@@ -48,17 +44,31 @@ namespace QuantConnect.Tests.Polygon
             _polygon.DisposeSafely();
         }
 
-        [Test]
-        public void UsesOptionChainProviderFromComposer()
+        private static Symbol[] OptionChainTestCases =>
+            new[]
+            {
+                Symbol.Create("SPY", SecurityType.Equity, Market.USA),
+                Symbol.Create("SPX", SecurityType.Index, Market.USA),
+            }
+            .Select(underlying => new[] { underlying, Symbol.CreateCanonicalOption(underlying) })
+            .SelectMany(x => x)
+            .ToArray();
+
+        [TestCaseSource(nameof(OptionChainTestCases))]
+        public void GetsOptionChain(Symbol symbol)
         {
             var date = new DateTime(2014, 10, 7);
             _polygon.TimeProviderInstance.SetCurrentTimeUtc(date);
-            var optionChain = _polygon.LookupSymbols(Symbol.CreateCanonicalOption(Symbols.AAPL), true).ToList();
+            var optionChain = _polygon.LookupSymbols(symbol, true).ToList();
 
-            Assert.That(optionChain, Is.Not.Empty);
-            Assert.IsTrue(optionChain.All(x => x.SecurityType == SecurityType.Option));
-            Assert.IsTrue(optionChain.All(x => x.ID.Symbol == "AAPL"));
-            Assert.IsTrue(optionChain.All(x => x.Underlying == Symbols.AAPL));
+            Assert.That(optionChain, Is.Not.Null.And.Not.Empty);
+
+            var expectedOptionType = symbol.SecurityType;
+            if (!expectedOptionType.IsOption())
+            {
+                expectedOptionType = expectedOptionType == SecurityType.Equity ? SecurityType.Option : SecurityType.IndexOption;
+            }
+            Assert.IsTrue(optionChain.All(x => x.SecurityType == expectedOptionType));
             Assert.IsTrue(optionChain.All(x => x.ID.Date.Date >= date));
         }
 
