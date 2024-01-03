@@ -31,6 +31,7 @@ using QuantConnect.Packets;
 using QuantConnect.Securities;
 using QuantConnect.Util;
 using RestSharp;
+using QuantConnect.Lean.Engine.DataFeeds;
 
 namespace QuantConnect.Polygon
 {
@@ -119,6 +120,7 @@ namespace QuantConnect.Polygon
             _apiKey = apiKey;
             _dataAggregator = new PolygonAggregationManager();
             RestApiClient = new PolygonRestApiClient(_apiKey);
+            _optionChainProvider = new CachingOptionChainProvider(new PolygonOptionChainProvider(RestApiClient, _symbolMapper));
 
             ValidateSubscription();
 
