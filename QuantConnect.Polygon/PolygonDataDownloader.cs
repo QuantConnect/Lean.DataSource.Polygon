@@ -17,6 +17,7 @@ using QuantConnect.Configuration;
 using QuantConnect.Data;
 using QuantConnect.Securities;
 using QuantConnect.Util;
+using System.Collections.Concurrent;
 
 namespace QuantConnect.Polygon
 {
@@ -64,28 +65,52 @@ namespace QuantConnect.Polygon
 
             if (endUtc < startUtc)
             {
-                throw new ArgumentException("The end date must be greater or equal than the start date.");
+                yield break;
             }
 
             var dataType = LeanData.GetDataType(resolution, tickType);
             var exchangeHours = _marketHoursDatabase.GetExchangeHours(symbol.ID.Market, symbol, symbol.SecurityType);
             var dataTimeZone = _marketHoursDatabase.GetDataTimeZone(symbol.ID.Market, symbol, symbol.SecurityType);
 
-            var historyRequest =
-                new HistoryRequest(startUtc,
-                    endUtc,
-                    dataType,
-                    symbol,
-                    resolution,
-                    exchangeHours,
-                    dataTimeZone,
-                    resolution,
-                    true,
-                    false,
-                    DataNormalizationMode.Raw,
-                    tickType);
+            if (symbol.IsCanonical())
+            {
+                var symbols = new List<Symbol>();
+                foreach (var date in Time.EachDay(startUtc.Date, endUtc.Date))
+                {
+                    symbols.AddRange(_historyProvider.GetOptionChain(symbol, date));
+                }
 
-            return _historyProvider.GetHistory(historyRequest);
+                using var queue = new BlockingCollection<BaseData>();
+                var symbolsProcessedCount = 0;
+                Task.Run(() => Parallel.ForEach(symbols, targetSymbol =>
+                {
+                    var historyRequest = new HistoryRequest(startUtc, endUtc, dataType, symbol, resolution, exchangeHours, dataTimeZone, resolution,
+                        true, false, DataNormalizationMode.Raw, tickType);
+                    foreach (var data in _historyProvider.GetHistory(historyRequest))
+                    {
+                        queue.Add(data);
+                    }
+
+                    if (Interlocked.Increment(ref symbolsProcessedCount) == symbols.Count)
+                    {
+                        queue.CompleteAdding();
+                    }
+                }));
+
+                foreach (var data in queue.GetConsumingEnumerable())
+                {
+                    yield return data;
+                }
+            }
+            else
+            {
+                var historyRequest = new HistoryRequest(startUtc, endUtc, dataType, symbol, resolution, exchangeHours, dataTimeZone, resolution,
+                    true, false, DataNormalizationMode.Raw, tickType);
+                foreach (var data in _historyProvider.GetHistory(historyRequest))
+                {
+                    yield return data;
+                }
+            }
         }
 
         /// <summary>

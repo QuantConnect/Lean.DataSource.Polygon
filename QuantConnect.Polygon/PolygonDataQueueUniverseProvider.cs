@@ -32,29 +32,22 @@ namespace QuantConnect.Polygon
         /// <returns>Future/Option chain associated with the Symbol provided</returns>
         public IEnumerable<Symbol> LookupSymbols(Symbol symbol, bool includeExpired, string securityCurrency = null)
         {
-            if ((symbol.SecurityType.IsOption() && symbol.SecurityType == SecurityType.FutureOption) ||
-                (symbol.HasUnderlying && symbol.Underlying.SecurityType != SecurityType.Equity && symbol.Underlying.SecurityType != SecurityType.Index))
-            {
-                throw new ArgumentException($"Unsupported security type {symbol.SecurityType}");
-            }
-
-            Log.Trace($"PolygonDataQueueHandler.LookupSymbols(): Requesting symbol list for {symbol}");
-
-            var symbols = _optionChainProvider.GetOptionContractList(symbol, TimeProvider.GetUtcNow().Date).ToList();
+            var symbols = GetOptionChain(symbol, TimeProvider.GetUtcNow().Date);
 
             // Try to remove options contracts that have expired
             if (!includeExpired)
             {
                 var removedSymbols = new List<Symbol>();
-                symbols.RemoveAll(x =>
+                foreach (var optionSymbol in symbols)
                 {
-                    var expired = x.ID.Date < GetTickTime(x, TimeProvider.GetUtcNow()).Date;
-                    if (expired)
+                    if (optionSymbol.ID.Date < GetTickTime(optionSymbol, TimeProvider.GetUtcNow()).Date)
                     {
-                        removedSymbols.Add(x);
+                        removedSymbols.Add(optionSymbol);
+                        continue;
                     }
-                    return expired;
-                });
+
+                    yield return optionSymbol;
+                }
 
                 if (removedSymbols.Count > 0)
                 {
@@ -63,9 +56,29 @@ namespace QuantConnect.Polygon
                 }
             }
 
-            Log.Trace($"PolygonDataQueueHandler.LookupSymbols(): Returning {symbols.Count} contract(s) for {symbol}");
+            foreach (var optionSymbol in symbols)
+            {
+                yield return optionSymbol;
+            }
+        }
 
-            return symbols;
+        /// <summary>
+        /// Method returns a collection of symbols that are available at the broker.
+        /// </summary>
+        /// <param name="symbol">Symbol to search option chain for</param>
+        /// <param name="date">Reference date</param>
+        /// <returns>Option chain associated with the provided symbol</returns>
+        public IEnumerable<Symbol> GetOptionChain(Symbol symbol, DateTime date)
+        {
+            if ((symbol.SecurityType.IsOption() && symbol.SecurityType == SecurityType.FutureOption) ||
+                (symbol.HasUnderlying && symbol.Underlying.SecurityType != SecurityType.Equity && symbol.Underlying.SecurityType != SecurityType.Index))
+            {
+                throw new ArgumentException($"Unsupported security type {symbol.SecurityType}");
+            }
+
+            Log.Trace($"PolygonDataQueueHandler.GetOptionChain(): Requesting symbol list for {symbol}");
+
+            return _optionChainProvider.GetOptionContractList(symbol, date);
         }
 
         /// <summary>

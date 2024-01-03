@@ -16,12 +16,10 @@
 
 using NUnit.Framework;
 using QuantConnect.Configuration;
-using QuantConnect.Data.Market;
 using QuantConnect.Logging;
 using QuantConnect.Polygon;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.Contracts;
 using System.Linq;
 
 namespace QuantConnect.Tests.Polygon
