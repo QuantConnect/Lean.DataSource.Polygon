@@ -71,7 +71,7 @@ namespace QuantConnect.Polygon
             var request = new RestRequest("/v3/reference/options/contracts", Method.GET);
             request.AddQueryParameter("underlying_ticker", brokerageSymbol);
             request.AddQueryParameter("as_of", date.ToStringInvariant("yyyy-MM-dd"));
-            request.AddQueryParameter("limit", "200");
+            request.AddQueryParameter("limit", "1000");
 
             foreach (var contract in _restApiClient.DownloadAndParseData<OptionChainResponse>(request).SelectMany(response => response.Results))
             {
