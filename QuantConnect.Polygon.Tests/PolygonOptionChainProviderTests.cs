@@ -66,15 +66,22 @@ namespace QuantConnect.Tests.Polygon
             GetOptionChain(underlying);
         }
 
-        private List<Symbol> GetOptionChain(Symbol symbol)
+        private List<Symbol> GetOptionChain(Symbol symbol, DateTime? reference = null)
         {
-            var reference = new DateTime(2024, 01, 03);
-            var optionChain = _optionChainProvider.GetOptionContractList(symbol, reference).ToList();
+            var referenceDate = reference ?? new DateTime(2024, 01, 03);
+            var optionChain = _optionChainProvider.GetOptionContractList(symbol, referenceDate).ToList();
 
             Assert.That(optionChain, Is.Not.Null.And.Not.Empty);
-            Assert.That(optionChain.Select(x => x.ID.StrikePrice), Is.All.GreaterThan(0));
-            Assert.That(optionChain.Select(x => x.ID.Date), Is.All.GreaterThanOrEqualTo(reference.Date));
 
+            // Multiple strikes
+            var strikes = optionChain.Select(x => x.ID.StrikePrice).Distinct().ToList();
+            Assert.That(strikes, Has.Count.GreaterThan(1).And.All.GreaterThan(0));
+
+            // Multiple expirations
+            var expirations = optionChain.Select(x => x.ID.Date).Distinct().ToList();
+            Assert.That(expirations, Has.Count.GreaterThan(1).And.All.GreaterThanOrEqualTo(referenceDate.Date));
+
+            // All contracts have the same underlying
             var underlying = symbol.Underlying ?? symbol;
             Assert.That(optionChain.Select(x => x.Underlying), Is.All.EqualTo(underlying));
 
@@ -92,6 +99,17 @@ namespace QuantConnect.Tests.Polygon
         public void GetsOptionChainGivenTheOptionSymbol(Symbol option)
         {
             GetOptionChain(option);
+        }
+
+        [Test]
+        public void GetsFullSPXOptionChain()
+        {
+            var chain = GetOptionChain(Symbol.Create("SPX", SecurityType.Index, Market.USA), new DateTime(2024, 01, 03));
+
+            // SPX has a lot of options, let's make sure we get more than 1000 contracts (which is the pagination limit)
+            // to assert that multiple requests are being made.
+            // In fact, we expect to get more than 20000 contracts for this date.
+            Assert.That(chain, Has.Count.GreaterThan(20000));
         }
     }
 }
