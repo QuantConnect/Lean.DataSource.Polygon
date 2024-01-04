@@ -19,6 +19,7 @@ using QuantConnect.Logging;
 using QuantConnect.Polygon;
 using QuantConnect.Util;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace QuantConnect.Tests.Polygon
@@ -60,15 +61,33 @@ namespace QuantConnect.Tests.Polygon
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
         public void DownloadsDataFromCanonicalOptionSymbol()
         {
-            var parameters = new DataDownloaderGetParameters(Symbol.CreateCanonicalOption(Symbols.SPY), Resolution.Minute,
-                new DateTime(2024, 01, 02), new DateTime(2024, 01, 03), TickType.Quote);
-            var data = _downloader.Get(parameters).ToList();
+            var symbol = Symbol.CreateCanonicalOption(Symbol.Create("SPY", SecurityType.Equity, Market.USA));
+            var parameters = new DataDownloaderGetParameters(symbol, Resolution.Hour,
+                new DateTime(2024, 01, 03), new DateTime(2024, 01, 04), TickType.Trade);
+            using var downloader = new TestablePolygonDataDownloader();
+            var data = downloader.Get(parameters).ToList();
 
             Log.Trace("Data points retrieved: " + data.Count);
 
-            PolygonHistoryTests.AssertHistoricalDataResults(data, parameters.Resolution);
+            Assert.That(data, Is.Not.Null.And.Not.Empty);
 
-            // Assert more! (e.g. check if the data is actually option data and has multiple options (the chain))
+            // Multiple symbols
+            var distinctSymbols = data.Select(x => x.Symbol).Distinct().ToList();
+            Assert.That(distinctSymbols, Has.Count.GreaterThan(1).And.All.Matches<Symbol>(x => x.Canonical == symbol));
+        }
+
+        private class TestablePolygonDataDownloader : PolygonDataDownloader
+        {
+            protected override IEnumerable<Symbol> GetOptions(Symbol symbol, DateTime startUtc, DateTime endUtc)
+            {
+                // Let's only take a few contracts from a few days to speed up the test
+                return base.GetOptions(symbol, startUtc, endUtc)
+                    .GroupBy(x => x.ID.Date)
+                    .OrderBy(x => x.Key)
+                    .Select(x => x.Take(50))
+                    .Take(5)
+                    .SelectMany(x => x);
+            }
         }
     }
 }

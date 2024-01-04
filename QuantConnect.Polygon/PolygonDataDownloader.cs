@@ -74,30 +74,25 @@ namespace QuantConnect.Polygon
 
             if (symbol.IsCanonical())
             {
-                var symbols = new List<Symbol>();
-                foreach (var date in Time.EachDay(startUtc.Date, endUtc.Date))
-                {
-                    symbols.AddRange(_historyProvider.GetOptionChain(symbol, date));
-                }
+                using var dataQueue = new BlockingCollection<BaseData>();
+                var symbols = GetOptions(symbol, startUtc, endUtc);
 
-                using var queue = new BlockingCollection<BaseData>();
-                var symbolsProcessedCount = 0;
                 Task.Run(() => Parallel.ForEach(symbols, targetSymbol =>
                 {
-                    var historyRequest = new HistoryRequest(startUtc, endUtc, dataType, symbol, resolution, exchangeHours, dataTimeZone, resolution,
-                        true, false, DataNormalizationMode.Raw, tickType);
+                    var historyRequest = new HistoryRequest(startUtc, endUtc, dataType, targetSymbol, resolution, exchangeHours, dataTimeZone,
+                        resolution, true, false, DataNormalizationMode.Raw, tickType);
+                    var count = 0;
                     foreach (var data in _historyProvider.GetHistory(historyRequest))
                     {
-                        queue.Add(data);
+                        count++;
+                        dataQueue.Add(data);
                     }
+                })).ContinueWith(_ =>
+                {
+                    dataQueue.CompleteAdding();
+                });
 
-                    if (Interlocked.Increment(ref symbolsProcessedCount) == symbols.Count)
-                    {
-                        queue.CompleteAdding();
-                    }
-                }));
-
-                foreach (var data in queue.GetConsumingEnumerable())
+                foreach (var data in dataQueue.GetConsumingEnumerable())
                 {
                     yield return data;
                 }
@@ -109,6 +104,17 @@ namespace QuantConnect.Polygon
                 foreach (var data in _historyProvider.GetHistory(historyRequest))
                 {
                     yield return data;
+                }
+            }
+        }
+
+        protected virtual IEnumerable<Symbol> GetOptions(Symbol symbol, DateTime startUtc, DateTime endUtc)
+        {
+            foreach (var date in Time.EachDay(startUtc.Date, endUtc.Date))
+            {
+                foreach (var option in _historyProvider.GetOptionChain(symbol, date))
+                {
+                    yield return option;
                 }
             }
         }
