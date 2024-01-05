@@ -23,7 +23,9 @@ namespace QuantConnect.Polygon
     /// </summary>
     public class PolygonSymbolMapper : ISymbolMapper
     {
-        private readonly Dictionary<string, Symbol> _leanSymbolsCache= new();
+        private readonly Dictionary<string, Symbol> _leanSymbolsCache = new();
+        private readonly Dictionary<Symbol, string> _brokerageSymbolsCache = new();
+        private readonly object _locker = new();
 
         /// <summary>
         /// Converts a Lean symbol instance to a brokerage symbol
@@ -37,18 +39,32 @@ namespace QuantConnect.Polygon
                 throw new ArgumentException($"Invalid symbol: {(symbol == null ? "null" : symbol.ToString())}");
             }
 
-            switch (symbol.SecurityType)
+            lock (_locker)
             {
-                case SecurityType.Equity:
-                case SecurityType.Index:
-                    return symbol.Value.Replace(" ", "");
+                if (!_brokerageSymbolsCache.TryGetValue(symbol, out var brokerageSymbol))
+                {
+                    switch (symbol.SecurityType)
+                    {
+                        case SecurityType.Equity:
+                        case SecurityType.Index:
+                            brokerageSymbol = symbol.Value.Replace(" ", "");
+                            break;
 
-                case SecurityType.Option:
-                case SecurityType.IndexOption:
-                    return $"O:{symbol.Value.Replace(" ", "")}";
+                        case SecurityType.Option:
+                        case SecurityType.IndexOption:
+                            brokerageSymbol = $"O:{symbol.Value.Replace(" ", "")}";
+                            break;
 
-                default:
-                    throw new Exception($"PolygonSymbolMapper.GetBrokerageSymbol(): unsupported security type: {symbol.SecurityType}");
+                        default:
+                            throw new Exception($"PolygonSymbolMapper.GetBrokerageSymbol(): unsupported security type: {symbol.SecurityType}");
+                    }
+
+                    // Lean-to-Polygon symbol conversion is accurate, so we can cache it both ways
+                    _brokerageSymbolsCache[symbol] = brokerageSymbol;
+                    _leanSymbolsCache[brokerageSymbol] = symbol;
+                }
+
+                return brokerageSymbol;
             }
         }
 
@@ -92,23 +108,37 @@ namespace QuantConnect.Polygon
                 throw new ArgumentException("Invalid symbol: " + brokerageSymbol);
             }
 
-            var leanBaseSymbol = securityType == SecurityType.Equity ? null : GetLeanSymbol(brokerageSymbol);
-            var underlyingSymbolStr = underlying?.ID.Symbol ?? leanBaseSymbol?.Underlying.ID.Symbol;
-
-            switch (securityType)
+            lock (_locker)
             {
-                case SecurityType.Option:
-                    return Symbol.CreateOption(underlyingSymbolStr, market, optionStyle, optionRight, strike, expirationDate);
+                if (!_leanSymbolsCache.TryGetValue(brokerageSymbol, out var leanSymbol))
+                {
+                    var leanBaseSymbol = securityType == SecurityType.Equity ? null : GetLeanSymbol(brokerageSymbol);
+                    var underlyingSymbolStr = underlying?.ID.Symbol ?? leanBaseSymbol?.Underlying.ID.Symbol;
 
-                case SecurityType.IndexOption:
-                    underlying ??= Symbol.Create(leanBaseSymbol?.Underlying.ID.Symbol, SecurityType.Index, market);
-                    return Symbol.CreateOption(underlying, leanBaseSymbol?.ID.Symbol, market, optionStyle, optionRight, strike, expirationDate);
+                    switch (securityType)
+                    {
+                        case SecurityType.Option:
+                            leanSymbol = Symbol.CreateOption(underlyingSymbolStr, market, optionStyle, optionRight, strike, expirationDate);
+                            break;
 
-                case SecurityType.Equity:
-                    return Symbol.Create(brokerageSymbol, securityType, market);
+                        case SecurityType.IndexOption:
+                            underlying ??= Symbol.Create(leanBaseSymbol?.Underlying.ID.Symbol, SecurityType.Index, market);
+                            leanSymbol = Symbol.CreateOption(underlying, leanBaseSymbol?.ID.Symbol, market, optionStyle, optionRight, strike, expirationDate);
+                            break;
 
-                default:
-                    throw new Exception($"PolygonSymbolMapper.GetLeanSymbol(): unsupported security type: {securityType}");
+                        case SecurityType.Equity:
+                            leanSymbol = Symbol.Create(brokerageSymbol, securityType, market);
+                            break;
+
+                        default:
+                            throw new Exception($"PolygonSymbolMapper.GetLeanSymbol(): unsupported security type: {securityType}");
+                    }
+
+                    _leanSymbolsCache[brokerageSymbol] = leanSymbol;
+                    _brokerageSymbolsCache[leanSymbol] = brokerageSymbol;
+                }
+
+                return leanSymbol;
             }
         }
 
@@ -124,23 +154,22 @@ namespace QuantConnect.Polygon
         /// </remarks>
         public Symbol GetLeanSymbol(string polygonSymbol)
         {
-            lock (_leanSymbolsCache)
+            if (!_leanSymbolsCache.TryGetValue(polygonSymbol, out var symbol))
             {
-                if (!_leanSymbolsCache.TryGetValue(polygonSymbol, out var symbol))
-                {
-                    if (polygonSymbol.StartsWith("O:"))
-                    {
-                        symbol = GetLeanOptionSymbol(polygonSymbol);
-                    }
-                    else
-                    {
-                        symbol = GetLeanSymbol(polygonSymbol, SecurityType.Equity, Market.USA);
-                    }
-                    _leanSymbolsCache[polygonSymbol] = symbol;
-                }
-
-                return symbol;
+                symbol = GetLeanSymbolInternal(polygonSymbol);
             }
+
+            return symbol;
+        }
+
+        private Symbol GetLeanSymbolInternal(string polygonSymbol)
+        {
+            if (polygonSymbol.StartsWith("O:"))
+            {
+                return GetLeanOptionSymbol(polygonSymbol);
+            }
+
+            return GetLeanSymbol(polygonSymbol, SecurityType.Equity, Market.USA);
         }
 
         /// <summary>
