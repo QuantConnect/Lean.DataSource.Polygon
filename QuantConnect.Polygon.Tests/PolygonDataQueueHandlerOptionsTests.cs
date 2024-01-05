@@ -15,9 +15,11 @@
 */
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using Microsoft.CodeAnalysis;
 using NUnit.Framework;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
@@ -83,6 +85,52 @@ namespace QuantConnect.Tests.Polygon
             Thread.Sleep(1000 * 60 * 3);
 
             polygon.DisposeSafely();
+        }
+
+        [Test]
+        public void WeeklyIndexOptionsStreamDataSymbolIsCorrectlyMapped()
+        {
+            using var polygon = new PolygonDataQueueHandler(ApiKey);
+
+            var configs = new[] { 4675m, 4680m, 4685m, 4690m, 4695m }
+                .Select(strike =>
+                {
+                    var symbol = Symbol.CreateOption(Symbols.SPX, "SPXW", Market.USA, OptionStyle.American, OptionRight.Call, strike,
+                        new DateTime(2024, 01, 05));
+                    return new[]
+                    {
+                        GetSubscriptionDataConfig<TradeBar>(symbol, Resolution.Tick),
+                        GetSubscriptionDataConfig<QuoteBar>(symbol, Resolution.Tick)
+                    };
+                })
+                .SelectMany(x => x);
+
+            using var receivedData = new BlockingCollection<BaseData>();
+            foreach (var config in configs)
+            {
+                polygon.Subscribe(config, (sender, args) =>
+                {
+                    var dataPoint = (BaseData)((NewDataAvailableEventArgs)args).DataPoint;
+                    Log.Trace($"{dataPoint}. Time span: {dataPoint.Time} - {dataPoint.EndTime}");
+
+                    receivedData.Add(dataPoint);
+                });
+            }
+
+            // Checking the symbol for one of the data points is enough
+            var data = receivedData.Take();
+
+            Log.Trace("Unsubscribing symbols");
+            foreach (var config in configs)
+            {
+                polygon.Unsubscribe(config);
+            }
+
+            // Some messages could be inflight
+            Thread.Sleep(2 * 1000);
+
+            Assert.That(data.Symbol.Underlying, Is.EqualTo(Symbols.SPX));
+            Assert.That(data.Symbol.ID.Symbol, Is.EqualTo("SPXW"));
         }
 
         /// <summary>
