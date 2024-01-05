@@ -14,6 +14,7 @@
 */
 
 using QuantConnect.Brokerages;
+using QuantConnect.Securities.IndexOption;
 using System.Globalization;
 
 namespace QuantConnect.Polygon
@@ -154,12 +155,15 @@ namespace QuantConnect.Polygon
         /// </remarks>
         public Symbol GetLeanSymbol(string polygonSymbol)
         {
-            if (!_leanSymbolsCache.TryGetValue(polygonSymbol, out var symbol))
+            lock (_locker)
             {
-                symbol = GetLeanSymbolInternal(polygonSymbol);
-            }
+                if (!_leanSymbolsCache.TryGetValue(polygonSymbol, out var symbol))
+                {
+                    symbol = GetLeanSymbolInternal(polygonSymbol);
+                }
 
-            return symbol;
+                return symbol;
+            }
         }
 
         private Symbol GetLeanSymbolInternal(string polygonSymbol)
@@ -186,10 +190,12 @@ namespace QuantConnect.Polygon
             var strike = long.Parse(polygonSymbol.Substring(polygonSymbol.Length - 8)) / 1000m;
             var optionRight = polygonSymbol.Substring(polygonSymbol.Length - 9, 1) == "C" ? OptionRight.Call : OptionRight.Put;
             var expirationDate = DateTime.ParseExact(polygonSymbol.Substring(polygonSymbol.Length - 15, 6), "yyMMdd", CultureInfo.InvariantCulture);
-            var underlyingTicker = polygonSymbol.Substring(2, polygonSymbol.Length - 15 - 2);
+            var ticker = polygonSymbol.Substring(2, polygonSymbol.Length - 15 - 2);
 
-            var symbol = Symbol.CreateOption(Symbol.Create(underlyingTicker, SecurityType.Equity, Market.USA), Market.USA, OptionStyle.American,
-                optionRight, strike, expirationDate);
+            var underlying = IndexOptionSymbol.IsIndexOption(ticker)
+                ? Symbol.Create(IndexOptionSymbol.MapToUnderlying(ticker), SecurityType.Index, Market.USA)
+                : Symbol.Create(ticker, SecurityType.Equity, Market.USA);
+            var symbol = Symbol.CreateOption(underlying, ticker, Market.USA, OptionStyle.American, optionRight, strike, expirationDate);
             _leanSymbolsCache[polygonSymbol] = symbol;
 
             return symbol;
