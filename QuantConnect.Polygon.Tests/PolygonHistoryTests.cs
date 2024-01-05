@@ -124,6 +124,9 @@ namespace QuantConnect.Tests.Polygon
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
         public void GetsSameBarCountForDifferentResponseLimits()
         {
+            // Set a high limit for the first request so less requests are made
+            using var historyProvider = new ConfigurableResponseLimitPolygonHistoryProvider(_apiKey, 5000);
+
             const Resolution resolution = Resolution.Minute;
             const TickType tickType = TickType.Trade;
             var symbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 429m, new DateTime(2023, 10, 06));
@@ -132,23 +135,23 @@ namespace QuantConnect.Tests.Polygon
 
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
-            var history1 = _historyProvider.GetHistory(request).ToList();
+            var history1 = historyProvider.GetHistory(request).ToList();
             stopwatch.Stop();
             var history1Duration = stopwatch.Elapsed;
 
             Assert.That(history1, Is.Not.Empty);
 
-            Log.Trace($"Retrieved {_historyProvider.DataPointCount} data points in {history1Duration}");
+            Log.Debug($"Retrieved {historyProvider.DataPointCount} data points in {history1Duration}");
 
-            Config.Set("polygon-aggregate-response-limit", 500);
-            using var newHistoryProvider = new PolygonDataQueueHandler(_apiKey, streamingEnabled: false);
+            // Set a low limit for the second request so more requests are made
+            using var historyProvider2 = new ConfigurableResponseLimitPolygonHistoryProvider(_apiKey, 100);
 
             stopwatch.Restart();
-            var history2 = newHistoryProvider.GetHistory(request).ToList();
+            var history2 = historyProvider2.GetHistory(request).ToList();
             stopwatch.Stop();
             var history2Duration = stopwatch.Elapsed;
 
-            Log.Trace($"Retrieved {newHistoryProvider.DataPointCount} data points in {history2Duration}");
+            Log.Debug($"Retrieved {historyProvider2.DataPointCount} data points in {history2Duration}");
 
             Assert.That(history2, Has.Count.EqualTo(history1.Count));
             Assert.That(history1, Is.Not.Empty);
@@ -260,12 +263,6 @@ namespace QuantConnect.Tests.Polygon
 
             public TestPolygonRestApiClient() : base(string.Empty) { }
 
-            public void SetRateLimiter(RateGate rateGate)
-            {
-                RateLimiter?.DisposeSafely();
-                RateLimiter = rateGate;
-            }
-
             public override IEnumerable<T> DownloadAndParseData<T>(RestRequest request)
             {
                 return new List<T>
@@ -315,8 +312,40 @@ namespace QuantConnect.Tests.Polygon
             public ConfigurableRateLimitedPolygonHistoryProvider(string apiKey, RateGate rateGate)
                 : base(apiKey, streamingEnabled: false)
             {
-                RestApiClient.RateLimiter.DisposeSafely();
-                RestApiClient.RateLimiter = rateGate;
+                RestApiClient.DisposeSafely();
+                RestApiClient = new TestApiClient(apiKey, rateGate);
+            }
+
+            private class TestApiClient : PolygonRestApiClient
+            {
+                private RateGate _rateGate;
+                protected override RateGate RateLimiter => _rateGate;
+
+                public TestApiClient(string apiKey, RateGate rateGate) : base(apiKey)
+                {
+                    _rateGate = rateGate;
+                }
+            }
+        }
+
+        private class ConfigurableResponseLimitPolygonHistoryProvider : PolygonDataQueueHandler
+        {
+            public ConfigurableResponseLimitPolygonHistoryProvider(string apiKey, int responseLimit)
+                : base(apiKey, streamingEnabled: false)
+            {
+                RestApiClient.DisposeSafely();
+                RestApiClient = new TestApiClient(apiKey, responseLimit.ToString());
+            }
+
+            private class TestApiClient : PolygonRestApiClient
+            {
+                private string _responseLimit;
+                protected override string ApiResponseLimit => _responseLimit;
+
+                public TestApiClient(string apiKey, string responseLimit) : base(apiKey)
+                {
+                    _responseLimit = responseLimit;
+                }
             }
         }
     }

@@ -82,8 +82,8 @@ namespace QuantConnect.Polygon
                     continue;
                 }
 
-                var contractSymbol = _symbolMapper.GetLeanSymbol(underlying.Value, optionsSecurityType, underlying.ID.Market, optionStyle,
-                    contract.ExpirationDate, contract.StrikePrice, optionRight);
+                var contractSymbol = _symbolMapper.GetLeanSymbol(contract.Ticker, optionsSecurityType, underlying.ID.Market, optionStyle,
+                    contract.ExpirationDate, contract.StrikePrice, optionRight, underlying);
                 yield return contractSymbol;
             }
         }
