@@ -32,7 +32,8 @@ namespace QuantConnect.Polygon
         /// <returns>Future/Option chain associated with the Symbol provided</returns>
         public IEnumerable<Symbol> LookupSymbols(Symbol symbol, bool includeExpired, string securityCurrency = null)
         {
-            var symbols = GetOptionChain(symbol, TimeProvider.GetUtcNow().Date);
+            var utcNow = TimeProvider.GetUtcNow();
+            var symbols = GetOptionChain(symbol, utcNow.Date);
 
             // Try to remove options contracts that have expired
             if (!includeExpired)
@@ -40,7 +41,7 @@ namespace QuantConnect.Polygon
                 var removedSymbols = new List<Symbol>();
                 foreach (var optionSymbol in symbols)
                 {
-                    if (optionSymbol.ID.Date < GetTickTime(optionSymbol, TimeProvider.GetUtcNow()).Date)
+                    if (optionSymbol.ID.Date < GetTickTime(optionSymbol, utcNow).Date)
                     {
                         removedSymbols.Add(optionSymbol);
                         continue;
