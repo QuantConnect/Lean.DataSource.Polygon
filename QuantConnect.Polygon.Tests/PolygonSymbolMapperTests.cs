@@ -47,14 +47,34 @@ namespace QuantConnect.Tests.Polygon
             Assert.That(convertedSymbol, Is.EqualTo(leanSymbol));
         }
 
-        [TestCase("SPY", SecurityType.Option, ExpectedResult = SecurityType.Equity)]
-        [TestCase("SPX", SecurityType.IndexOption, ExpectedResult = SecurityType.Index)]
+        [TestCase("O:SPY240104C00467000", SecurityType.Option, ExpectedResult = SecurityType.Equity)]
+        [TestCase("O:SPX240104C04685000", SecurityType.IndexOption, ExpectedResult = SecurityType.Index)]
+        [TestCase("O:SPXW240104C04685000", SecurityType.IndexOption, ExpectedResult = SecurityType.Index)]
         public SecurityType ConvertsOptionSymbolWithCorrectUnderlyingSecurityType(string ticker, SecurityType optionType)
         {
             var mapper = new PolygonSymbolMapper();
-            var symbol = mapper.GetLeanSymbol(ticker, optionType, Market.USA, new DateTime(2024, 01, 03), 400m, OptionRight.Call);
+            var symbol = mapper.GetLeanSymbol(ticker, optionType, Market.USA, new DateTime(2024, 01, 04), 400m, OptionRight.Call);
 
             return symbol.Underlying.SecurityType;
+        }
+
+        [Test]
+        public void ConvertsWeeklyIndexOptionSymbol()
+        {
+            var mapper = new PolygonSymbolMapper();
+            var expiry = new DateTime(2024, 01, 04);
+            var strike = 400m;
+            // The underlying symbol should be specified for weekly index options,
+            // otherwise the underlying will be set to SPXW/VIXW/... when it should actually be SPX/VIX/...
+            var symbol = mapper.GetLeanSymbol("O:SPXW240104C04685000", SecurityType.IndexOption, Market.USA, OptionStyle.American, expiry, strike,
+                OptionRight.Call, underlying: Symbols.SPX);
+
+            Assert.That(symbol.Underlying, Is.EqualTo(Symbols.SPX));
+            Assert.That(symbol, Is.EqualTo(Symbol.CreateOption(Symbols.SPX, "SPXW", Market.USA, OptionStyle.American, OptionRight.Call, strike, expiry)));
+            Assert.That(symbol.ID.Date, Is.EqualTo(expiry));
+            Assert.That(symbol.ID.OptionRight, Is.EqualTo(OptionRight.Call));
+            Assert.That(symbol.ID.OptionStyle, Is.EqualTo(OptionStyle.American));
+            Assert.That(symbol.ID.StrikePrice, Is.EqualTo(strike));
         }
     }
 }

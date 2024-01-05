@@ -81,10 +81,8 @@ namespace QuantConnect.Polygon
                 {
                     var historyRequest = new HistoryRequest(startUtc, endUtc, dataType, targetSymbol, resolution, exchangeHours, dataTimeZone,
                         resolution, true, false, DataNormalizationMode.Raw, tickType);
-                    var count = 0;
                     foreach (var data in _historyProvider.GetHistory(historyRequest))
                     {
-                        count++;
                         dataQueue.Add(data);
                     }
                 })).ContinueWith(_ =>

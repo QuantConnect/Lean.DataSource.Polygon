@@ -28,13 +28,15 @@ namespace QuantConnect.Polygon
     {
         private readonly static string RestApiBaseUrl = Config.Get("polygon-api-url", "https://api.polygon.io");
 
-        private readonly static string ApiResponseLimit = Config.Get("polygon-aggregate-response-limit", "5000");
-
         private readonly RestClient _restClient;
 
         private readonly string _apiKey;
 
-        internal RateGate RateLimiter { get; set; } = new(300, TimeSpan.FromSeconds(1));
+        // Made virtual for testing purposes
+        protected virtual string ApiResponseLimit { get; } = Config.Get("polygon-aggregate-response-limit", "5000");
+
+        // Made virtual for testing purposes
+        protected virtual RateGate RateLimiter { get; } = new(300, TimeSpan.FromSeconds(1));
 
         /// <summary>
         /// Initializes a new instance of the <see cref="PolygonRestApiClient"/> class

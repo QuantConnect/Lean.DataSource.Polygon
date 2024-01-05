@@ -110,6 +110,16 @@ namespace QuantConnect.Tests.Polygon
             // to assert that multiple requests are being made.
             // In fact, we expect to get more than 20000 contracts for this date.
             Assert.That(chain, Has.Count.GreaterThan(20000));
+
+            // Make sure we have both SPX and SPXW contracts:
+
+            var spxw = chain.Where(x => x.ID.Symbol == "SPXW").ToList();
+            Assert.That(spxw, Is.Not.Empty);
+
+            var spx = chain.Where(x => x.ID.Symbol == "SPX").ToList();
+            Assert.That(spx, Is.Not.Empty);
+
+            Assert.That(spxw.Count + spx.Count, Is.EqualTo(chain.Count));
         }
     }
 }

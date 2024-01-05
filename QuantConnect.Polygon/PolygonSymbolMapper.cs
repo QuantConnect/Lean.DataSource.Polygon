@@ -78,32 +78,34 @@ namespace QuantConnect.Polygon
         /// <param name="expirationDate">Expiration date of the security(if applicable)</param>
         /// <param name="strike">The strike of the security (if applicable)</param>
         /// <param name="optionRight">The option right of the security (if applicable)</param>
+        /// <param name="underlying">
+        /// The underlying symbol of the security (if applicable). This is useful in cases like weekly index options (e.g. SPXW)
+        /// where the brokerage symbol (e.g. O:SPXW240104C04685000) doesn't have information about the actual underlying symbol (SPX in this case).
+        /// </param>
         /// <returns>A new Lean Symbol instance</returns>
         public Symbol GetLeanSymbol(string brokerageSymbol, SecurityType securityType, string market, OptionStyle optionStyle,
-            DateTime expirationDate = new DateTime(), decimal strike = 0, OptionRight optionRight = OptionRight.Call)
+            DateTime expirationDate = new DateTime(), decimal strike = 0, OptionRight optionRight = OptionRight.Call,
+            Symbol? underlying = null)
         {
             if (string.IsNullOrWhiteSpace(brokerageSymbol))
             {
                 throw new ArgumentException("Invalid symbol: " + brokerageSymbol);
             }
 
+            var leanBaseSymbol = securityType == SecurityType.Equity ? null : GetLeanSymbol(brokerageSymbol);
+            var underlyingSymbolStr = underlying?.ID.Symbol ?? leanBaseSymbol?.Underlying.ID.Symbol;
+
             switch (securityType)
             {
                 case SecurityType.Option:
-                    return Symbol.CreateOption(brokerageSymbol, market, optionStyle, optionRight, strike, expirationDate);
+                    return Symbol.CreateOption(underlyingSymbolStr, market, optionStyle, optionRight, strike, expirationDate);
 
                 case SecurityType.IndexOption:
-                    return Symbol.CreateOption(Symbol.Create(brokerageSymbol, SecurityType.Index, market), market, optionStyle, optionRight,
-                        strike, expirationDate);
+                    underlying ??= Symbol.Create(leanBaseSymbol?.Underlying.ID.Symbol, SecurityType.Index, market);
+                    return Symbol.CreateOption(underlying, leanBaseSymbol?.ID.Symbol, market, optionStyle, optionRight, strike, expirationDate);
 
                 case SecurityType.Equity:
                     return Symbol.Create(brokerageSymbol, securityType, market);
-
-                case SecurityType.Forex:
-                    return Symbol.Create(brokerageSymbol.Replace("/", ""), securityType, market);
-
-                case SecurityType.Crypto:
-                    return Symbol.Create(brokerageSymbol.Replace("-", ""), securityType, market);
 
                 default:
                     throw new Exception($"PolygonSymbolMapper.GetLeanSymbol(): unsupported security type: {securityType}");
@@ -115,6 +117,11 @@ namespace QuantConnect.Polygon
         /// </summary>
         /// <param name="polygonSymbol">The polygon symbol</param>
         /// <returns>The corresponding Lean symbol</returns>
+        /// <remarks>
+        /// The mapped symbol might not be 100% accurate, since Polygon.io doesn't provide the full symbol information.
+        /// For instance, for weekly index options (e.g. SPXW), Polygon.io doesn't provide the underlying symbol (SPX in this case).
+        /// See <see cref="GetLeanSymbol(string, SecurityType, string, OptionStyle, DateTime, decimal, OptionRight, Symbol?)"/> for more details.
+        /// </remarks>
         public Symbol GetLeanSymbol(string polygonSymbol)
         {
             lock (_leanSymbolsCache)
@@ -147,7 +154,7 @@ namespace QuantConnect.Polygon
             // But they don't have a fixed number of characters for the underlying ticker, so we need to parse it
             // starting from the end of the string: strike -> option right -> expiration date -> underlying ticker.
             // Reference: https://polygon.io/blog/how-to-read-a-stock-options-ticker
-            var strike = Int64.Parse(polygonSymbol.Substring(polygonSymbol.Length - 8)) / 1000m;
+            var strike = long.Parse(polygonSymbol.Substring(polygonSymbol.Length - 8)) / 1000m;
             var optionRight = polygonSymbol.Substring(polygonSymbol.Length - 9, 1) == "C" ? OptionRight.Call : OptionRight.Put;
             var expirationDate = DateTime.ParseExact(polygonSymbol.Substring(polygonSymbol.Length - 15, 6), "yyMMdd", CultureInfo.InvariantCulture);
             var underlyingTicker = polygonSymbol.Substring(2, polygonSymbol.Length - 15 - 2);
