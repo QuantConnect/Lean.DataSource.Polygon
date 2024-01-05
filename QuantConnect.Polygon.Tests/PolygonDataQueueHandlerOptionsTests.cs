@@ -93,11 +93,11 @@ namespace QuantConnect.Tests.Polygon
         /// </remarks>
         protected override List<SubscriptionDataConfig> GetConfigs(Resolution resolution = Resolution.Second)
         {
-            var spyOptions = new[] { 463m, 464m, 465m, 466m, 467m }
+            var spyOptions = new[] { 465m, 466m, 467m, 468m, 469m }
                 .Select(strike =>
                 {
                     var symbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, strike,
-                        new DateTime(2023, 12, 18));
+                        new DateTime(2024, 01, 05));
                     return new[]
                     {
                         GetSubscriptionDataConfig<TradeBar>(symbol, resolution),
@@ -106,11 +106,11 @@ namespace QuantConnect.Tests.Polygon
                 })
                 .SelectMany(x => x);
 
-            var aaplOptions = new[] { 195m, 197.5m, 200m, 202.5m, 205m }
+            var spxOptions = new[] { 4675m, 4680m, 4685m, 4690m, 4695m }
                 .Select(strike =>
                 {
-                    var symbol = Symbol.CreateOption(Symbols.AAPL, Market.USA, OptionStyle.American, OptionRight.Call, strike,
-                        new DateTime(2023, 12, 15));
+                    var symbol = Symbol.CreateOption(Symbols.SPX, "SPXW", Market.USA, OptionStyle.American, OptionRight.Call, strike,
+                        new DateTime(2024, 01, 05));
                     return new[]
                     {
                         GetSubscriptionDataConfig<TradeBar>(symbol, resolution),
@@ -119,7 +119,7 @@ namespace QuantConnect.Tests.Polygon
                 })
                 .SelectMany(x => x);
 
-            return spyOptions.Concat(aaplOptions).ToList();
+            return spyOptions.Concat(spxOptions).ToList();
         }
     }
 }
