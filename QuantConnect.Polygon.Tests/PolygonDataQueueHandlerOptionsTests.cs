@@ -129,6 +129,7 @@ namespace QuantConnect.Tests.Polygon
             // Some messages could be inflight
             Thread.Sleep(2 * 1000);
 
+            Assert.That(data.Symbol.SecurityType, Is.EqualTo(SecurityType.IndexOption));
             Assert.That(data.Symbol.Underlying, Is.EqualTo(Symbols.SPX));
             Assert.That(data.Symbol.ID.Symbol, Is.EqualTo("SPXW"));
         }
