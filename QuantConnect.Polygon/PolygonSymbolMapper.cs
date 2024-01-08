@@ -51,7 +51,6 @@ namespace QuantConnect.Polygon
                             brokerageSymbol = ticker;
                             break;
 
-
                         case SecurityType.Index:
                             brokerageSymbol = $"I:{ticker}";
                             break;
@@ -208,9 +207,8 @@ namespace QuantConnect.Polygon
             var underlying = IndexOptionSymbol.IsIndexOption(ticker)
                 ? Symbol.Create(IndexOptionSymbol.MapToUnderlying(ticker), SecurityType.Index, Market.USA)
                 : Symbol.Create(ticker, SecurityType.Equity, Market.USA);
-            var symbol = Symbol.CreateOption(underlying, ticker, Market.USA, OptionStyle.American, optionRight, strike, expirationDate);
 
-            return symbol;
+            return Symbol.CreateOption(underlying, ticker, Market.USA, OptionStyle.American, optionRight, strike, expirationDate);
         }
 
         /// <summary>
@@ -218,8 +216,7 @@ namespace QuantConnect.Polygon
         /// </summary>
         private Symbol GetLeanIndexSymbol(string polygonSymbol)
         {
-            var symbol = Symbol.Create(polygonSymbol.Substring(2), SecurityType.Index, Market.USA);
-            return symbol;
+            return Symbol.Create(polygonSymbol.Substring(2), SecurityType.Index, Market.USA);
         }
     }
 }

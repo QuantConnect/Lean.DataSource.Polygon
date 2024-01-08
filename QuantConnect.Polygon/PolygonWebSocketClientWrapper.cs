@@ -126,6 +126,8 @@ namespace QuantConnect.Polygon
         /// </summary>
         private void TrySubscribe(string ticker, SubscriptionDataConfig config, out bool usingAggregates)
         {
+            usingAggregates = false;
+
             // We'll try subscribing assuming the highest subscription plan and work our way down if we get an error
             using var subscribedEvent = new ManualResetEventSlim(false);
             using var errorEvent = new ManualResetEventSlim(false);
@@ -193,8 +195,6 @@ namespace QuantConnect.Polygon
                 throw new Exception($"PolygonWebSocketClientWrapper.Subscribe(): Failed to subscribe to {ticker}. " +
                     $"Make sure your subscription plan allows streaming {config.TickType.ToString().ToLowerInvariant()} data.");
             }
-
-            usingAggregates = false;
         }
 
         /// <summary>

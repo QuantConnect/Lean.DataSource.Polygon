@@ -57,6 +57,30 @@ namespace QuantConnect.Tests.Polygon
             PolygonHistoryTests.AssertHistoricalDataResults(data, resolution);
         }
 
+        private static TestCaseData[] IndexHistoricalDataTestCases => PolygonHistoryTests.IndexHistoricalDataTestCases;
+
+        [TestCaseSource(nameof(IndexHistoricalDataTestCases))]
+        [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
+        public void DownloadsIndexHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeEmpy)
+        {
+            var symbol = Symbol.Create("SPX", SecurityType.Index, Market.USA);
+            var request = PolygonHistoryTests.CreateHistoryRequest(symbol, resolution, tickType, period);
+
+            var parameters = new DataDownloaderGetParameters(symbol, resolution, request.StartTimeUtc, request.EndTimeUtc, tickType);
+            var data = _downloader.Get(parameters).ToList();
+
+            Log.Trace("Data points retrieved: " + data.Count);
+
+            if (shouldBeEmpy)
+            {
+                Assert.That(data, Is.Empty);
+            }
+            else
+            {
+                PolygonHistoryTests.AssertHistoricalDataResults(data, resolution);
+            }
+        }
+
         [Test]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
         public void DownloadsDataFromCanonicalOptionSymbol()
