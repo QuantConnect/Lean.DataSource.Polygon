@@ -128,7 +128,7 @@ namespace QuantConnect.Tests.Polygon
         [TestCase(Resolution.Hour, 3)]
         [Explicit("Tests are dependent on network and take long. " +
             "Also, this test will only pass if the subscribed securities are liquid enough to get data in the test run time.")]
-        public void StreamsDataForDifferentResolutions(Resolution resolution, int period)
+        public virtual void StreamsDataForDifferentResolutions(Resolution resolution, int period)
         {
             using var polygon = new PolygonDataQueueHandler(ApiKey);
 

@@ -48,7 +48,8 @@ namespace QuantConnect.Polygon
         {
             SecurityType.Equity,
             SecurityType.Option,
-            SecurityType.IndexOption
+            SecurityType.IndexOption,
+            SecurityType.Index,
         });
 
         private readonly string _apiKey;

@@ -120,6 +120,49 @@ namespace QuantConnect.Tests.Polygon
             }
         }
 
+        internal static TestCaseData[] IndexHistoricalDataTestCases
+        {
+            get
+            {
+                return new[]
+                {
+                    // Trades
+                    new TestCaseData(Resolution.Tick, TimeSpan.FromMinutes(5), TickType.Trade, true),   // Tick data is not available for indexes
+                    new TestCaseData(Resolution.Second, TimeSpan.FromMinutes(30), TickType.Trade, false),
+                    new TestCaseData(Resolution.Minute, TimeSpan.FromDays(15), TickType.Trade, false),
+                    new TestCaseData(Resolution.Hour, TimeSpan.FromDays(180), TickType.Trade, false),
+                    new TestCaseData(Resolution.Daily, TimeSpan.FromDays(3650), TickType.Trade, false),
+
+                    // Quotes: quote data is not available for indexes
+                    new TestCaseData(Resolution.Tick, TimeSpan.FromMinutes(5), TickType.Quote, true),
+                    new TestCaseData(Resolution.Second, TimeSpan.FromMinutes(5), TickType.Quote, true),
+                    new TestCaseData(Resolution.Minute, TimeSpan.FromMinutes(5), TickType.Quote, true),
+                    new TestCaseData(Resolution.Hour, TimeSpan.FromMinutes(5), TickType.Quote, true),
+                    new TestCaseData(Resolution.Daily, TimeSpan.FromMinutes(5), TickType.Quote, true),
+                };
+            }
+        }
+
+        [TestCaseSource(nameof(IndexHistoricalDataTestCases))]
+        [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
+        public void GetsIndexHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeEmpty)
+        {
+            var symbol = Symbol.Create("SPX", SecurityType.Index, Market.USA);
+            var requests = new List<HistoryRequest> { CreateHistoryRequest(symbol, resolution, tickType, period) };
+            var history = _historyProvider.GetHistory(requests, TimeZones.Utc).ToList();
+
+            Log.Trace("Data points retrieved: " + history.Count);
+
+            if (shouldBeEmpty)
+            {
+                Assert.That(history, Is.Empty);
+            }
+            else
+            {
+                AssertHistoricalDataResults(history.Select(x => x.AllData).SelectMany(x => x).ToList(), resolution, _historyProvider.DataPointCount);
+            }
+        }
+
         [Test]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
         public void GetsSameBarCountForDifferentResponseLimits()
@@ -165,7 +208,6 @@ namespace QuantConnect.Tests.Polygon
             new TestCaseData(Symbols.USDJPY, Resolution.Minute, TickType.Trade),
             new TestCaseData(Symbols.BTCUSD, Resolution.Minute, TickType.Trade),
             new TestCaseData(Symbols.DE10YBEUR, Resolution.Minute, TickType.Trade),
-            new TestCaseData(Symbols.SPX, Resolution.Minute, TickType.Trade),
             new TestCaseData(Symbols.Future_ESZ18_Dec2018, Resolution.Minute, TickType.Trade),
 
             // Supported security type and resolution, unsupported tick type

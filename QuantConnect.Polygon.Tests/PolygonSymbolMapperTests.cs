@@ -94,5 +94,39 @@ namespace QuantConnect.Tests.Polygon
             Assert.That(symbol.ID.OptionStyle, Is.EqualTo(OptionStyle.American));
             Assert.That(symbol.ID.StrikePrice, Is.EqualTo(strike));
         }
+
+        [Test]
+        public void ConvertsLeanIndexSymbolToPolygon()
+        {
+            var mapper = new PolygonSymbolMapper();
+            var symbol = Symbol.Create("SPX", SecurityType.Index, Market.USA);
+            var polygonSymbol = mapper.GetBrokerageSymbol(symbol);
+            Assert.That(polygonSymbol, Is.EqualTo("I:SPX"));
+        }
+
+        [Test]
+        public void ConvertsPolygonIndexSymbolToLean()
+        {
+            var mapper = new PolygonSymbolMapper();
+            var symbol = mapper.GetLeanSymbol("I:SPX");
+            Assert.That(symbol, Is.EqualTo(Symbol.Create("SPX", SecurityType.Index, Market.USA)));
+        }
+
+        [Test]
+        public void ConvertsLeanEquitySymbolToPolygon()
+        {
+            var mapper = new PolygonSymbolMapper();
+            var symbol = Symbol.Create("AAPL", SecurityType.Equity, Market.USA);
+            var polygonSymbol = mapper.GetBrokerageSymbol(symbol);
+            Assert.That(polygonSymbol, Is.EqualTo("AAPL"));
+        }
+
+        [Test]
+        public void ConvertsPolygonEquitySymbolToLean()
+        {
+            var mapper = new PolygonSymbolMapper();
+            var symbol = mapper.GetLeanSymbol("AAPL");
+            Assert.That(symbol, Is.EqualTo(Symbol.Create("AAPL", SecurityType.Equity, Market.USA)));
+        }
     }
 }
