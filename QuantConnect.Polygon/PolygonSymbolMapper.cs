@@ -127,8 +127,8 @@ namespace QuantConnect.Polygon
                             break;
 
                         case SecurityType.IndexOption:
-                            underlying ??= Symbol.Create(leanBaseSymbol?.Underlying.ID.Symbol, SecurityType.Index, market);
-                            leanSymbol = Symbol.CreateOption(underlying, leanBaseSymbol?.ID.Symbol, market, optionStyle, optionRight, strike, expirationDate);
+                            underlying ??= Symbol.Create(leanBaseSymbol.Underlying.ID.Symbol, SecurityType.Index, market);
+                            leanSymbol = Symbol.CreateOption(underlying, leanBaseSymbol.ID.Symbol, market, optionStyle, optionRight, strike, expirationDate);
                             break;
 
                         case SecurityType.Equity:
@@ -136,7 +136,7 @@ namespace QuantConnect.Polygon
                             break;
 
                         case SecurityType.Index:
-                            leanSymbol = Symbol.Create(leanBaseSymbol?.ID.Symbol, securityType, market);
+                            leanSymbol = Symbol.Create(leanBaseSymbol.ID.Symbol, securityType, market);
                             break;
 
                         default:
