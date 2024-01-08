@@ -44,16 +44,21 @@ namespace QuantConnect.Polygon
             {
                 if (!_brokerageSymbolsCache.TryGetValue(symbol, out var brokerageSymbol))
                 {
+                    var ticker = symbol.Value.Replace(" ", "");
                     switch (symbol.SecurityType)
                     {
                         case SecurityType.Equity:
+                            brokerageSymbol = ticker;
+                            break;
+
+
                         case SecurityType.Index:
-                            brokerageSymbol = symbol.Value.Replace(" ", "");
+                            brokerageSymbol = $"I:{ticker}";
                             break;
 
                         case SecurityType.Option:
                         case SecurityType.IndexOption:
-                            brokerageSymbol = $"O:{symbol.Value.Replace(" ", "")}";
+                            brokerageSymbol = $"O:{ticker}";
                             break;
 
                         default:
@@ -131,6 +136,10 @@ namespace QuantConnect.Polygon
                             leanSymbol = Symbol.Create(brokerageSymbol, securityType, market);
                             break;
 
+                        case SecurityType.Index:
+                            leanSymbol = Symbol.Create(leanBaseSymbol?.ID.Symbol, securityType, market);
+                            break;
+
                         default:
                             throw new Exception($"PolygonSymbolMapper.GetLeanSymbol(): unsupported security type: {securityType}");
                     }
@@ -172,6 +181,10 @@ namespace QuantConnect.Polygon
             {
                 return GetLeanOptionSymbol(polygonSymbol);
             }
+            else if (polygonSymbol.StartsWith("I:"))
+            {
+                return GetLeanIndexSymbol(polygonSymbol);
+            }
 
             return GetLeanSymbol(polygonSymbol, SecurityType.Equity, Market.USA);
         }
@@ -196,8 +209,16 @@ namespace QuantConnect.Polygon
                 ? Symbol.Create(IndexOptionSymbol.MapToUnderlying(ticker), SecurityType.Index, Market.USA)
                 : Symbol.Create(ticker, SecurityType.Equity, Market.USA);
             var symbol = Symbol.CreateOption(underlying, ticker, Market.USA, OptionStyle.American, optionRight, strike, expirationDate);
-            _leanSymbolsCache[polygonSymbol] = symbol;
 
+            return symbol;
+        }
+
+        /// <summary>
+        /// Gets the Lean index symbol for the specified Polygon symbol
+        /// </summary>
+        private Symbol GetLeanIndexSymbol(string polygonSymbol)
+        {
+            var symbol = Symbol.Create(polygonSymbol.Substring(2), SecurityType.Index, Market.USA);
             return symbol;
         }
     }
