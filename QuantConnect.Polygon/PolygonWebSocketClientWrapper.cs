@@ -157,9 +157,11 @@ namespace QuantConnect.Polygon
 
             var waitHandles = new WaitHandle[] { subscribedEvent.WaitHandle, errorEvent.WaitHandle };
             var subscribed = false;
+            var triedSubscription = false;
 
             foreach (var protentialPrefix in GetSubscriptionPefixes(config.SecurityType, config.TickType, config.Resolution))
             {
+                triedSubscription = true;
                 subscribedEvent.Reset();
                 errorEvent.Reset();
 
@@ -169,16 +171,10 @@ namespace QuantConnect.Polygon
                 // Wait for the subscribed event or error event
                 var index = WaitHandle.WaitAny(waitHandles, TimeSpan.FromSeconds(30));
 
-                // Quickly try the next prefix if we get an error
-                if (index == 1)
+                // Quickly try the next prefix if we get an error or timeout
+                if (index != 0)
                 {
                     continue;
-                }
-
-                // Check for timeout
-                if (index == WaitHandle.WaitTimeout)
-                {
-                    throw new TimeoutException($"PolygonWebSocketClientWrapper.Subscribe(): Timeout waiting for subscription confirmation for {subscriptionTicker}");
                 }
 
                 Log.Trace($"PolygonWebSocketClientWrapper.Subscribe(): Subscribed to {subscriptionTicker}");
@@ -192,7 +188,7 @@ namespace QuantConnect.Polygon
 
             Message -= ProcessMessage;
 
-            if (!subscribed)
+            if (triedSubscription && !subscribed)
             {
                 throw new Exception($"PolygonWebSocketClientWrapper.Subscribe(): Failed to subscribe to {ticker}. " +
                     $"Make sure your subscription plan allows streaming {config.TickType.ToString().ToLowerInvariant()} data.");
@@ -241,6 +237,17 @@ namespace QuantConnect.Polygon
             if (_prefixes.TryGetValue((securityType, tickType), out var prefix))
             {
                 yield return prefix;
+                yield break;
+            }
+
+            if (securityType == SecurityType.Index)
+            {
+                if (tickType != TickType.Trade || resolution == Resolution.Tick)
+                {
+                    yield break;
+                }
+
+                yield return "A";
                 yield break;
             }
 
@@ -345,6 +352,9 @@ namespace QuantConnect.Polygon
                 case SecurityType.IndexOption:
                     return BaseUrl + "/options";
 
+                case SecurityType.Index:
+                    return BaseUrl + "/indices";
+
                 default:
                     throw new Exception($"Unsupported security type: {securityType}");
             }
@@ -355,6 +365,7 @@ namespace QuantConnect.Polygon
             switch (securityType)
             {
                 case SecurityType.Equity:
+                case SecurityType.Index:
                     return new List<SecurityType> { securityType };
 
                 case SecurityType.Option:
