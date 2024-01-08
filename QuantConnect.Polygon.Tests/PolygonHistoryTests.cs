@@ -208,7 +208,6 @@ namespace QuantConnect.Tests.Polygon
             new TestCaseData(Symbols.USDJPY, Resolution.Minute, TickType.Trade),
             new TestCaseData(Symbols.BTCUSD, Resolution.Minute, TickType.Trade),
             new TestCaseData(Symbols.DE10YBEUR, Resolution.Minute, TickType.Trade),
-            new TestCaseData(Symbols.SPX, Resolution.Minute, TickType.Trade),
             new TestCaseData(Symbols.Future_ESZ18_Dec2018, Resolution.Minute, TickType.Trade),
 
             // Supported security type and resolution, unsupported tick type
