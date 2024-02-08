@@ -1,5 +1,5 @@
 {
-    "description": "Polygon is a high quality streaming and historical data source with integrations to market prices, news, fundamentals, and corporate action events.",
+    "description": "Polygon is a high-quality streaming and historical data source with integrations to market prices, news, fundamentals, and corporate action events. Our integration with polygon supports research, backtesting, optimization, and live-trading strategies.",
     "platforms-features": [
         {
             "Platform Support": ["Cloud Platform", "Local Platform", "LEAN CLI"],
@@ -10,5 +10,6 @@
         }
     ],
     "data-supported": [ "Equity", "Equity Options", "Indexes", "Index Options" ], 
+    "documentation": "/docs/v2/lean-cli/datasets/polygon",
     "more-information": "https://www.polygon.io/"
 }
