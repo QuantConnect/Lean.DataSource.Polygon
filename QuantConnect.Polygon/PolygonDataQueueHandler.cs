@@ -52,13 +52,13 @@ namespace QuantConnect.Polygon
             SecurityType.Index,
         });
 
-        private readonly string _apiKey;
+        private string _apiKey;
 
-        private readonly PolygonAggregationManager _dataAggregator;
+        private PolygonAggregationManager _dataAggregator;
 
-        protected readonly PolygonSubscriptionManager _subscriptionManager;
+        protected PolygonSubscriptionManager _subscriptionManager;
 
-        private readonly List<ExchangeMapping> _exchangeMappings;
+        private List<ExchangeMapping> _exchangeMappings;
         private readonly PolygonSymbolMapper _symbolMapper = new();
         private readonly MarketHoursDatabase _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
         private readonly Dictionary<Symbol, DateTimeZone> _symbolExchangeTimeZones = new();
@@ -115,10 +115,21 @@ namespace QuantConnect.Polygon
         {
             if (string.IsNullOrWhiteSpace(apiKey))
             {
-                throw new PolygonAuthenticationException("Missing Polygon.io API key");
+                // If the API key is not provided, we can't do anything.
+                // The handler might going to be initialized using a node packet job.
+                return;
             }
 
             _apiKey = apiKey;
+
+            Initialize(maxSubscriptionsPerWebSocket, streamingEnabled);
+        }
+
+        /// <summary>
+        /// Initializes the data queue handler and validates the product subscription
+        /// </summary>
+        private void Initialize(int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
+        {
             _dataAggregator = new PolygonAggregationManager();
             RestApiClient = new PolygonRestApiClient(_apiKey);
             _optionChainProvider = new CachingOptionChainProvider(new PolygonOptionChainProvider(RestApiClient, _symbolMapper));
@@ -144,7 +155,7 @@ namespace QuantConnect.Polygon
         /// Returns whether the data provider is connected
         /// </summary>
         /// <returns>True if the data provider is connected</returns>
-        public bool IsConnected => _subscriptionManager.IsConnected;
+        public bool IsConnected => _subscriptionManager != null && _subscriptionManager.IsConnected;
 
         /// <summary>
         /// Sets the job we're subscribing for
@@ -152,6 +163,20 @@ namespace QuantConnect.Polygon
         /// <param name="job">Job we're subscribing for</param>
         public void SetJob(LiveNodePacket job)
         {
+            job.BrokerageData.TryGetValue("polygon-api-key", out _apiKey);
+            if (string.IsNullOrEmpty(_apiKey))
+            {
+                throw new ArgumentException("The PolygonDataQueueHandler requires an API key");
+            }
+
+            var maxSubscriptionsPerWebSocket = 0;
+            if (!job.BrokerageData.TryGetValue("polygon-max-subscriptions-per-websocket", out var maxSubscriptionsPerWebSocketStr) ||
+                !int.TryParse(maxSubscriptionsPerWebSocketStr, out maxSubscriptionsPerWebSocket))
+            {
+                maxSubscriptionsPerWebSocket = -1;
+            }
+
+            Initialize(maxSubscriptionsPerWebSocket);
         }
 
         /// <summary>
@@ -339,7 +364,7 @@ namespace QuantConnect.Polygon
             var response = RestApiClient.DownloadAndParseData<ExchangesResponse>(request).SingleOrDefault();
             if (response == null)
             {
-                throw new Exception($"Failed to download exchange mappings from {uri}. Make sure your API key is valid.");
+                throw new PolygonAuthenticationException($"Failed to download exchange mappings from {uri}. Make sure your API key is valid.");
             }
 
             return response.Results.ToList();

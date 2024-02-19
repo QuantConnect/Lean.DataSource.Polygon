@@ -15,12 +15,15 @@
 */
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using Microsoft.CodeAnalysis;
 using NUnit.Framework;
 using QuantConnect.Configuration;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
+using QuantConnect.Packets;
 using QuantConnect.Polygon;
 using QuantConnect.Util;
 
@@ -37,6 +40,11 @@ namespace QuantConnect.Tests.Polygon
         {
             using var polygon = new PolygonDataQueueHandler(_apiKey);
 
+            AssertConnection(polygon);
+        }
+
+        private void AssertConnection(PolygonDataQueueHandler polygon)
+        {
             Assert.IsFalse(polygon.IsConnected);
 
             var config = GetConfigs()[0];
@@ -54,12 +62,9 @@ namespace QuantConnect.Tests.Polygon
         [Test]
         public void ThrowsOnFailedAuthentication()
         {
-            using var polygon = new PolygonDataQueueHandler("invalidapikey");
-
-            var config = GetConfigs()[0];
             Assert.Throws<PolygonAuthenticationException>(() =>
             {
-                polygon.Subscribe(config, (sender, args) => { });
+                using var polygon = new PolygonDataQueueHandler("invalidapikey");
             });
         }
 
@@ -84,6 +89,28 @@ namespace QuantConnect.Tests.Polygon
             Assert.Throws<NotSupportedException>(() => polygon.Subscribe(configs[i], (sender, args) => { }));
         }
 
+        [Test]
+        public void CanInitializeUsingJobPacket()
+        {
+            Config.Set("polygon-api-key", "");
+
+            var job = new LiveNodePacket
+            {
+                BrokerageData = new Dictionary<string, string>() { { "polygon-api-key", _apiKey } }
+            };
+
+            using var polygon = new PolygonDataQueueHandler();
+
+            Assert.IsFalse(polygon.IsConnected);
+
+            polygon.SetJob(job);
+
+            AssertConnection(polygon);
+
+            // Restore the API key after the test
+            Config.Set("polygon-api-key", _apiKey);
+        }
+
         private SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)
         {
             return new SubscriptionDataConfig(
@@ -102,27 +129,18 @@ namespace QuantConnect.Tests.Polygon
         /// </summary>
         protected virtual SubscriptionDataConfig[] GetConfigs()
         {
-            var spyOptions = new[] { 463m, 464m, 465m, 466m, 467m }.Select(strike => GetSubscriptionDataConfig<TradeBar>(
-                Symbol.CreateOption(
-                    Symbols.SPY,
-                    Market.USA,
-                    OptionStyle.American,
-                    OptionRight.Call,
-                    strike,
-                    new DateTime(2023, 12, 18)),
-                Resolution.Minute));
-
-            var aaplOptions = new[] { 195m, 197.5m, 200m, 202.5m, 205m }.Select(strike => GetSubscriptionDataConfig<TradeBar>(
-                Symbol.CreateOption(
-                    Symbols.AAPL,
-                    Market.USA,
-                    OptionStyle.American,
-                    OptionRight.Call,
-                    strike,
-                    new DateTime(2023, 12, 15)),
-                Resolution.Minute));
-
-            return spyOptions.Concat(aaplOptions).ToArray();
+            return new[] { "SPY", "AAPL", "GOOG", "MSFT" }
+                .Select(ticker =>
+                {
+                    var symbol = Symbol.Create(ticker, SecurityType.Equity, Market.USA);
+                    return new[]
+                    {
+                        GetSubscriptionDataConfig<TradeBar>(symbol, Resolution.Second),
+                        GetSubscriptionDataConfig<QuoteBar>(symbol, Resolution.Second),
+                    };
+                })
+                .SelectMany(x => x)
+                .ToArray();
         }
     }
 }
