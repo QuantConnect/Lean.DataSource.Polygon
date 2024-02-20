@@ -22,7 +22,7 @@ using QuantConnect.Logging;
 using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
     /// <summary>
     /// WebSocket client wrapper for Polygon.io

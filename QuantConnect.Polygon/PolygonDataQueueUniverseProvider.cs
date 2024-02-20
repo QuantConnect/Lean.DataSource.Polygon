@@ -17,7 +17,7 @@ using QuantConnect.Interfaces;
 using QuantConnect.Logging;
 using QuantConnect.Util;
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
     public partial class PolygonDataProvider : IDataQueueUniverseProvider
     {

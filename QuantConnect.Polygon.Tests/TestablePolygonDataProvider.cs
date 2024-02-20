@@ -14,9 +14,7 @@
  * limitations under the License.
 */
 
-using QuantConnect.Polygon;
-
-namespace QuantConnect.Tests.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
     public class TestablePolygonDataProvider : PolygonDataProvider
     {

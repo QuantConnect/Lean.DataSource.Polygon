@@ -15,10 +15,10 @@
 */
 
 using NUnit.Framework;
-using QuantConnect.Polygon;
 using System;
+using QuantConnect.Tests;
 
-namespace QuantConnect.Tests.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
     [TestFixture]
     public class PolygonSymbolMapperTests

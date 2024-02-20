@@ -18,10 +18,8 @@ using NUnit.Framework;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
 using QuantConnect.Logging;
-using QuantConnect.Polygon;
 using QuantConnect.Securities;
 using QuantConnect.Util;
-using Microsoft.CodeAnalysis;
 using Newtonsoft.Json;
 using QuantConnect.Configuration;
 using System.Diagnostics;
@@ -29,8 +27,9 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using RestSharp;
+using QuantConnect.Tests;
 
-namespace QuantConnect.Tests.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
     [TestFixture]
     public class PolygonHistoryTests

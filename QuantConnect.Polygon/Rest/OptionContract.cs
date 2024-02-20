@@ -16,7 +16,7 @@
 using Newtonsoft.Json;
 using QuantConnect.Util;
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
     /// <summary>
     /// Models a option contract as returned by the Polygon.io REST API

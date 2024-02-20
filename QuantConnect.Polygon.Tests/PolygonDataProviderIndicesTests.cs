@@ -23,10 +23,9 @@ using QuantConnect.Data;
 using QuantConnect.Data.Market;
 using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 using QuantConnect.Logging;
-using QuantConnect.Polygon;
 using QuantConnect.Util;
 
-namespace QuantConnect.Tests.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
     [TestFixture]
     [Explicit("Tests are dependent on network and take long")]

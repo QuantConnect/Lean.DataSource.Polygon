@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
     /// <summary>
     /// Models a Polygon.io REST API message containing a list of quote ticks

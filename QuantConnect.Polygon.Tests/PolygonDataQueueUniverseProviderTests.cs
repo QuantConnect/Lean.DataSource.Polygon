@@ -15,16 +15,14 @@
 */
 
 using NUnit.Framework;
-using QuantConnect.Polygon;
 using QuantConnect.Util;
-using Microsoft.CodeAnalysis;
 using QuantConnect.Configuration;
 using System;
 using System.Linq;
 using QuantConnect.Lean.Engine.DataFeeds;
 using System.Collections.Generic;
 
-namespace QuantConnect.Tests.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
     [TestFixture]
     public class PolygonDataQueueUniverseProviderTests

@@ -1,3 +1,3 @@
 ﻿using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("QuantConnect.Polygon.Tests")]
+[assembly: InternalsVisibleTo("QuantConnect.Lean.DataSource.Polygon.Tests")]

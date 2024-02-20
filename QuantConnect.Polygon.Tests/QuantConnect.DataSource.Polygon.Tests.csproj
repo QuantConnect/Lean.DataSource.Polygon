@@ -6,10 +6,10 @@
 		<IsPackable>false</IsPackable>
 		<TestProjectType>UnitTest</TestProjectType>
 		<OutputPath>bin\$(Configuration)\</OutputPath>
-		<Product>QuantConnect.Polygon.Tests</Product>
-		<AssemblyName>QuantConnect.Polygon.Tests</AssemblyName>
-		<RootNamespace>QuantConnect.Polygon.Tests</RootNamespace>
-		<AssemblyTitle>QuantConnect.Polygon.Tests</AssemblyTitle>
+		<Product>QuantConnect.Lean.DataSource.Polygon.Tests</Product>
+		<AssemblyName>QuantConnect.Lean.DataSource.Polygon.Tests</AssemblyName>
+		<RootNamespace>QuantConnect.Lean.DataSource.Polygon.Tests</RootNamespace>
+		<AssemblyTitle>QuantConnect.Lean.DataSource.Polygon.Tests</AssemblyTitle>
 		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 	</PropertyGroup>
 
@@ -24,7 +24,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\QuantConnect.Polygon\QuantConnect.Polygon.csproj" />
+		<ProjectReference Include="..\QuantConnect.Polygon\QuantConnect.DataSource.Polygon.csproj" />
 		<ProjectReference Include="..\..\Lean\Tests\QuantConnect.Tests.csproj" />
 	</ItemGroup>
 

@@ -17,7 +17,7 @@ using QuantConnect.Interfaces;
 using QuantConnect.Logging;
 using RestSharp;
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
     /// <summary>
     /// Polygon.io implementation of <see cref="IOptionChainProvider"/>

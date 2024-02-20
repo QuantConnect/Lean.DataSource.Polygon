@@ -19,7 +19,7 @@ using QuantConnect.Securities;
 using QuantConnect.Util;
 using System.Collections.Concurrent;
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
     /// <summary>
     /// Data downloader class for pulling data from Polygon.io

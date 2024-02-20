@@ -33,7 +33,7 @@ using QuantConnect.Util;
 using RestSharp;
 using QuantConnect.Lean.Engine.DataFeeds;
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
     /// <summary>
     /// Polygon.io implementation of <see cref="IDataQueueHandler"/> and <see cref="IHistoryProvider"/>

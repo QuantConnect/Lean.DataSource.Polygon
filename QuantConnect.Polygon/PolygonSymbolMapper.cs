@@ -17,7 +17,7 @@ using QuantConnect.Brokerages;
 using QuantConnect.Securities.IndexOption;
 using System.Globalization;
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
     /// <summary>
     /// Provides the mapping between Lean symbols and Polygon.io symbols.
