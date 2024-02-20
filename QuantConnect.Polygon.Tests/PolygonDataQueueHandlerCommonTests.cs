@@ -111,6 +111,26 @@ namespace QuantConnect.Tests.Polygon
             Config.Set("polygon-api-key", _apiKey);
         }
 
+        [Test]
+        public void JobPacketWontOverrideCredentials()
+        {
+            var job = new LiveNodePacket
+            {
+                BrokerageData = new Dictionary<string, string>() { { "polygon-api-key", "InvalidApiKeyThatWontBeUsed" } }
+            };
+
+            // This should pick up the API key from the configuration
+            using var polygon = new PolygonDataQueueHandler();
+
+            Assert.IsFalse(polygon.IsConnected);
+
+            // This should not override the API key
+            polygon.SetJob(job);
+
+            // Since API key was not overriden, this should work
+            AssertConnection(polygon);
+        }
+
         private SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)
         {
             return new SubscriptionDataConfig(

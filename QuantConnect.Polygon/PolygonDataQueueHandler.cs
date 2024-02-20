@@ -63,6 +63,7 @@ namespace QuantConnect.Polygon
         private readonly MarketHoursDatabase _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
         private readonly Dictionary<Symbol, DateTimeZone> _symbolExchangeTimeZones = new();
 
+        private bool _initialized;
         private bool _disposed;
 
         private bool _unsupportedSecurityTypeMessageLogged;
@@ -130,6 +131,7 @@ namespace QuantConnect.Polygon
         /// </summary>
         private void Initialize(int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
         {
+            _initialized = true;
             _dataAggregator = new PolygonAggregationManager();
             RestApiClient = new PolygonRestApiClient(_apiKey);
             _optionChainProvider = new CachingOptionChainProvider(new PolygonOptionChainProvider(RestApiClient, _symbolMapper));
@@ -163,11 +165,17 @@ namespace QuantConnect.Polygon
         /// <param name="job">Job we're subscribing for</param>
         public void SetJob(LiveNodePacket job)
         {
-            job.BrokerageData.TryGetValue("polygon-api-key", out _apiKey);
-            if (string.IsNullOrEmpty(_apiKey))
+            if (_initialized)
             {
-                throw new ArgumentException("The PolygonDataQueueHandler requires an API key");
+                return;
             }
+
+            if (!job.BrokerageData.TryGetValue("polygon-api-key", out var apiKey))
+            {
+                throw new ArgumentException("The Polygon.io API key is missing from the brokerage data.");
+            }
+
+            _apiKey = apiKey;
 
             var maxSubscriptionsPerWebSocket = 0;
             if (!job.BrokerageData.TryGetValue("polygon-max-subscriptions-per-websocket", out var maxSubscriptionsPerWebSocketStr) ||
