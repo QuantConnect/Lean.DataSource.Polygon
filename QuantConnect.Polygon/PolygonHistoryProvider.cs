@@ -25,7 +25,7 @@ using QuantConnect.Data.Consolidators;
 
 namespace QuantConnect.Polygon
 {
-    public partial class PolygonDataQueueHandler : SynchronizingHistoryProvider
+    public partial class PolygonDataProvider : SynchronizingHistoryProvider
     {
         private int _dataPointCount;
 
@@ -83,7 +83,7 @@ namespace QuantConnect.Polygon
             // which would be too slow for anything above second resolution or long time spans.
             if (request.TickType == TickType.Quote && request.Resolution > Resolution.Second)
             {
-                Log.Error("PolygonDataQueueHandler.GetHistory(): Quote data above second resolution is not supported.");
+                Log.Error("PolygonDataProvider.GetHistory(): Quote data above second resolution is not supported.");
                 yield break;
             }
 

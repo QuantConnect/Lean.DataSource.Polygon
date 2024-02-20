@@ -18,11 +18,11 @@ using QuantConnect.Polygon;
 
 namespace QuantConnect.Tests.Polygon
 {
-    public class TestablePolygonDataQueueHandler : PolygonDataQueueHandler
+    public class TestablePolygonDataProvider : PolygonDataProvider
     {
         public PolygonSubscriptionManager SubscriptionManager => _subscriptionManager;
 
-        public TestablePolygonDataQueueHandler(string apiKey, int maxSubscriptionsPerWebSocket)
+        public TestablePolygonDataProvider(string apiKey, int maxSubscriptionsPerWebSocket)
             : base(apiKey, maxSubscriptionsPerWebSocket)
         {
         }

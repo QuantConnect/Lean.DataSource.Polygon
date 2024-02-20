@@ -25,7 +25,7 @@ namespace QuantConnect.Tests.Polygon
 {
     [TestFixture]
     [Explicit("Tests are dependent on network and take long")]
-    public class PolygonDataQueueHandlerStocksTests : PolygonDataQueueHandlerBaseTests
+    public class PolygonDataProviderStocksTests : PolygonDataProviderBaseTests
     {
         /// <summary>
         /// The subscription data configs to be used in the tests. At least 2 configs are required

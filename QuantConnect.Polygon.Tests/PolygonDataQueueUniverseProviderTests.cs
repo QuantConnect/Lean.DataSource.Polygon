@@ -30,12 +30,12 @@ namespace QuantConnect.Tests.Polygon
     public class PolygonDataQueueUniverseProviderTests
     {
         private readonly string _apiKey = Config.Get("polygon-api-key");
-        private TestablePolygonDataQueueHandler _polygon;
+        private TestablePolygonDataProvider _polygon;
 
         [SetUp]
         public void SetUp()
         {
-            _polygon = new TestablePolygonDataQueueHandler(_apiKey);
+            _polygon = new TestablePolygonDataProvider(_apiKey);
         }
 
         [TearDown]
@@ -72,13 +72,13 @@ namespace QuantConnect.Tests.Polygon
             Assert.IsTrue(optionChain.All(x => x.ID.Date.Date >= date));
         }
 
-        private class TestablePolygonDataQueueHandler : PolygonDataQueueHandler
+        private class TestablePolygonDataProvider : PolygonDataProvider
         {
             public ManualTimeProvider TimeProviderInstance = new ManualTimeProvider();
 
             protected override ITimeProvider TimeProvider => TimeProviderInstance;
 
-            public TestablePolygonDataQueueHandler(string apiKey)
+            public TestablePolygonDataProvider(string apiKey)
                 : base(apiKey, streamingEnabled: false)
             {
             }

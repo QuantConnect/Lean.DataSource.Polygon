@@ -36,12 +36,12 @@ namespace QuantConnect.Tests.Polygon
     public class PolygonHistoryTests
     {
         private readonly string _apiKey = Config.Get("polygon-api-key");
-        private PolygonDataQueueHandler _historyProvider;
+        private PolygonDataProvider _historyProvider;
 
         [SetUp]
         public void SetUp()
         {
-            _historyProvider = new PolygonDataQueueHandler(_apiKey, streamingEnabled: false);
+            _historyProvider = new PolygonDataProvider(_apiKey, streamingEnabled: false);
             _historyProvider.Initialize(new HistoryProviderInitializeParameters(null, null, null, null, null, null, null, false, null, null));
 
         }
@@ -332,7 +332,7 @@ namespace QuantConnect.Tests.Polygon
             }
         }
 
-        private class TestPolygonHistoryProvider : PolygonDataQueueHandler
+        private class TestPolygonHistoryProvider : PolygonDataProvider
         {
             public TestPolygonRestApiClient TestRestApiClient => RestApiClient as TestPolygonRestApiClient;
 
@@ -349,7 +349,7 @@ namespace QuantConnect.Tests.Polygon
             }
         }
 
-        private class ConfigurableRateLimitedPolygonHistoryProvider : PolygonDataQueueHandler
+        private class ConfigurableRateLimitedPolygonHistoryProvider : PolygonDataProvider
         {
             public ConfigurableRateLimitedPolygonHistoryProvider(string apiKey, RateGate rateGate)
                 : base(apiKey, streamingEnabled: false)
@@ -370,7 +370,7 @@ namespace QuantConnect.Tests.Polygon
             }
         }
 
-        private class ConfigurableResponseLimitPolygonHistoryProvider : PolygonDataQueueHandler
+        private class ConfigurableResponseLimitPolygonHistoryProvider : PolygonDataProvider
         {
             public ConfigurableResponseLimitPolygonHistoryProvider(string apiKey, int responseLimit)
                 : base(apiKey, streamingEnabled: false)

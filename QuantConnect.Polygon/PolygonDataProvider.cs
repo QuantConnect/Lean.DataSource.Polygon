@@ -42,7 +42,7 @@ namespace QuantConnect.Polygon
     /// Polygon.io equities documentation: https://polygon.io/docs/stocks/getting-started
     /// Polygon.io options documentation: https://polygon.io/docs/options/getting-started
     /// </remarks>
-    public partial class PolygonDataQueueHandler : IDataQueueHandler
+    public partial class PolygonDataProvider : IDataQueueHandler
     {
         private static readonly ReadOnlyCollection<SecurityType> _supportedSecurityTypes = Array.AsReadOnly(new[]
         {
@@ -83,28 +83,28 @@ namespace QuantConnect.Polygon
         protected virtual PolygonRestApiClient RestApiClient { get; set; }
 
         /// <summary>
-        /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
+        /// Creates and initializes a new instance of the <see cref="PolygonDataProvider"/> class
         /// </summary>
-        public PolygonDataQueueHandler()
+        public PolygonDataProvider()
             : this(Config.Get("polygon-api-key"), Config.GetInt("polygon-max-subscriptions-per-websocket", -1))
         {
         }
 
         /// <summary>
-        /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
+        /// Creates and initializes a new instance of the <see cref="PolygonDataProvider"/> class
         /// </summary>
         /// <param name="apiKey">The Polygon API key for authentication</param>
         /// <param name="streamingEnabled">
         /// Whether this handle will be used for streaming data.
         /// If false, the handler is supposed to be used as a history provider only.
         /// </param>
-        public PolygonDataQueueHandler(string apiKey, bool streamingEnabled = true)
+        public PolygonDataProvider(string apiKey, bool streamingEnabled = true)
             : this(apiKey, Config.GetInt("polygon-max-subscriptions-per-websocket", -1), streamingEnabled)
         {
         }
 
         /// <summary>
-        /// Creates and initializes a new instance of the <see cref="PolygonDataQueueHandler"/> class
+        /// Creates and initializes a new instance of the <see cref="PolygonDataProvider"/> class
         /// </summary>
         /// <param name="apiKey">The Polygon.io API key for authentication</param>
         /// <param name="maxSubscriptionsPerWebSocket">The maximum number of subscriptions allowed per websocket</param>
@@ -112,7 +112,7 @@ namespace QuantConnect.Polygon
         /// Whether this handle will be used for streaming data.
         /// If false, the handler is supposed to be used as a history provider only.
         /// </param>
-        public PolygonDataQueueHandler(string apiKey, int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
+        public PolygonDataProvider(string apiKey, int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
             {
@@ -200,7 +200,7 @@ namespace QuantConnect.Polygon
                 return null;
             }
 
-            Log.Trace($"PolygonDataQueueHandler.Subscribe(): Subscribing to {dataConfig.Symbol} | {dataConfig.TickType}");
+            Log.Trace($"PolygonDataProvider.Subscribe(): Subscribing to {dataConfig.Symbol} | {dataConfig.TickType}");
 
             _subscriptionManager.Subscribe(dataConfig);
 
@@ -242,7 +242,7 @@ namespace QuantConnect.Polygon
             GC.SuppressFinalize(this);
         }
 
-        ~PolygonDataQueueHandler()
+        ~PolygonDataProvider()
         {
             Dispose(disposing: false);
         }
@@ -416,7 +416,7 @@ namespace QuantConnect.Polygon
             {
                 if (!_unsupportedSecurityTypeMessageLogged)
                 {
-                    Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported security type: {securityType}");
+                    Log.Trace($"PolygonDataProvider.IsSupported(): Unsupported security type: {securityType}");
                     _unsupportedSecurityTypeMessageLogged = true;
                 }
                 return false;
@@ -426,7 +426,7 @@ namespace QuantConnect.Polygon
             {
                 if (!_unsupportedTickTypeMessagedLogged)
                 {
-                    Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported tick type: {tickType}");
+                    Log.Trace($"PolygonDataProvider.IsSupported(): Unsupported tick type: {tickType}");
                     _unsupportedTickTypeMessagedLogged = true;
                 }
                 return false;
@@ -438,7 +438,7 @@ namespace QuantConnect.Polygon
             {
                 if (!_unsupportedDataTypeMessageLogged)
                 {
-                    Log.Trace($"PolygonDataQueueHandler.IsSupported(): Unsupported data type: {dataType}");
+                    Log.Trace($"PolygonDataProvider.IsSupported(): Unsupported data type: {dataType}");
                     _unsupportedDataTypeMessageLogged = true;
                 }
                 return false;
@@ -446,7 +446,7 @@ namespace QuantConnect.Polygon
 
             if (resolution < Resolution.Second && !_potentialUnsupportedResolutionMessageLogged)
             {
-                Log.Trace("PolygonDataQueueHandler.IsSupported(): " +
+                Log.Trace("PolygonDataProvider.IsSupported(): " +
                     $"Subscription for {securityType}-{dataType}-{tickType}-{resolution} will be attempted. " +
                     $"An Advanced Polygon.io subscription plan is required to stream tick data.");
                 _potentialUnsupportedResolutionMessageLogged = true;
@@ -454,7 +454,7 @@ namespace QuantConnect.Polygon
 
             if (tickType == TickType.Quote && !_potentialUnsupportedTickTypeMessageLogged)
             {
-                Log.Trace("PolygonDataQueueHandler.IsSupported(): " +
+                Log.Trace("PolygonDataProvider.IsSupported(): " +
                     $"Subscription for {securityType}-{dataType}-{tickType}-{resolution} will be attempted. " +
                     $"An Advanced Polygon.io subscription plan is required to stream quote data.");
                 _potentialUnsupportedTickTypeMessageLogged = true;
@@ -605,7 +605,7 @@ namespace QuantConnect.Polygon
             }
             catch (Exception e)
             {
-                Log.Error($"PolygonDataQueueHandler.ValidateSubscription(): Failed during validation, shutting down. Error : {e.Message}");
+                Log.Error($"PolygonDataProvider.ValidateSubscription(): Failed during validation, shutting down. Error : {e.Message}");
                 throw;
             }
         }
