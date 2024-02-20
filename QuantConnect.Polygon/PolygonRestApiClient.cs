@@ -19,7 +19,7 @@ using QuantConnect.Logging;
 using QuantConnect.Configuration;
 using QuantConnect.Util;
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
     /// <summary>
     /// Provides a common API to download data from Polygon.io's REST API

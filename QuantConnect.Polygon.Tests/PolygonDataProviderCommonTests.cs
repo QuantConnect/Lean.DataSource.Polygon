@@ -18,32 +18,30 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
-using Microsoft.CodeAnalysis;
 using NUnit.Framework;
 using QuantConnect.Configuration;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
 using QuantConnect.Packets;
-using QuantConnect.Polygon;
 using QuantConnect.Util;
 
-namespace QuantConnect.Tests.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
     [TestFixture]
     [Explicit("Tests are dependent on network and take long")]
-    public class PolygonDataQueueHandlerCommonTests
+    public class PolygonDataProviderCommonTests
     {
         private readonly string _apiKey = Config.Get("polygon-api-key");
 
         [Test]
         public void IsConnectedReturnsTrueOnlyAfterAWebSocketConnectionIsOpen()
         {
-            using var polygon = new PolygonDataQueueHandler(_apiKey);
+            using var polygon = new PolygonDataProvider(_apiKey);
 
             AssertConnection(polygon);
         }
 
-        private void AssertConnection(PolygonDataQueueHandler polygon)
+        private void AssertConnection(PolygonDataProvider polygon)
         {
             Assert.IsFalse(polygon.IsConnected);
 
@@ -64,7 +62,7 @@ namespace QuantConnect.Tests.Polygon
         {
             Assert.Throws<PolygonAuthenticationException>(() =>
             {
-                using var polygon = new PolygonDataQueueHandler("invalidapikey");
+                using var polygon = new PolygonDataProvider("invalidapikey");
             });
         }
 
@@ -72,7 +70,7 @@ namespace QuantConnect.Tests.Polygon
         public void RespectsMaximumWebSocketConnectionsAndSubscriptions(
             [Values(1, 2, 3, 4, 5)] int maxSubscriptionsPerWebSocket)
         {
-            using var polygon = new TestablePolygonDataQueueHandler(Config.Get("polygon-api-key"), maxSubscriptionsPerWebSocket);
+            using var polygon = new TestablePolygonDataProvider(Config.Get("polygon-api-key"), maxSubscriptionsPerWebSocket);
             var configs = GetConfigs();
 
             var i = 0;
@@ -99,7 +97,7 @@ namespace QuantConnect.Tests.Polygon
                 BrokerageData = new Dictionary<string, string>() { { "polygon-api-key", _apiKey } }
             };
 
-            using var polygon = new PolygonDataQueueHandler();
+            using var polygon = new PolygonDataProvider();
 
             Assert.IsFalse(polygon.IsConnected);
 
@@ -120,7 +118,7 @@ namespace QuantConnect.Tests.Polygon
             };
 
             // This should pick up the API key from the configuration
-            using var polygon = new PolygonDataQueueHandler();
+            using var polygon = new PolygonDataProvider();
 
             Assert.IsFalse(polygon.IsConnected);
 

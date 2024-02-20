@@ -19,14 +19,14 @@ using QuantConnect.Securities;
 using QuantConnect.Util;
 using System.Collections.Concurrent;
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
     /// <summary>
     /// Data downloader class for pulling data from Polygon.io
     /// </summary>
     public class PolygonDataDownloader : IDataDownloader, IDisposable
     {
-        private readonly PolygonDataQueueHandler _historyProvider;
+        private readonly PolygonDataProvider _historyProvider;
 
         private readonly MarketHoursDatabase _marketHoursDatabase;
 
@@ -37,7 +37,7 @@ namespace QuantConnect.Polygon
         /// <param name="subscriptionPlan">Polygon subscription plan</param>
         public PolygonDataDownloader(string apiKey)
         {
-            _historyProvider = new PolygonDataQueueHandler(apiKey, false);
+            _historyProvider = new PolygonDataProvider(apiKey, false);
             _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
         }
 

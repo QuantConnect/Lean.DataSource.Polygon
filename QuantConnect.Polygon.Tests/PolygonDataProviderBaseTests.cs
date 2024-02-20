@@ -25,12 +25,11 @@ using QuantConnect.Data;
 using QuantConnect.Data.Market;
 using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 using QuantConnect.Logging;
-using QuantConnect.Polygon;
 using QuantConnect.Util;
 
-namespace QuantConnect.Tests.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
-    public abstract class PolygonDataQueueHandlerBaseTests
+    public abstract class PolygonDataProviderBaseTests
     {
         protected readonly string ApiKey = Config.Get("polygon-api-key");
 
@@ -43,7 +42,7 @@ namespace QuantConnect.Tests.Polygon
             "Also, this test will only pass if the subscribed securities are liquid enough to get data in the test run time.")]
         public void CanSubscribeAndUnsubscribe()
         {
-            using var polygon = new PolygonDataQueueHandler(ApiKey);
+            using var polygon = new PolygonDataProvider(ApiKey);
             var unsubscribed = false;
 
             var configs = GetConfigs(Resolution.Second);
@@ -130,7 +129,7 @@ namespace QuantConnect.Tests.Polygon
             "Also, this test will only pass if the subscribed securities are liquid enough to get data in the test run time.")]
         public virtual void StreamsDataForDifferentResolutions(Resolution resolution, int period)
         {
-            using var polygon = new PolygonDataQueueHandler(ApiKey);
+            using var polygon = new PolygonDataProvider(ApiKey);
 
             var configs = GetConfigs(resolution);
             var receivedData = new List<BaseData>();

@@ -23,14 +23,13 @@ using QuantConnect.Data;
 using QuantConnect.Data.Market;
 using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 using QuantConnect.Logging;
-using QuantConnect.Polygon;
 using QuantConnect.Util;
 
-namespace QuantConnect.Tests.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
     [TestFixture]
     [Explicit("Tests are dependent on network and take long")]
-    public class PolygonDataQueueHandlerIndicesTests : PolygonDataQueueHandlerBaseTests
+    public class PolygonDataProviderIndicesTests : PolygonDataProviderBaseTests
     {
         // Overriding because tick data is not supported for indices
         [TestCase(Resolution.Second, 15)]
@@ -48,7 +47,7 @@ namespace QuantConnect.Tests.Polygon
             "Also, this test will only pass if the subscribed securities are liquid enough to get data in the test run time.")]
         public void TickDataIsNotSupportedForStreaming()
         {
-            using var polygon = new PolygonDataQueueHandler(ApiKey);
+            using var polygon = new PolygonDataProvider(ApiKey);
 
             var configs = GetConfigs(Resolution.Tick);
             var receivedData = new List<BaseData>();

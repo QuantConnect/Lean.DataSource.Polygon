@@ -17,12 +17,11 @@
 using NUnit.Framework;
 using QuantConnect.Configuration;
 using QuantConnect.Logging;
-using QuantConnect.Polygon;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace QuantConnect.Tests.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
     [TestFixture]
     [Explicit("Requires Polygon API key and depends on internet connection")]

@@ -21,7 +21,7 @@ using NUnit.Framework;
 using QuantConnect.Configuration;
 using QuantConnect.Logging;
 
-namespace QuantConnect.Tests.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
     [SetUpFixture]
     public class TestSetup

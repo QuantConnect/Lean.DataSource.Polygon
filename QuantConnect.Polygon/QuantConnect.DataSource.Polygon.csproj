@@ -3,10 +3,10 @@
 		<Configuration Condition=" '$(Configuration)' == '' ">Release</Configuration>
 		<Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
 		<TargetFramework>net6.0</TargetFramework>
-		<Product>QuantConnect.Polygon</Product>
-		<AssemblyName>QuantConnect.Polygon</AssemblyName>
-		<RootNamespace>QuantConnect.Polygon</RootNamespace>
-		<AssemblyTitle>QuantConnect.Polygon</AssemblyTitle>
+		<Product>QuantConnect.Lean.DataSource.Polygon</Product>
+		<AssemblyName>QuantConnect.Lean.DataSource.Polygon</AssemblyName>
+		<RootNamespace>QuantConnect.Lean.DataSource.Polygon</RootNamespace>
+		<AssemblyTitle>QuantConnect.Lean.DataSource.Polygon</AssemblyTitle>
 		<OutputType>Library</OutputType>
 		<OutputPath>bin\$(Configuration)\</OutputPath>
 		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>

@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
     /// <summary>
     /// Defines an exception generated on a failed authentication to Polygon services

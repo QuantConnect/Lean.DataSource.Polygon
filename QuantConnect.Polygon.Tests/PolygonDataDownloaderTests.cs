@@ -16,13 +16,12 @@
 
 using NUnit.Framework;
 using QuantConnect.Logging;
-using QuantConnect.Polygon;
 using QuantConnect.Util;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace QuantConnect.Tests.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
     [TestFixture]
     public class PolygonDataDownloaderTests

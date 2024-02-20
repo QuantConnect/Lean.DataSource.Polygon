@@ -17,7 +17,7 @@ using QuantConnect.Data;
 using QuantConnect.Data.Consolidators;
 using QuantConnect.Lean.Engine.DataFeeds;
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
     /// <summary>
     /// Aggregates Polygon.io trade bars into same or higher resolution bars

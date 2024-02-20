@@ -21,7 +21,7 @@ using QuantConnect.Logging;
 using QuantConnect.Util;
 using static QuantConnect.Brokerages.WebSocketClientWrapper;
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
     /// <summary>
     /// Subscription manager to handle the subscriptions for the Polygon data queue handler.

@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
     /// <summary>
     /// Models a single trade tick from a Polygon.io REST API response

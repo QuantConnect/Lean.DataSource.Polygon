@@ -19,28 +19,27 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
-using Microsoft.CodeAnalysis;
 using NUnit.Framework;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
 using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 using QuantConnect.Logging;
-using QuantConnect.Polygon;
+using QuantConnect.Tests;
 using QuantConnect.Util;
 
-namespace QuantConnect.Tests.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
     [TestFixture]
     [Explicit("Tests are dependent on network and take long")]
-    public class PolygonDataQueueHandlerOptionsTests : PolygonDataQueueHandlerBaseTests
+    public class PolygonDataProviderOptionsTests : PolygonDataProviderBaseTests
     {
         [Test]
         public void StressTest()
         {
             const int maxSubscriptions = 1000;
 
-            using var polygon = new PolygonDataQueueHandler(ApiKey, maxSubscriptions);
+            using var polygon = new PolygonDataProvider(ApiKey, maxSubscriptions);
             var optionChainProvider = new LiveOptionChainProvider(TestGlobals.DataCacheProvider, TestGlobals.MapFileProvider);
 
             var underlyingTickers = new[] { "SPY", "AAPL", "GOOG", "IBM" };
@@ -90,7 +89,7 @@ namespace QuantConnect.Tests.Polygon
         [Test]
         public void WeeklyIndexOptionsStreamDataSymbolIsCorrectlyMapped()
         {
-            using var polygon = new PolygonDataQueueHandler(ApiKey);
+            using var polygon = new PolygonDataProvider(ApiKey);
 
             var configs = new[] { 4675m, 4680m, 4685m, 4690m, 4695m }
                 .Select(strike =>

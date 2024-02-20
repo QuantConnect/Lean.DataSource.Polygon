@@ -17,9 +17,9 @@ using QuantConnect.Interfaces;
 using QuantConnect.Logging;
 using QuantConnect.Util;
 
-namespace QuantConnect.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon
 {
-    public partial class PolygonDataQueueHandler : IDataQueueUniverseProvider
+    public partial class PolygonDataProvider : IDataQueueUniverseProvider
     {
         private IOptionChainProvider _optionChainProvider;
 
@@ -52,7 +52,7 @@ namespace QuantConnect.Polygon
 
                 if (removedSymbols.Count > 0)
                 {
-                    Log.Trace("PolygonDataQueueHandler.LookupSymbols(): Removed contract(s) for having expiry in the past: " +
+                    Log.Trace("PolygonDataProvider.LookupSymbols(): Removed contract(s) for having expiry in the past: " +
                         $"{string.Join(",", removedSymbols.Select(x => x.Value))}");
                 }
             }
@@ -77,7 +77,7 @@ namespace QuantConnect.Polygon
                 throw new ArgumentException($"Unsupported security type {symbol.SecurityType}");
             }
 
-            Log.Trace($"PolygonDataQueueHandler.GetOptionChain(): Requesting symbol list for {symbol}");
+            Log.Trace($"PolygonDataProvider.GetOptionChain(): Requesting symbol list for {symbol}");
 
             return _optionChainProvider.GetOptionContractList(symbol, date);
         }
