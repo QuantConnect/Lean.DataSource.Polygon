@@ -68,14 +68,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <returns>An enumerable of BaseData points</returns>
         public IEnumerable<BaseData> GetHistory(HistoryRequest request)
         {
-            if (string.IsNullOrWhiteSpace(_apiKey))
-            {
-                throw new PolygonAuthenticationException("History calls for Polygon.io require an API key.");
-            }
-
             if (request.Symbol.IsCanonical() ||
                 !IsSupported(request.Symbol.SecurityType, request.DataType, request.TickType, request.Resolution))
             {
+                // It is Logged in IsSupported(...)
                 yield break;
             }
 
