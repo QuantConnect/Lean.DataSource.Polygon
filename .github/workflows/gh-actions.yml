@@ -43,4 +43,4 @@ jobs:
             # Build
             dotnet build /p:Configuration=Release /v:quiet /p:WarningLevel=1 QuantConnect.Polygon.sln
             # Run Tests
-            dotnet test ./QuantConnect.Polygon.Tests/bin/Release/QuantConnect.Polygon.Tests.dll
+            dotnet test ./QuantConnect.Polygon.Tests/bin/Release/QuantConnect.Lean.DataSource.Polygon.Tests.dll
