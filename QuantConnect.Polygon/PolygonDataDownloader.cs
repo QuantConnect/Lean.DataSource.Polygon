@@ -27,9 +27,19 @@ namespace QuantConnect.Lean.DataSource.Polygon
     /// </summary>
     public class PolygonDataDownloader : IDataDownloader, IDisposable
     {
+        /// <inheritdoc cref="PolygonDataProvider"/>
         private readonly PolygonDataProvider _historyProvider;
 
+        /// <inheritdoc cref="MarketHoursDatabase" />
         private readonly MarketHoursDatabase _marketHoursDatabase;
+
+        /// <inheritdoc cref="CancellationTokenSource" />
+        private readonly CancellationTokenSource _cancellationTokenSource = new();
+
+        /// <summary>
+        /// Collection to get history for <see cref="SecurityType.Option"/> in enumerable way
+        /// </summary>
+        private BlockingCollection<BaseData>? _blockingOptionCollection;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="PolygonDataDownloader"/>
@@ -66,7 +76,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             if (endUtc < startUtc)
             {
-                return Enumerable.Empty<BaseData>();
+                return null;
             }
 
             var dataType = LeanData.GetDataType(resolution, tickType);
@@ -93,11 +103,13 @@ namespace QuantConnect.Lean.DataSource.Polygon
             }
         }
 
-        private IEnumerable<BaseData>? GetCanonicalOptionHistory(Symbol symbol, DateTime startUtc, DateTime endUtc, Type dataType, Resolution resolution, SecurityExchangeHours exchangeHours, DateTimeZone dataTimeZone, TickType tickType)
+        private IEnumerable<BaseData>? GetCanonicalOptionHistory(Symbol symbol, DateTime startUtc, DateTime endUtc, Type dataType,
+            Resolution resolution, SecurityExchangeHours exchangeHours, DateTimeZone dataTimeZone, TickType tickType)
         {
-            var dataQueue = new BlockingCollection<BaseData>();
+            _blockingOptionCollection = new BlockingCollection<BaseData>();
             var symbols = GetOptions(symbol, startUtc, endUtc);
 
+            // Symbol can have a lot of Option parameters
             Task.Run(() => Parallel.ForEach(symbols, targetSymbol =>
             {
                 var historyRequest = new HistoryRequest(startUtc, endUtc, dataType, targetSymbol, resolution, exchangeHours, dataTimeZone,
@@ -105,6 +117,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
                 var history = _historyProvider.GetHistory(historyRequest);
 
+                // If history is null, it indicates an incorrect or missing request for historical data,
+                // so we skip processing for this symbol and move to the next one.
                 if (history == null)
                 {
                     return;
@@ -112,20 +126,22 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
                 foreach (var data in history)
                 {
-                    dataQueue.Add(data);
+                    _blockingOptionCollection.Add(data);
                 }
-            })).ContinueWith(_ =>
+            }), _cancellationTokenSource.Token).ContinueWith(_ =>
             {
-                dataQueue.CompleteAdding();
-            });
+                _blockingOptionCollection.CompleteAdding();
+            }, _cancellationTokenSource.Token);
 
-            // Validate: data is not null, we have gotten anything at least
-            if (!dataQueue.TryTake(out _, TimeSpan.FromSeconds(10)))
+            var options = _blockingOptionCollection.GetConsumingEnumerable();
+
+            // Validate if the collection contains at least one successful response from history.
+            if (!options.Any())
             {
                 return null;
             }
 
-            return dataQueue.GetConsumingEnumerable();
+            return options;
         }
 
         protected virtual IEnumerable<Symbol> GetOptions(Symbol symbol, DateTime startUtc, DateTime endUtc)
@@ -145,6 +161,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
         public void Dispose()
         {
             _historyProvider.DisposeSafely();
+            _blockingOptionCollection.DisposeSafely();
+            _cancellationTokenSource.DisposeSafely();
         }
     }
 }
