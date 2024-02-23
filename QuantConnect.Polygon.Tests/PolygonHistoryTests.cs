@@ -236,7 +236,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         };
 
         [TestCaseSource(nameof(UssuportedSecurityTypesResolutionsAndTickTypesTestCases))]
-        public void ReturnsEmptyForUnsupportedSecurityTypeResolutionOrTickType(Symbol symbol, Resolution resolution, TickType tickType)
+        public void ReturnsNullForUnsupportedSecurityTypeResolutionOrTickType(Symbol symbol, Resolution resolution, TickType tickType)
         {
             using var historyProvider = new TestPolygonHistoryProvider();
             var request = CreateHistoryRequest(symbol, resolution, tickType, TimeSpan.FromDays(100));

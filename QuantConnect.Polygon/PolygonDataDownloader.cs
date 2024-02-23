@@ -66,7 +66,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             if (endUtc < startUtc)
             {
-                return null;
+                return Enumerable.Empty<BaseData>();
             }
 
             var dataType = LeanData.GetDataType(resolution, tickType);
@@ -75,7 +75,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             if (symbol.IsCanonical())
             {
-                return GetBaseData(symbol, startUtc, endUtc, dataType, resolution, exchangeHours, dataTimeZone, tickType);
+                return GetCanonicalOptionHistory(symbol, startUtc, endUtc, dataType, resolution, exchangeHours, dataTimeZone, tickType);
             }
             else
             {
@@ -89,11 +89,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     return null;
                 }
 
-                return GetBaseData(historyData);
+                return historyData;
             }
         }
 
-        private IEnumerable<BaseData>? GetBaseData(Symbol symbol, DateTime startUtc, DateTime endUtc, Type dataType, Resolution resolution, SecurityExchangeHours exchangeHours, DateTimeZone dataTimeZone, TickType tickType)
+        private IEnumerable<BaseData>? GetCanonicalOptionHistory(Symbol symbol, DateTime startUtc, DateTime endUtc, Type dataType, Resolution resolution, SecurityExchangeHours exchangeHours, DateTimeZone dataTimeZone, TickType tickType)
         {
             var dataQueue = new BlockingCollection<BaseData>();
             var symbols = GetOptions(symbol, startUtc, endUtc);
@@ -125,15 +125,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 return null;
             }
 
-            return GetBaseData(dataQueue.GetConsumingEnumerable());
-        }
-
-        private IEnumerable<BaseData> GetBaseData(IEnumerable<BaseData> baseData)
-        {
-            foreach (var data in baseData)
-            {
-                yield return data;
-            }
+            return dataQueue.GetConsumingEnumerable();
         }
 
         protected virtual IEnumerable<Symbol> GetOptions(Symbol symbol, DateTime startUtc, DateTime endUtc)
