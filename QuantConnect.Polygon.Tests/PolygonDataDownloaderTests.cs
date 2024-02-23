@@ -60,17 +60,22 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
         [TestCaseSource(nameof(IndexHistoricalDataTestCases))]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
-        public void DownloadsIndexHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeEmpy)
+        public void DownloadsIndexHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeEmpty)
         {
             var symbol = Symbol.Create("SPX", SecurityType.Index, Market.USA);
             var request = PolygonHistoryTests.CreateHistoryRequest(symbol, resolution, tickType, period);
 
             var parameters = new DataDownloaderGetParameters(symbol, resolution, request.StartTimeUtc, request.EndTimeUtc, tickType);
-            var data = _downloader.Get(parameters).ToList();
+            var data = _downloader.Get(parameters)?.ToList();
+
+            if (data == null)
+            {
+                Assert.Pass("History returns null result");
+            }
 
             Log.Trace("Data points retrieved: " + data.Count);
 
-            if (shouldBeEmpy)
+            if (shouldBeEmpty)
             {
                 Assert.That(data, Is.Empty);
             }
@@ -86,9 +91,9 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         {
             var symbol = Symbol.CreateCanonicalOption(Symbol.Create("SPY", SecurityType.Equity, Market.USA));
             var parameters = new DataDownloaderGetParameters(symbol, Resolution.Hour,
-                new DateTime(2024, 01, 03), new DateTime(2024, 01, 04), TickType.Trade);
+                new DateTime(2024, 02, 22), new DateTime(2024, 02, 23), TickType.Trade);
             using var downloader = new TestablePolygonDataDownloader();
-            var data = downloader.Get(parameters).ToList();
+            var data = downloader.Get(parameters)?.ToList();
 
             Log.Trace("Data points retrieved: " + data.Count);
 

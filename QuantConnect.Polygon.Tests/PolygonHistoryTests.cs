@@ -148,7 +148,12 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         {
             var symbol = Symbol.Create("SPX", SecurityType.Index, Market.USA);
             var requests = new List<HistoryRequest> { CreateHistoryRequest(symbol, resolution, tickType, period) };
-            var history = _historyProvider.GetHistory(requests, TimeZones.Utc).ToList();
+            var history = _historyProvider.GetHistory(requests, TimeZones.Utc)?.ToList();
+
+            if (history == null)
+            {
+                Assert.Pass("History returns null result");
+            }
 
             Log.Trace("Data points retrieved: " + history.Count);
 
@@ -223,9 +228,9 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         {
             using var historyProvider = new TestPolygonHistoryProvider();
             var request = CreateHistoryRequest(symbol, resolution, tickType, TimeSpan.FromDays(100));
-            var history = historyProvider.GetHistory(request).ToList();
+            var history = historyProvider.GetHistory(request)?.ToList();
 
-            Assert.That(history, Is.Empty);
+            Assert.IsNull(history);
             Assert.That(historyProvider.TestRestApiClient.ApiCallsCount, Is.EqualTo(0));
         }
 

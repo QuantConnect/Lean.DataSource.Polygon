@@ -13,10 +13,11 @@
  * limitations under the License.
  */
 
-using QuantConnect.Configuration;
+using NodaTime;
 using QuantConnect.Data;
-using QuantConnect.Securities;
 using QuantConnect.Util;
+using QuantConnect.Securities;
+using QuantConnect.Configuration;
 using System.Collections.Concurrent;
 
 namespace QuantConnect.Lean.DataSource.Polygon
@@ -55,7 +56,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         /// <param name="parameters">Parameters for the historical data request</param>
         /// <returns>Enumerable of base data for this symbol</returns>
-        public IEnumerable<BaseData> Get(DataDownloaderGetParameters parameters)
+        public IEnumerable<BaseData>? Get(DataDownloaderGetParameters parameters)
         {
             var symbol = parameters.Symbol;
             var resolution = parameters.Resolution;
@@ -65,7 +66,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             if (endUtc < startUtc)
             {
-                yield break;
+                return null;
             }
 
             var dataType = LeanData.GetDataType(resolution, tickType);
@@ -74,35 +75,64 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             if (symbol.IsCanonical())
             {
-                using var dataQueue = new BlockingCollection<BaseData>();
-                var symbols = GetOptions(symbol, startUtc, endUtc);
-
-                Task.Run(() => Parallel.ForEach(symbols, targetSymbol =>
-                {
-                    var historyRequest = new HistoryRequest(startUtc, endUtc, dataType, targetSymbol, resolution, exchangeHours, dataTimeZone,
-                        resolution, true, false, DataNormalizationMode.Raw, tickType);
-                    foreach (var data in _historyProvider.GetHistory(historyRequest))
-                    {
-                        dataQueue.Add(data);
-                    }
-                })).ContinueWith(_ =>
-                {
-                    dataQueue.CompleteAdding();
-                });
-
-                foreach (var data in dataQueue.GetConsumingEnumerable())
-                {
-                    yield return data;
-                }
+                return GetBaseData(symbol, startUtc, endUtc, dataType, resolution, exchangeHours, dataTimeZone, tickType);
             }
             else
             {
                 var historyRequest = new HistoryRequest(startUtc, endUtc, dataType, symbol, resolution, exchangeHours, dataTimeZone, resolution,
                     true, false, DataNormalizationMode.Raw, tickType);
-                foreach (var data in _historyProvider.GetHistory(historyRequest))
+
+                var historyData = _historyProvider.GetHistory(historyRequest);
+
+                if (historyData == null)
                 {
-                    yield return data;
+                    return null;
                 }
+
+                return GetBaseData(historyData);
+            }
+        }
+
+        private IEnumerable<BaseData>? GetBaseData(Symbol symbol, DateTime startUtc, DateTime endUtc, Type dataType, Resolution resolution, SecurityExchangeHours exchangeHours, DateTimeZone dataTimeZone, TickType tickType)
+        {
+            var dataQueue = new BlockingCollection<BaseData>();
+            var symbols = GetOptions(symbol, startUtc, endUtc);
+
+            Task.Run(() => Parallel.ForEach(symbols, targetSymbol =>
+            {
+                var historyRequest = new HistoryRequest(startUtc, endUtc, dataType, targetSymbol, resolution, exchangeHours, dataTimeZone,
+                    resolution, true, false, DataNormalizationMode.Raw, tickType);
+
+                var history = _historyProvider.GetHistory(historyRequest);
+
+                if (history == null)
+                {
+                    return;
+                }
+
+                foreach (var data in history)
+                {
+                    dataQueue.Add(data);
+                }
+            })).ContinueWith(_ =>
+            {
+                dataQueue.CompleteAdding();
+            });
+
+            // Validate: data is not null, we have gotten anything at least
+            if (!dataQueue.TryTake(out _, TimeSpan.FromSeconds(10)))
+            {
+                return null;
+            }
+
+            return GetBaseData(dataQueue.GetConsumingEnumerable());
+        }
+
+        private IEnumerable<BaseData> GetBaseData(IEnumerable<BaseData> baseData)
+        {
+            foreach (var data in baseData)
+            {
+                yield return data;
             }
         }
 
