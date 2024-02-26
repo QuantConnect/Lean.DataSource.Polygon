@@ -30,6 +30,16 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private int _dataPointCount;
 
         /// <summary>
+        /// Indicates whether a error for an invalid start time has been fired, where the start time is greater than or equal to the end time in UTC.
+        /// </summary>
+        private bool _invalidStartTimeErrorFired;
+
+        /// <summary>
+        /// Indicates whether an error has been fired due to invalid conditions if the TickType is <seealso cref="TickType.Quote"/> and the <seealso cref="Resolution"/> is greater than one second.
+        /// </summary>
+        private bool _invalidTickTypeAndResolutionErrorFired;
+
+        /// <summary>
         /// Gets the total number of data points emitted by this history provider
         /// </summary>
         public override int DataPointCount => _dataPointCount;
@@ -87,9 +97,24 @@ namespace QuantConnect.Lean.DataSource.Polygon
             // which would be too slow for anything above second resolution or long time spans.
             if (request.TickType == TickType.Quote && request.Resolution > Resolution.Second)
             {
-                Log.Error("PolygonDataProvider.GetHistory(): Quote data above second resolution is not supported.");
+                if (!_invalidTickTypeAndResolutionErrorFired)
+                {
+                    Log.Error("PolygonDataProvider.GetHistory(): Quote data above second resolution is not supported.");
+                    _invalidTickTypeAndResolutionErrorFired = true;
+                }
                 return null;
             }
+
+            if (request.EndTimeUtc < request.StartTimeUtc)
+            {
+                if (!_invalidStartTimeErrorFired)
+                {
+                    Log.Error($"{nameof(PolygonDataProvider)}.{nameof(GetHistory)}:InvalidDateRange. The history request start date must precede the end date, no history returned");
+                    _invalidStartTimeErrorFired = true;
+                }
+                return null;
+            }
+
 
             // Use the trade aggregates API for resolutions above tick for fastest results
             if (request.TickType == TickType.Trade && request.Resolution > Resolution.Tick)
