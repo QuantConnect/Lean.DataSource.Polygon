@@ -33,14 +33,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <inheritdoc cref="MarketHoursDatabase" />
         private readonly MarketHoursDatabase _marketHoursDatabase;
 
-        /// <inheritdoc cref="CancellationTokenSource" />
-        private readonly CancellationTokenSource _cancellationTokenSource = new();
-
-        /// <summary>
-        /// Collection to get history for <see cref="SecurityType.Option"/> in enumerable way
-        /// </summary>
-        private BlockingCollection<BaseData>? _blockingOptionCollection;
-
         /// <summary>
         /// Initializes a new instance of the <see cref="PolygonDataDownloader"/>
         /// </summary>
@@ -106,7 +98,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private IEnumerable<BaseData>? GetCanonicalOptionHistory(Symbol symbol, DateTime startUtc, DateTime endUtc, Type dataType,
             Resolution resolution, SecurityExchangeHours exchangeHours, DateTimeZone dataTimeZone, TickType tickType)
         {
-            _blockingOptionCollection = new BlockingCollection<BaseData>();
+            var blockingOptionCollection = new BlockingCollection<BaseData>();
             var symbols = GetOptions(symbol, startUtc, endUtc);
 
             // Symbol can have a lot of Option parameters
@@ -126,14 +118,14 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
                 foreach (var data in history)
                 {
-                    _blockingOptionCollection.Add(data);
+                    blockingOptionCollection.Add(data);
                 }
-            }), _cancellationTokenSource.Token).ContinueWith(_ =>
+            })).ContinueWith(_ =>
             {
-                _blockingOptionCollection.CompleteAdding();
-            }, _cancellationTokenSource.Token);
+                blockingOptionCollection.CompleteAdding();
+            });
 
-            var options = _blockingOptionCollection.GetConsumingEnumerable();
+            var options = blockingOptionCollection.GetConsumingEnumerable();
 
             // Validate if the collection contains at least one successful response from history.
             if (!options.Any())
@@ -161,8 +153,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
         public void Dispose()
         {
             _historyProvider.DisposeSafely();
-            _blockingOptionCollection.DisposeSafely();
-            _cancellationTokenSource.DisposeSafely();
         }
     }
 }
