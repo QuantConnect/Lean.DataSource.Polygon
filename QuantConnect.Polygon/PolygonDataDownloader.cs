@@ -13,10 +13,11 @@
  * limitations under the License.
  */
 
-using QuantConnect.Configuration;
+using NodaTime;
 using QuantConnect.Data;
-using QuantConnect.Securities;
 using QuantConnect.Util;
+using QuantConnect.Securities;
+using QuantConnect.Configuration;
 using System.Collections.Concurrent;
 
 namespace QuantConnect.Lean.DataSource.Polygon
@@ -26,8 +27,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
     /// </summary>
     public class PolygonDataDownloader : IDataDownloader, IDisposable
     {
+        /// <inheritdoc cref="PolygonDataProvider"/>
         private readonly PolygonDataProvider _historyProvider;
 
+        /// <inheritdoc cref="MarketHoursDatabase" />
         private readonly MarketHoursDatabase _marketHoursDatabase;
 
         /// <summary>
@@ -55,7 +58,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         /// <param name="parameters">Parameters for the historical data request</param>
         /// <returns>Enumerable of base data for this symbol</returns>
-        public IEnumerable<BaseData> Get(DataDownloaderGetParameters parameters)
+        public IEnumerable<BaseData>? Get(DataDownloaderGetParameters parameters)
         {
             var symbol = parameters.Symbol;
             var resolution = parameters.Resolution;
@@ -63,47 +66,69 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var endUtc = parameters.EndUtc;
             var tickType = parameters.TickType;
 
-            if (endUtc < startUtc)
-            {
-                yield break;
-            }
-
             var dataType = LeanData.GetDataType(resolution, tickType);
             var exchangeHours = _marketHoursDatabase.GetExchangeHours(symbol.ID.Market, symbol, symbol.SecurityType);
             var dataTimeZone = _marketHoursDatabase.GetDataTimeZone(symbol.ID.Market, symbol, symbol.SecurityType);
 
             if (symbol.IsCanonical())
             {
-                using var dataQueue = new BlockingCollection<BaseData>();
-                var symbols = GetOptions(symbol, startUtc, endUtc);
-
-                Task.Run(() => Parallel.ForEach(symbols, targetSymbol =>
-                {
-                    var historyRequest = new HistoryRequest(startUtc, endUtc, dataType, targetSymbol, resolution, exchangeHours, dataTimeZone,
-                        resolution, true, false, DataNormalizationMode.Raw, tickType);
-                    foreach (var data in _historyProvider.GetHistory(historyRequest))
-                    {
-                        dataQueue.Add(data);
-                    }
-                })).ContinueWith(_ =>
-                {
-                    dataQueue.CompleteAdding();
-                });
-
-                foreach (var data in dataQueue.GetConsumingEnumerable())
-                {
-                    yield return data;
-                }
+                return GetCanonicalOptionHistory(symbol, startUtc, endUtc, dataType, resolution, exchangeHours, dataTimeZone, tickType);
             }
             else
             {
                 var historyRequest = new HistoryRequest(startUtc, endUtc, dataType, symbol, resolution, exchangeHours, dataTimeZone, resolution,
                     true, false, DataNormalizationMode.Raw, tickType);
-                foreach (var data in _historyProvider.GetHistory(historyRequest))
+
+                var historyData = _historyProvider.GetHistory(historyRequest);
+
+                if (historyData == null)
                 {
-                    yield return data;
+                    return null;
                 }
+
+                return historyData;
             }
+        }
+
+        private IEnumerable<BaseData>? GetCanonicalOptionHistory(Symbol symbol, DateTime startUtc, DateTime endUtc, Type dataType,
+            Resolution resolution, SecurityExchangeHours exchangeHours, DateTimeZone dataTimeZone, TickType tickType)
+        {
+            var blockingOptionCollection = new BlockingCollection<BaseData>();
+            var symbols = GetOptions(symbol, startUtc, endUtc);
+
+            // Symbol can have a lot of Option parameters
+            Task.Run(() => Parallel.ForEach(symbols, targetSymbol =>
+            {
+                var historyRequest = new HistoryRequest(startUtc, endUtc, dataType, targetSymbol, resolution, exchangeHours, dataTimeZone,
+                    resolution, true, false, DataNormalizationMode.Raw, tickType);
+
+                var history = _historyProvider.GetHistory(historyRequest);
+
+                // If history is null, it indicates an incorrect or missing request for historical data,
+                // so we skip processing for this symbol and move to the next one.
+                if (history == null)
+                {
+                    return;
+                }
+
+                foreach (var data in history)
+                {
+                    blockingOptionCollection.Add(data);
+                }
+            })).ContinueWith(_ =>
+            {
+                blockingOptionCollection.CompleteAdding();
+            });
+
+            var options = blockingOptionCollection.GetConsumingEnumerable();
+
+            // Validate if the collection contains at least one successful response from history.
+            if (!options.Any())
+            {
+                return null;
+            }
+
+            return options;
         }
 
         protected virtual IEnumerable<Symbol> GetOptions(Symbol symbol, DateTime startUtc, DateTime endUtc)

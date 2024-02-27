@@ -121,16 +121,20 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 return;
             }
 
-            _apiKey = apiKey;
-
-            Initialize(maxSubscriptionsPerWebSocket, streamingEnabled);
+            Initialize(apiKey, maxSubscriptionsPerWebSocket, streamingEnabled);
         }
 
         /// <summary>
         /// Initializes the data queue handler and validates the product subscription
         /// </summary>
-        private void Initialize(int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
+        private void Initialize(string apiKey, int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
         {
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                throw new PolygonAuthenticationException("History calls for Polygon.io require an API key.");
+            }
+            _apiKey = apiKey;
+
             _initialized = true;
             _dataAggregator = new PolygonAggregationManager();
             RestApiClient = new PolygonRestApiClient(_apiKey);
@@ -175,16 +179,13 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 throw new ArgumentException("The Polygon.io API key is missing from the brokerage data.");
             }
 
-            _apiKey = apiKey;
-
-            var maxSubscriptionsPerWebSocket = 0;
             if (!job.BrokerageData.TryGetValue("polygon-max-subscriptions-per-websocket", out var maxSubscriptionsPerWebSocketStr) ||
-                !int.TryParse(maxSubscriptionsPerWebSocketStr, out maxSubscriptionsPerWebSocket))
+                !int.TryParse(maxSubscriptionsPerWebSocketStr, out var maxSubscriptionsPerWebSocket))
             {
                 maxSubscriptionsPerWebSocket = -1;
             }
 
-            Initialize(maxSubscriptionsPerWebSocket);
+            Initialize(apiKey, maxSubscriptionsPerWebSocket);
         }
 
         /// <summary>
@@ -488,9 +489,9 @@ namespace QuantConnect.Lean.DataSource.Polygon
             try
             {
                 const int productId = 306;
-                var userId = Config.GetInt("job-user-id");
-                var token = Config.Get("api-access-token");
-                var organizationId = Config.Get("job-organization-id", null);
+                var userId = Globals.UserId;
+                var token = Globals.UserToken;
+                var organizationId = Globals.OrganizationID;
                 // Verify we can authenticate with this user and token
                 var api = new ApiConnection(userId, token);
                 if (!api.Connected)

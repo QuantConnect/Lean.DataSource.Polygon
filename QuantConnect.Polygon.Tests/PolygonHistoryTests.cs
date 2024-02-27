@@ -134,10 +134,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
                     // Quotes: quote data is not available for indexes
                     new TestCaseData(Resolution.Tick, TimeSpan.FromMinutes(5), TickType.Quote, true),
-                    new TestCaseData(Resolution.Second, TimeSpan.FromMinutes(5), TickType.Quote, true),
-                    new TestCaseData(Resolution.Minute, TimeSpan.FromMinutes(5), TickType.Quote, true),
-                    new TestCaseData(Resolution.Hour, TimeSpan.FromMinutes(5), TickType.Quote, true),
-                    new TestCaseData(Resolution.Daily, TimeSpan.FromMinutes(5), TickType.Quote, true),
+                    new TestCaseData(Resolution.Second, TimeSpan.FromMinutes(5), TickType.Quote, true)
                 };
             }
         }
@@ -146,9 +143,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
         public void GetsIndexHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeEmpty)
         {
-            var symbol = Symbol.Create("SPX", SecurityType.Index, Market.USA);
-            var requests = new List<HistoryRequest> { CreateHistoryRequest(symbol, resolution, tickType, period) };
-            var history = _historyProvider.GetHistory(requests, TimeZones.Utc).ToList();
+            var history = GetIndexHistory(resolution, period, tickType);
 
             Log.Trace("Data points retrieved: " + history.Count);
 
@@ -160,6 +155,28 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             {
                 AssertHistoricalDataResults(history.Select(x => x.AllData).SelectMany(x => x).ToList(), resolution, _historyProvider.DataPointCount);
             }
+        }
+
+        internal static TestCaseData[] IndexHistoricalInvalidDataTestCases
+        {
+            get
+            {
+                return new[]
+                {
+                    new TestCaseData(Resolution.Daily, TimeSpan.FromMinutes(5), TickType.Quote, true),
+                    new TestCaseData(Resolution.Hour, TimeSpan.FromMinutes(5), TickType.Quote, true),
+                    new TestCaseData(Resolution.Minute, TimeSpan.FromMinutes(5), TickType.Quote, true),
+                };
+            }
+        }
+
+        [TestCaseSource(nameof(IndexHistoricalInvalidDataTestCases))]
+        [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
+        public void GetsIndexInvalidHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeEmpty)
+        {
+            var history = GetIndexHistory(resolution, period, tickType);
+
+            Assert.IsNull(history);
         }
 
         [Test]
@@ -219,13 +236,13 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         };
 
         [TestCaseSource(nameof(UssuportedSecurityTypesResolutionsAndTickTypesTestCases))]
-        public void ReturnsEmptyForUnsupportedSecurityTypeResolutionOrTickType(Symbol symbol, Resolution resolution, TickType tickType)
+        public void ReturnsNullForUnsupportedSecurityTypeResolutionOrTickType(Symbol symbol, Resolution resolution, TickType tickType)
         {
             using var historyProvider = new TestPolygonHistoryProvider();
             var request = CreateHistoryRequest(symbol, resolution, tickType, TimeSpan.FromDays(100));
-            var history = historyProvider.GetHistory(request).ToList();
+            var history = historyProvider.GetHistory(request)?.ToList();
 
-            Assert.That(history, Is.Empty);
+            Assert.IsNull(history);
             Assert.That(historyProvider.TestRestApiClient.ApiCallsCount, Is.EqualTo(0));
         }
 
@@ -271,6 +288,25 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
             Assert.That(delay, Is.GreaterThanOrEqualTo(lowerBound), $"The rate gate was early: {lowerBound - delay}");
             Assert.That(delay, Is.LessThanOrEqualTo(upperBound), $"The rate gate was late: {delay - upperBound}");
+        }
+
+        /// <summary>
+        /// Retrieves the historical data of an hardcoded index [SPX] based on specified parameters.
+        /// </summary>
+        /// <param name="resolution">The resolution of the historical data to retrieve.</param>
+        /// <param name="period">The time period for which historical data is requested.</param>
+        /// <param name="tickType">The type of ticks for the historical data.</param>
+        /// <returns>A list of <see cref="Slice"/> containing historical data of the index.</returns>
+        /// <remarks>
+        /// The <paramref name="resolution"/> parameter determines the granularity of the historical data, 
+        /// while the <paramref name="period"/> parameter specifies the duration of the historical data to be retrieved.
+        /// The <paramref name="tickType"/> parameter specifies the type of ticks to be included in the historical data.
+        /// </remarks>
+        internal List<Slice> GetIndexHistory(Resolution resolution, TimeSpan period, TickType tickType)
+        {
+            var symbol = Symbol.Create("SPX", SecurityType.Index, Market.USA);
+            var requests = new List<HistoryRequest> { CreateHistoryRequest(symbol, resolution, tickType, period) };
+            return _historyProvider.GetHistory(requests, TimeZones.Utc)?.ToList();
         }
 
         internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)

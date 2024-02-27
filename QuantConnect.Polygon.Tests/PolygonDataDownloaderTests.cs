@@ -15,6 +15,7 @@
 */
 
 using NUnit.Framework;
+using QuantConnect.Data;
 using QuantConnect.Logging;
 using QuantConnect.Util;
 using System;
@@ -60,17 +61,13 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
         [TestCaseSource(nameof(IndexHistoricalDataTestCases))]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
-        public void DownloadsIndexHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeEmpy)
+        public void DownloadsIndexHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeEmpty)
         {
-            var symbol = Symbol.Create("SPX", SecurityType.Index, Market.USA);
-            var request = PolygonHistoryTests.CreateHistoryRequest(symbol, resolution, tickType, period);
-
-            var parameters = new DataDownloaderGetParameters(symbol, resolution, request.StartTimeUtc, request.EndTimeUtc, tickType);
-            var data = _downloader.Get(parameters).ToList();
+            var data = DownloadIndexHistoryData(resolution, period, tickType);
 
             Log.Trace("Data points retrieved: " + data.Count);
 
-            if (shouldBeEmpy)
+            if (shouldBeEmpty)
             {
                 Assert.That(data, Is.Empty);
             }
@@ -80,15 +77,26 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             }
         }
 
+        private static TestCaseData[] IndexHistoricalInvalidDataTestCases => PolygonHistoryTests.IndexHistoricalInvalidDataTestCases;
+
+        [TestCaseSource(nameof(IndexHistoricalInvalidDataTestCases))]
+        [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
+        public void DownloadsIndexInvalidHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeEmpty)
+        {
+            var data = DownloadIndexHistoryData(resolution, period, tickType);
+
+            Assert.IsNull(data);
+        }
+
         [Test]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
         public void DownloadsDataFromCanonicalOptionSymbol()
         {
             var symbol = Symbol.CreateCanonicalOption(Symbol.Create("SPY", SecurityType.Equity, Market.USA));
             var parameters = new DataDownloaderGetParameters(symbol, Resolution.Hour,
-                new DateTime(2024, 01, 03), new DateTime(2024, 01, 04), TickType.Trade);
+                new DateTime(2024, 02, 22), new DateTime(2024, 02, 23), TickType.Trade);
             using var downloader = new TestablePolygonDataDownloader();
-            var data = downloader.Get(parameters).ToList();
+            var data = downloader.Get(parameters)?.ToList();
 
             Log.Trace("Data points retrieved: " + data.Count);
 
@@ -97,6 +105,27 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             // Multiple symbols
             var distinctSymbols = data.Select(x => x.Symbol).Distinct().ToList();
             Assert.That(distinctSymbols, Has.Count.GreaterThan(1).And.All.Matches<Symbol>(x => x.Canonical == symbol));
+        }
+
+        /// <summary>
+        /// Downloads historical data of an hardcoded index [SPX] based on specified parameters.
+        /// </summary>
+        /// <param name="resolution">The resolution of the historical data to download.</param>
+        /// <param name="period">The time period for which historical data is requested.</param>
+        /// <param name="tickType">The type of ticks for the historical data.</param>
+        /// <returns>A list of <see cref="BaseData"/> containing downloaded historical data of the index.</returns>
+        /// <remarks>
+        /// The <paramref name="resolution"/> parameter determines the granularity of the historical data, 
+        /// while the <paramref name="period"/> parameter specifies the duration of the historical data to be downloaded.
+        /// The <paramref name="tickType"/> parameter specifies the type of ticks to be included in the historical data.
+        /// </remarks>
+        private List<BaseData> DownloadIndexHistoryData(Resolution resolution, TimeSpan period, TickType tickType)
+        {
+            var symbol = Symbol.Create("SPX", SecurityType.Index, Market.USA);
+            var request = PolygonHistoryTests.CreateHistoryRequest(symbol, resolution, tickType, period);
+
+            var parameters = new DataDownloaderGetParameters(symbol, resolution, request.StartTimeUtc, request.EndTimeUtc, tickType);
+            return _downloader.Get(parameters)?.ToList();
         }
 
         private class TestablePolygonDataDownloader : PolygonDataDownloader

@@ -30,6 +30,16 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private int _dataPointCount;
 
         /// <summary>
+        /// Indicates whether a error for an invalid start time has been fired, where the start time is greater than or equal to the end time in UTC.
+        /// </summary>
+        private bool _invalidStartTimeErrorFired;
+
+        /// <summary>
+        /// Indicates whether an error has been fired due to invalid conditions if the TickType is <seealso cref="TickType.Quote"/> and the <seealso cref="Resolution"/> is greater than one second.
+        /// </summary>
+        private bool _invalidTickTypeAndResolutionErrorFired;
+
+        /// <summary>
         /// Gets the total number of data points emitted by this history provider
         /// </summary>
         public override int DataPointCount => _dataPointCount;
@@ -48,16 +58,24 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <param name="requests">The historical data requests</param>
         /// <param name="sliceTimeZone">The time zone used when time stamping the slice instances</param>
         /// <returns>An enumerable of the slices of data covering the span specified in each request</returns>
-        public override IEnumerable<Slice> GetHistory(IEnumerable<HistoryRequest> requests, DateTimeZone sliceTimeZone)
+        public override IEnumerable<Slice>? GetHistory(IEnumerable<HistoryRequest> requests, DateTimeZone sliceTimeZone)
         {
             var subscriptions = new List<Subscription>();
             foreach (var request in requests)
             {
                 var history = GetHistory(request);
+                if (history == null)
+                {
+                    continue;
+                }
                 var subscription = CreateSubscription(request, history);
                 subscriptions.Add(subscription);
             }
 
+            if (subscriptions.Count == 0)
+            {
+                return null;
+            }
             return CreateSliceEnumerableFromSubscriptions(subscriptions, sliceTimeZone);
         }
 
@@ -66,39 +84,56 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         /// <param name="request">The historical data request</param>
         /// <returns>An enumerable of BaseData points</returns>
-        public IEnumerable<BaseData> GetHistory(HistoryRequest request)
+        public IEnumerable<BaseData>? GetHistory(HistoryRequest request)
         {
-            if (string.IsNullOrWhiteSpace(_apiKey))
-            {
-                throw new PolygonAuthenticationException("History calls for Polygon.io require an API key.");
-            }
-
             if (request.Symbol.IsCanonical() ||
                 !IsSupported(request.Symbol.SecurityType, request.DataType, request.TickType, request.Resolution))
             {
-                yield break;
+                // It is Logged in IsSupported(...)
+                return null;
             }
 
             // Quote data can only be fetched from Polygon from their Quote Tick endpoint,
             // which would be too slow for anything above second resolution or long time spans.
             if (request.TickType == TickType.Quote && request.Resolution > Resolution.Second)
             {
-                Log.Error("PolygonDataProvider.GetHistory(): Quote data above second resolution is not supported.");
-                yield break;
+                if (!_invalidTickTypeAndResolutionErrorFired)
+                {
+                    Log.Error("PolygonDataProvider.GetHistory(): Quote data above second resolution is not supported.");
+                    _invalidTickTypeAndResolutionErrorFired = true;
+                }
+                return null;
             }
+
+            if (request.EndTimeUtc < request.StartTimeUtc)
+            {
+                if (!_invalidStartTimeErrorFired)
+                {
+                    Log.Error($"{nameof(PolygonDataProvider)}.{nameof(GetHistory)}:InvalidDateRange. The history request start date must precede the end date, no history returned");
+                    _invalidStartTimeErrorFired = true;
+                }
+                return null;
+            }
+
 
             // Use the trade aggregates API for resolutions above tick for fastest results
             if (request.TickType == TickType.Trade && request.Resolution > Resolution.Tick)
             {
-                foreach (var data in GetAggregates(request))
+                var data = GetAggregates(request);
+
+                if (data == null)
                 {
-                    Interlocked.Increment(ref _dataPointCount);
-                    yield return data;
+                    return null;
                 }
 
-                yield break;
+                return data;
             }
 
+            return GetHistoryThroughDataConsolidator(request);
+        }
+
+        private IEnumerable<BaseData>? GetHistoryThroughDataConsolidator(HistoryRequest request)
+        {
             IDataConsolidator consolidator;
             IEnumerable<BaseData> history;
 
@@ -160,6 +195,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 var utcTime = Time.UnixMillisecondTimeStampToDateTime(bar.Timestamp);
                 var time = GetTickTime(request.Symbol, utcTime);
 
+                Interlocked.Increment(ref _dataPointCount);
                 yield return new TradeBar(time, request.Symbol, bar.Open, bar.High, bar.Low, bar.Close,
                     bar.Volume, resolutionTimeSpan);
             }
