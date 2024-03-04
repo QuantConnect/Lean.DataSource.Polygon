@@ -48,7 +48,10 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         [TearDown]
         public void TearDown()
         {
-            _historyProvider.Dispose();
+            if (_historyProvider != null)
+            {
+                _historyProvider.Dispose();
+            }
         }
 
         internal static TestCaseData[] HistoricalDataTestCases
@@ -90,6 +93,26 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             Log.Trace("Data points retrieved: " + history.Count);
 
             AssertHistoricalDataResults(history.Select(x => x.AllData).SelectMany(x => x).ToList(), resolution, _historyProvider.DataPointCount);
+        }
+
+        [Test]
+        public void GetsRenamedSymbolHistoricalData()
+        {
+            var endDate = new DateTime(2024, 4, 1);
+            var period = TimeSpan.FromDays(365 * 11);
+            var startDate = endDate.Subtract(period);
+
+            var FB = Symbol.Create("GOOGL", SecurityType.Equity, Market.USA);
+
+            var request = CreateHistoryRequest(FB, Resolution.Daily, TickType.Trade, period, endDate);
+
+            var history = _historyProvider.GetHistory(new[] { request }, TimeZones.Utc)?.ToList();
+
+            Log.Trace("Data points retrieved: " + history.Count);
+
+            Assert.IsNotNull(history);
+            Assert.IsNotEmpty(history);
+            Assert.GreaterOrEqual(history[0].Time, startDate);
         }
 
         internal static void AssertHistoricalDataResults(List<BaseData> history, Resolution resolution, int? expectedCount = null)
@@ -309,9 +332,9 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             return _historyProvider.GetHistory(requests, TimeZones.Utc)?.ToList();
         }
 
-        internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
+        internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period, DateTime? endDateTime = null)
         {
-            var end = new DateTime(2023, 12, 15, 16, 0, 0);
+            var end = endDateTime ?? new DateTime(2023, 12, 15, 16, 0, 0);
             if (resolution == Resolution.Daily)
             {
                 end = end.Date.AddDays(1);

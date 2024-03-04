@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -71,6 +71,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private bool _unsupportedDataTypeMessageLogged;
         private bool _potentialUnsupportedResolutionMessageLogged;
         private bool _potentialUnsupportedTickTypeMessageLogged;
+
+        /// <summary>
+        /// <inheritdoc cref="IMapFileProvider"/>
+        /// </summary>
+        private readonly IMapFileProvider _mapFileProvider =
+            Composer.Instance.GetExportedValueByTypeName<IMapFileProvider>(Config.Get("map-file-provider", "QuantConnect.Data.Auxiliary.LocalDiskMapFileProvider"));
 
         /// <summary>
         /// The time provider instance. Used for improved testability

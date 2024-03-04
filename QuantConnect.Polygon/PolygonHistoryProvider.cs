@@ -63,8 +63,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var subscriptions = new List<Subscription>();
             foreach (var request in requests)
             {
-                var history = GetHistory(request);
-                if (history == null)
+                var history = request.SplitHistoryRequestWithUpdatedMappedSymbol(_mapFileProvider).SelectMany(x => GetHistory(x) ?? Enumerable.Empty<BaseData>());
+
+                // TODO: extra request.
+                if (history.IsNullOrEmpty())
                 {
                     continue;
                 }
@@ -179,7 +181,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         private IEnumerable<TradeBar> GetAggregates(HistoryRequest request)
         {
-            var ticker = _symbolMapper.GetBrokerageSymbol(request.Symbol);
+            var ticker = _symbolMapper.GetBrokerageSymbol(request.Symbol, true);
             var resolutionTimeSpan = request.Resolution.ToTimeSpan();
             // Aggregates API gets timestamps in milliseconds
             var start = Time.DateTimeToUnixTimeStampMilliseconds(request.StartTimeUtc.RoundDown(resolutionTimeSpan));
