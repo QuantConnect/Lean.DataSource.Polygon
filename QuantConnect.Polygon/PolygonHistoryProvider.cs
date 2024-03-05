@@ -65,12 +65,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 var history = request.SplitHistoryRequestWithUpdatedMappedSymbol(_mapFileProvider).SelectMany(x => GetHistory(x) ?? Enumerable.Empty<BaseData>());
 
-                // TODO: extra request.
-                if (history.IsNullOrEmpty())
+                var subscription = CreateSubscription(request, history);
+                if (!subscription.MoveNext())
                 {
                     continue;
                 }
-                var subscription = CreateSubscription(request, history);
+
                 subscriptions.Add(subscription);
             }
 

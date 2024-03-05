@@ -95,16 +95,12 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             AssertHistoricalDataResults(history.Select(x => x.AllData).SelectMany(x => x).ToList(), resolution, _historyProvider.DataPointCount);
         }
 
-        [Test]
-        public void GetsRenamedSymbolHistoricalData()
+        [TestCase("GOOGL", "2014/4/1", "2016/4/1", Resolution.Daily)]
+        public void GetsRenamedSymbolHistoricalData(string ticker, DateTime startDateTime, DateTime endDateTime, Resolution resolution)
         {
-            var endDate = new DateTime(2024, 4, 1);
-            var period = TimeSpan.FromDays(365 * 11);
-            var startDate = endDate.Subtract(period);
+            var symbol = Symbol.Create(ticker, SecurityType.Equity, Market.USA);
 
-            var FB = Symbol.Create("GOOGL", SecurityType.Equity, Market.USA);
-
-            var request = CreateHistoryRequest(FB, Resolution.Daily, TickType.Trade, period, endDate);
+            var request = CreateHistoryRequest(symbol, resolution, TickType.Trade, startDateTime, endDateTime);
 
             var history = _historyProvider.GetHistory(new[] { request }, TimeZones.Utc)?.ToList();
 
@@ -112,7 +108,9 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
             Assert.IsNotNull(history);
             Assert.IsNotEmpty(history);
-            Assert.GreaterOrEqual(history[0].Time, startDate);
+            Assert.That(history.First().Time.Date, Is.EqualTo(startDateTime));
+            Assert.That(history.Last().Time.Date, Is.EqualTo(endDateTime));
+            AssertHistoricalDataResults(history.Select(x => x.AllData).SelectMany(x => x).ToList(), resolution);
         }
 
         internal static void AssertHistoricalDataResults(List<BaseData> history, Resolution resolution, int? expectedCount = null)
@@ -332,17 +330,24 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             return _historyProvider.GetHistory(requests, TimeZones.Utc)?.ToList();
         }
 
-        internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period, DateTime? endDateTime = null)
+        internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
         {
-            var end = endDateTime ?? new DateTime(2023, 12, 15, 16, 0, 0);
+            var end = new DateTime(2023, 12, 15, 16, 0, 0);
+
             if (resolution == Resolution.Daily)
             {
                 end = end.Date.AddDays(1);
             }
-            var dataType = LeanData.GetDataType(resolution, tickType);
 
-            return new HistoryRequest(end.Subtract(period),
-                end,
+            return CreateHistoryRequest(symbol, resolution, tickType, end.Subtract(period), end);
+        }
+
+        internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, DateTime startDateTime, DateTime endDateTime)
+        {
+            var dataType = LeanData.GetDataType(resolution, tickType);
+            return new HistoryRequest(
+                startDateTime,
+                endDateTime,
                 dataType,
                 symbol,
                 resolution,
@@ -352,7 +357,8 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                 true,
                 false,
                 DataNormalizationMode.Adjusted,
-                tickType);
+                tickType
+                );
         }
 
         private class TestPolygonRestApiClient : PolygonRestApiClient
