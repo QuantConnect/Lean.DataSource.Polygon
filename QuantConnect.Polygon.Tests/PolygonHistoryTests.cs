@@ -186,16 +186,16 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             {
                 return new[]
                 {
-                    new TestCaseData(Resolution.Daily, TimeSpan.FromMinutes(5), TickType.Quote, true),
-                    new TestCaseData(Resolution.Hour, TimeSpan.FromMinutes(5), TickType.Quote, true),
-                    new TestCaseData(Resolution.Minute, TimeSpan.FromMinutes(5), TickType.Quote, true),
+                    new TestCaseData(Resolution.Daily, TimeSpan.FromMinutes(5), TickType.Quote),
+                    new TestCaseData(Resolution.Hour, TimeSpan.FromMinutes(5), TickType.Quote),
+                    new TestCaseData(Resolution.Minute, TimeSpan.FromMinutes(5), TickType.Quote),
                 };
             }
         }
 
         [TestCaseSource(nameof(IndexHistoricalInvalidDataTestCases))]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
-        public void GetsIndexInvalidHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeEmpty)
+        public void GetsIndexInvalidHistoricalData(Resolution resolution, TimeSpan period, TickType tickType)
         {
             var history = GetIndexHistory(resolution, period, tickType);
 
