@@ -75,8 +75,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <summary>
         /// <inheritdoc cref="IMapFileProvider"/>
         /// </summary>
-        private readonly IMapFileProvider _mapFileProvider =
-            Composer.Instance.GetExportedValueByTypeName<IMapFileProvider>(Config.Get("map-file-provider", "QuantConnect.Data.Auxiliary.LocalDiskMapFileProvider"));
+        private readonly IMapFileProvider _mapFileProvider = Composer.Instance.GetPart<IMapFileProvider>();
 
         /// <summary>
         /// The time provider instance. Used for improved testability

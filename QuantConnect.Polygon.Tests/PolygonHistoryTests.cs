@@ -162,18 +162,17 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
         [TestCaseSource(nameof(IndexHistoricalDataTestCases))]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
-        public void GetsIndexHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeEmpty)
+        public void GetsIndexHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeNull)
         {
             var history = GetIndexHistory(resolution, period, tickType);
 
-            Log.Trace("Data points retrieved: " + history.Count);
-
-            if (shouldBeEmpty)
+            if (shouldBeNull)
             {
-                Assert.That(history, Is.Empty);
+                Assert.IsNull(history);
             }
             else
             {
+                Log.Trace("Data points retrieved: " + history.Count);
                 AssertHistoricalDataResults(history.Select(x => x.AllData).SelectMany(x => x).ToList(), resolution, _historyProvider.DataPointCount);
             }
         }
