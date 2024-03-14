@@ -28,6 +28,7 @@ using System.Linq;
 using System.Collections.Generic;
 using RestSharp;
 using QuantConnect.Tests;
+using NodaTime;
 
 namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
@@ -95,21 +96,25 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             AssertHistoricalDataResults(history.Select(x => x.AllData).SelectMany(x => x).ToList(), resolution, _historyProvider.DataPointCount);
         }
 
-        [TestCase("GOOGL", "2014/4/1", "2016/4/1", Resolution.Daily)]
+        [TestCase("GOOGL", "2014/4/1", "2016/4/1", Resolution.Daily, Description = "The stock split on July 15 2022. [GOOG -> GOOGL]")]
+        [TestCase("GOOGL", "2014/4/1", "2014/4/4", Resolution.Hour)]
         public void GetsRenamedSymbolHistoricalData(string ticker, DateTime startDateTime, DateTime endDateTime, Resolution resolution)
         {
             var symbol = Symbol.Create(ticker, SecurityType.Equity, Market.USA);
 
             var request = CreateHistoryRequest(symbol, resolution, TickType.Trade, startDateTime, endDateTime);
 
-            var history = _historyProvider.GetHistory(new[] { request }, TimeZones.Utc)?.ToList();
+            var history = _historyProvider.GetHistory(new[] { request }, TimeZones.NewYork)?.ToList();
 
             Log.Trace("Data points retrieved: " + history.Count);
 
             Assert.IsNotNull(history);
             Assert.IsNotEmpty(history);
             Assert.That(history.First().Time.Date, Is.EqualTo(startDateTime));
-            Assert.That(history.Last().Time.Date, Is.EqualTo(endDateTime));
+            Assert.That(history.Last().Time.Date, Is.LessThanOrEqualTo(endDateTime));
+            Assert.That(history.First().AllData.First().Symbol.Value, Is.EqualTo("GOOG"));
+            Assert.That(history.Last().AllData.First().Symbol.Value, Is.EqualTo("GOOGL"));
+
             AssertHistoricalDataResults(history.Select(x => x.AllData).SelectMany(x => x).ToList(), resolution);
         }
 
@@ -341,8 +346,19 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             return CreateHistoryRequest(symbol, resolution, tickType, end.Subtract(period), end);
         }
 
-        internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, DateTime startDateTime, DateTime endDateTime)
+        internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, DateTime startDateTime, DateTime endDateTime,
+            SecurityExchangeHours exchangeHours = null, DateTimeZone dataTimeZone = null)
         {
+            if (exchangeHours == null)
+            {
+                exchangeHours = SecurityExchangeHours.AlwaysOpen(TimeZones.NewYork);
+            }
+
+            if (dataTimeZone == null)
+            {
+                dataTimeZone = TimeZones.NewYork;
+            }
+
             var dataType = LeanData.GetDataType(resolution, tickType);
             return new HistoryRequest(
                 startDateTime,
@@ -350,8 +366,8 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                 dataType,
                 symbol,
                 resolution,
-                SecurityExchangeHours.AlwaysOpen(TimeZones.NewYork),
-                TimeZones.NewYork,
+                exchangeHours,
+                dataTimeZone,
                 null,
                 true,
                 false,
