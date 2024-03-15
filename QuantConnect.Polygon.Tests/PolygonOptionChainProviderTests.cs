@@ -14,12 +14,14 @@
  *
 */
 
-using NUnit.Framework;
-using QuantConnect.Configuration;
-using QuantConnect.Logging;
+using Moq;
 using System;
-using System.Collections.Generic;
+using RestSharp;
 using System.Linq;
+using NUnit.Framework;
+using QuantConnect.Logging;
+using QuantConnect.Configuration;
+using System.Collections.Generic;
 
 namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
@@ -52,6 +54,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                 ("AAPL", SecurityType.Equity),
                 ("IBM", SecurityType.Equity),
                 ("GOOG", SecurityType.Equity),
+                ("GOOGL", SecurityType.Equity),
                 ("SPX", SecurityType.Index),
                 ("VIX", SecurityType.Index),
                 ("DAX", SecurityType.Index),
@@ -103,7 +106,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         [Test]
         public void GetsFullSPXOptionChain()
         {
-            var chain = GetOptionChain(Symbol.Create("SPX", SecurityType.Index, Market.USA), new DateTime(2024, 01, 03));
+            var chain = GetOptionChain(Symbol.Create("SPX", SecurityType.Index, Market.USA), new DateTime(2024, 03, 15));
 
             // SPX has a lot of options, let's make sure we get more than 1000 contracts (which is the pagination limit)
             // to assert that multiple requests are being made.
@@ -119,6 +122,38 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             Assert.That(spx, Is.Not.Empty);
 
             Assert.That(spxw.Count + spx.Count, Is.EqualTo(chain.Count));
+        }
+
+        [TestCaseSource(nameof(Underlyings))]
+        public void ValidateQueryParameterToSpecificSymbolValue(Symbol underlyingSymbol)
+        {
+            IRestRequest request = default;
+            var mock = new Mock<PolygonRestApiClient>("api-key");
+
+            mock.Setup(m => m.DownloadAndParseData<OptionChainResponse>(It.IsAny<RestRequest>()))
+                .Callback((RestRequest r) => request = r);
+
+            var optionChainProvider = new PolygonOptionChainProvider(mock.Object, new PolygonSymbolMapper());
+
+            var expiryDate = new DateTime(2024, 03, 15);
+            var option = Symbol.CreateOption(underlyingSymbol, Market.USA, OptionStyle.American, OptionRight.Call, 1000m, expiryDate);
+
+            var optionContracts = optionChainProvider.GetOptionContractList(option, expiryDate).ToList();
+
+            Assert.IsNotNull(optionContracts);
+            Assert.IsTrue(request.Parameters[0].Value.ToString().EndsWith(option.Underlying.Value));
+        }
+
+        [TestCaseSource(nameof(Underlyings))]
+        public void ValidateGetOptionContractsReturnsAppropriateSymbol(Symbol underlyingSymbol)
+        {
+            var referenceDate = new DateTime(2024, 03, 15);
+            var optionContracts = _optionChainProvider.GetOptionContractList(underlyingSymbol, referenceDate).ToList();
+
+            foreach (var optionContract in optionContracts)
+            {
+                Assert.That(optionContract.Underlying, Is.EqualTo(underlyingSymbol));
+            }
         }
     }
 }

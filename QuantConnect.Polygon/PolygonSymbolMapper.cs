@@ -130,7 +130,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 if (!_leanSymbolsCache.TryGetValue(brokerageSymbol, out var leanSymbol))
                 {
                     var leanBaseSymbol = securityType == SecurityType.Equity ? null : GetLeanSymbol(brokerageSymbol);
-                    var underlyingSymbolStr = underlying?.ID.Symbol ?? leanBaseSymbol?.Underlying.ID.Symbol;
+                    var underlyingSymbolStr = underlying?.Value ?? leanBaseSymbol?.Underlying.Value;
 
                     switch (securityType)
                     {

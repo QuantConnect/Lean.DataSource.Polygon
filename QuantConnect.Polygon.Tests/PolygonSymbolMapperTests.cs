@@ -47,13 +47,17 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             Assert.That(convertedSymbol, Is.EqualTo(leanSymbol));
         }
 
-        [TestCase("O:SPY240104C00467000", SecurityType.Option, ExpectedResult = SecurityType.Equity)]
-        [TestCase("O:SPX240104C04685000", SecurityType.IndexOption, ExpectedResult = SecurityType.Index)]
-        [TestCase("O:SPXW240104C04685000", SecurityType.IndexOption, ExpectedResult = SecurityType.Index)]
-        public SecurityType ConvertsOptionSymbolWithCorrectUnderlyingSecurityType(string ticker, SecurityType optionType)
+        [TestCase("O:SPY240104C00467000", "SPY", SecurityType.Option, ExpectedResult = SecurityType.Equity)]
+        [TestCase("O:GOOGL240105C00050000", "GOOGL", SecurityType.Option, ExpectedResult = SecurityType.Equity)]
+        [TestCase("O:GOOG240105C00070000", "GOOG", SecurityType.Option, ExpectedResult = SecurityType.Equity)]
+        [TestCase("O:SPX240104C04685000", "SPX", SecurityType.IndexOption, ExpectedResult = SecurityType.Index)]
+        [TestCase("O:SPXW240104C04685000", "SPX", SecurityType.IndexOption, ExpectedResult = SecurityType.Index)]
+        public SecurityType ConvertsOptionSymbolWithCorrectUnderlyingSecurityType(string ticker, string expectedTicker, SecurityType optionType)
         {
             var mapper = new PolygonSymbolMapper();
             var symbol = mapper.GetLeanSymbol(ticker, optionType, Market.USA, new DateTime(2024, 01, 04), 400m, OptionRight.Call);
+
+            Assert.That(symbol.Underlying.Value, Is.EqualTo(expectedTicker));
 
             return symbol.Underlying.SecurityType;
         }
