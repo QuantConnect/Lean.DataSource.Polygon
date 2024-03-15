@@ -32,12 +32,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <summary>
         /// Indicates whether a error for an invalid start time has been fired, where the start time is greater than or equal to the end time in UTC.
         /// </summary>
-        private bool _invalidStartTimeErrorFired;
+        private volatile bool _invalidStartTimeErrorFired;
 
         /// <summary>
         /// Indicates whether an error has been fired due to invalid conditions if the TickType is <seealso cref="TickType.Quote"/> and the <seealso cref="Resolution"/> is greater than one second.
         /// </summary>
-        private bool _invalidTickTypeAndResolutionErrorFired;
+        private volatile bool _invalidTickTypeAndResolutionErrorFired;
 
         /// <summary>
         /// Gets the total number of data points emitted by this history provider
@@ -101,8 +101,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 if (!_invalidTickTypeAndResolutionErrorFired)
                 {
-                    Log.Error("PolygonDataProvider.GetHistory(): Quote data above second resolution is not supported.");
                     _invalidTickTypeAndResolutionErrorFired = true;
+                    Log.Error("PolygonDataProvider.GetHistory(): Quote data above second resolution is not supported.");
                 }
                 return null;
             }
@@ -111,8 +111,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 if (!_invalidStartTimeErrorFired)
                 {
-                    Log.Error($"{nameof(PolygonDataProvider)}.{nameof(GetHistory)}:InvalidDateRange. The history request start date must precede the end date, no history returned");
                     _invalidStartTimeErrorFired = true;
+                    Log.Error($"{nameof(PolygonDataProvider)}.{nameof(GetHistory)}:InvalidDateRange. The history request start date must precede the end date, no history returned");
                 }
                 return null;
             }

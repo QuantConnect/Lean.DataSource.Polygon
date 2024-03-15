@@ -66,11 +66,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private bool _initialized;
         private bool _disposed;
 
-        private bool _unsupportedSecurityTypeMessageLogged;
-        private bool _unsupportedTickTypeMessagedLogged;
-        private bool _unsupportedDataTypeMessageLogged;
-        private bool _potentialUnsupportedResolutionMessageLogged;
-        private bool _potentialUnsupportedTickTypeMessageLogged;
+        private volatile bool _unsupportedSecurityTypeMessageLogged;
+        private volatile bool _unsupportedTickTypeMessagedLogged;
+        private volatile bool _unsupportedDataTypeMessageLogged;
+        private volatile bool _potentialUnsupportedResolutionMessageLogged;
+        private volatile bool _potentialUnsupportedTickTypeMessageLogged;
 
         /// <summary>
         /// <inheritdoc cref="IMapFileProvider"/>
@@ -422,8 +422,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 if (!_unsupportedSecurityTypeMessageLogged)
                 {
-                    Log.Trace($"PolygonDataProvider.IsSupported(): Unsupported security type: {securityType}");
                     _unsupportedSecurityTypeMessageLogged = true;
+                    Log.Trace($"PolygonDataProvider.IsSupported(): Unsupported security type: {securityType}");
                 }
                 return false;
             }
@@ -432,8 +432,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 if (!_unsupportedTickTypeMessagedLogged)
                 {
-                    Log.Trace($"PolygonDataProvider.IsSupported(): Unsupported tick type: {tickType}");
                     _unsupportedTickTypeMessagedLogged = true;
+                    Log.Trace($"PolygonDataProvider.IsSupported(): Unsupported tick type: {tickType}");
                 }
                 return false;
             }
@@ -444,26 +444,26 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 if (!_unsupportedDataTypeMessageLogged)
                 {
-                    Log.Trace($"PolygonDataProvider.IsSupported(): Unsupported data type: {dataType}");
                     _unsupportedDataTypeMessageLogged = true;
+                    Log.Trace($"PolygonDataProvider.IsSupported(): Unsupported data type: {dataType}");
                 }
                 return false;
             }
 
             if (resolution < Resolution.Second && !_potentialUnsupportedResolutionMessageLogged)
             {
+                _potentialUnsupportedResolutionMessageLogged = true;
                 Log.Trace("PolygonDataProvider.IsSupported(): " +
                     $"Subscription for {securityType}-{dataType}-{tickType}-{resolution} will be attempted. " +
                     $"An Advanced Polygon.io subscription plan is required to stream tick data.");
-                _potentialUnsupportedResolutionMessageLogged = true;
             }
 
             if (tickType == TickType.Quote && !_potentialUnsupportedTickTypeMessageLogged)
             {
+                _potentialUnsupportedTickTypeMessageLogged = true;
                 Log.Trace("PolygonDataProvider.IsSupported(): " +
                     $"Subscription for {securityType}-{dataType}-{tickType}-{resolution} will be attempted. " +
                     $"An Advanced Polygon.io subscription plan is required to stream quote data.");
-                _potentialUnsupportedTickTypeMessageLogged = true;
             }
 
             return true;
