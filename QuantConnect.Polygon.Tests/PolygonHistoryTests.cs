@@ -28,6 +28,7 @@ using System.Linq;
 using System.Collections.Generic;
 using RestSharp;
 using QuantConnect.Tests;
+using NodaTime;
 
 namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
@@ -48,7 +49,10 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         [TearDown]
         public void TearDown()
         {
-            _historyProvider.Dispose();
+            if (_historyProvider != null)
+            {
+                _historyProvider.Dispose();
+            }
         }
 
         internal static TestCaseData[] HistoricalDataTestCases
@@ -90,6 +94,28 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             Log.Trace("Data points retrieved: " + history.Count);
 
             AssertHistoricalDataResults(history.Select(x => x.AllData).SelectMany(x => x).ToList(), resolution, _historyProvider.DataPointCount);
+        }
+
+        [TestCase("GOOGL", "2014/4/1", "2016/4/1", Resolution.Daily, Description = "The stock split on July 15 2022. [GOOG -> GOOGL]")]
+        [TestCase("GOOGL", "2014/4/1", "2014/4/4", Resolution.Hour)]
+        public void GetsRenamedSymbolHistoricalData(string ticker, DateTime startDateTime, DateTime endDateTime, Resolution resolution)
+        {
+            var symbol = Symbol.Create(ticker, SecurityType.Equity, Market.USA);
+
+            var request = CreateHistoryRequest(symbol, resolution, TickType.Trade, startDateTime, endDateTime);
+
+            var history = _historyProvider.GetHistory(new[] { request }, TimeZones.NewYork)?.ToList();
+
+            Log.Trace("Data points retrieved: " + history.Count);
+
+            Assert.IsNotNull(history);
+            Assert.IsNotEmpty(history);
+            Assert.That(history.First().Time.Date, Is.EqualTo(startDateTime));
+            Assert.That(history.Last().Time.Date, Is.LessThanOrEqualTo(endDateTime));
+            Assert.That(history.First().AllData.First().Symbol.Value, Is.EqualTo("GOOG"));
+            Assert.That(history.Last().AllData.First().Symbol.Value, Is.EqualTo("GOOGL"));
+
+            AssertHistoricalDataResults(history.Select(x => x.AllData).SelectMany(x => x).ToList(), resolution);
         }
 
         internal static void AssertHistoricalDataResults(List<BaseData> history, Resolution resolution, int? expectedCount = null)
@@ -141,18 +167,17 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
         [TestCaseSource(nameof(IndexHistoricalDataTestCases))]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
-        public void GetsIndexHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeEmpty)
+        public void GetsIndexHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeNull)
         {
             var history = GetIndexHistory(resolution, period, tickType);
 
-            Log.Trace("Data points retrieved: " + history.Count);
-
-            if (shouldBeEmpty)
+            if (shouldBeNull)
             {
-                Assert.That(history, Is.Empty);
+                Assert.IsNull(history);
             }
             else
             {
+                Log.Trace("Data points retrieved: " + history.Count);
                 AssertHistoricalDataResults(history.Select(x => x.AllData).SelectMany(x => x).ToList(), resolution, _historyProvider.DataPointCount);
             }
         }
@@ -163,16 +188,16 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             {
                 return new[]
                 {
-                    new TestCaseData(Resolution.Daily, TimeSpan.FromMinutes(5), TickType.Quote, true),
-                    new TestCaseData(Resolution.Hour, TimeSpan.FromMinutes(5), TickType.Quote, true),
-                    new TestCaseData(Resolution.Minute, TimeSpan.FromMinutes(5), TickType.Quote, true),
+                    new TestCaseData(Resolution.Daily, TimeSpan.FromMinutes(5), TickType.Quote),
+                    new TestCaseData(Resolution.Hour, TimeSpan.FromMinutes(5), TickType.Quote),
+                    new TestCaseData(Resolution.Minute, TimeSpan.FromMinutes(5), TickType.Quote),
                 };
             }
         }
 
         [TestCaseSource(nameof(IndexHistoricalInvalidDataTestCases))]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
-        public void GetsIndexInvalidHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeEmpty)
+        public void GetsIndexInvalidHistoricalData(Resolution resolution, TimeSpan period, TickType tickType)
         {
             var history = GetIndexHistory(resolution, period, tickType);
 
@@ -312,24 +337,43 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, TimeSpan period)
         {
             var end = new DateTime(2023, 12, 15, 16, 0, 0);
+
             if (resolution == Resolution.Daily)
             {
                 end = end.Date.AddDays(1);
             }
-            var dataType = LeanData.GetDataType(resolution, tickType);
 
-            return new HistoryRequest(end.Subtract(period),
-                end,
+            return CreateHistoryRequest(symbol, resolution, tickType, end.Subtract(period), end);
+        }
+
+        internal static HistoryRequest CreateHistoryRequest(Symbol symbol, Resolution resolution, TickType tickType, DateTime startDateTime, DateTime endDateTime,
+            SecurityExchangeHours exchangeHours = null, DateTimeZone dataTimeZone = null)
+        {
+            if (exchangeHours == null)
+            {
+                exchangeHours = SecurityExchangeHours.AlwaysOpen(TimeZones.NewYork);
+            }
+
+            if (dataTimeZone == null)
+            {
+                dataTimeZone = TimeZones.NewYork;
+            }
+
+            var dataType = LeanData.GetDataType(resolution, tickType);
+            return new HistoryRequest(
+                startDateTime,
+                endDateTime,
                 dataType,
                 symbol,
                 resolution,
-                SecurityExchangeHours.AlwaysOpen(TimeZones.NewYork),
-                TimeZones.NewYork,
+                exchangeHours,
+                dataTimeZone,
                 null,
                 true,
                 false,
                 DataNormalizationMode.Adjusted,
-                tickType);
+                tickType
+                );
         }
 
         private class TestPolygonRestApiClient : PolygonRestApiClient

@@ -81,7 +81,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
         [TestCaseSource(nameof(IndexHistoricalInvalidDataTestCases))]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
-        public void DownloadsIndexInvalidHistoricalData(Resolution resolution, TimeSpan period, TickType tickType, bool shouldBeEmpty)
+        public void DownloadsIndexInvalidHistoricalData(Resolution resolution, TimeSpan period, TickType tickType)
         {
             var data = DownloadIndexHistoryData(resolution, period, tickType);
 

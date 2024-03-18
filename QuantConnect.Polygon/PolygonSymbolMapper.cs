@@ -40,9 +40,21 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 throw new ArgumentException($"Invalid symbol: {(symbol == null ? "null" : symbol.ToString())}");
             }
 
+            return GetBrokerageSymbol(symbol, false);
+        }
+
+        /// <summary>
+        /// Converts a Lean symbol instance to a brokerage symbol with updating of cached symbol collection
+        /// </summary>
+        /// <param name="symbol"></param>
+        /// <param name="isUpdateCachedSymbol"></param>
+        /// <returns></returns>
+        /// <exception cref="Exception"></exception>
+        public string GetBrokerageSymbol(Symbol symbol, bool isUpdateCachedSymbol)
+        {
             lock (_locker)
             {
-                if (!_brokerageSymbolsCache.TryGetValue(symbol, out var brokerageSymbol))
+                if (!_brokerageSymbolsCache.TryGetValue(symbol, out var brokerageSymbol) || isUpdateCachedSymbol)
                 {
                     var ticker = symbol.Value.Replace(" ", "");
                     switch (symbol.SecurityType)
@@ -118,7 +130,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 if (!_leanSymbolsCache.TryGetValue(brokerageSymbol, out var leanSymbol))
                 {
                     var leanBaseSymbol = securityType == SecurityType.Equity ? null : GetLeanSymbol(brokerageSymbol);
-                    var underlyingSymbolStr = underlying?.ID.Symbol ?? leanBaseSymbol?.Underlying.ID.Symbol;
+                    var underlyingSymbolStr = underlying?.Value ?? leanBaseSymbol?.Underlying.Value;
 
                     switch (securityType)
                     {

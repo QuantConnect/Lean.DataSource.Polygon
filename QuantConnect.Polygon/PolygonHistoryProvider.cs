@@ -32,12 +32,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <summary>
         /// Indicates whether a error for an invalid start time has been fired, where the start time is greater than or equal to the end time in UTC.
         /// </summary>
-        private bool _invalidStartTimeErrorFired;
+        private volatile bool _invalidStartTimeErrorFired;
 
         /// <summary>
         /// Indicates whether an error has been fired due to invalid conditions if the TickType is <seealso cref="TickType.Quote"/> and the <seealso cref="Resolution"/> is greater than one second.
         /// </summary>
-        private bool _invalidTickTypeAndResolutionErrorFired;
+        private volatile bool _invalidTickTypeAndResolutionErrorFired;
 
         /// <summary>
         /// Gets the total number of data points emitted by this history provider
@@ -63,12 +63,14 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var subscriptions = new List<Subscription>();
             foreach (var request in requests)
             {
-                var history = GetHistory(request);
-                if (history == null)
+                var history = request.SplitHistoryRequestWithUpdatedMappedSymbol(_mapFileProvider).SelectMany(x => GetHistory(x) ?? Enumerable.Empty<BaseData>());
+
+                var subscription = CreateSubscription(request, history);
+                if (!subscription.MoveNext())
                 {
                     continue;
                 }
-                var subscription = CreateSubscription(request, history);
+
                 subscriptions.Add(subscription);
             }
 
@@ -99,8 +101,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 if (!_invalidTickTypeAndResolutionErrorFired)
                 {
-                    Log.Error("PolygonDataProvider.GetHistory(): Quote data above second resolution is not supported.");
                     _invalidTickTypeAndResolutionErrorFired = true;
+                    Log.Error("PolygonDataProvider.GetHistory(): Quote data above second resolution is not supported.");
                 }
                 return null;
             }
@@ -109,8 +111,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 if (!_invalidStartTimeErrorFired)
                 {
-                    Log.Error($"{nameof(PolygonDataProvider)}.{nameof(GetHistory)}:InvalidDateRange. The history request start date must precede the end date, no history returned");
                     _invalidStartTimeErrorFired = true;
+                    Log.Error($"{nameof(PolygonDataProvider)}.{nameof(GetHistory)}:InvalidDateRange. The history request start date must precede the end date, no history returned");
                 }
                 return null;
             }
@@ -179,7 +181,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         private IEnumerable<TradeBar> GetAggregates(HistoryRequest request)
         {
-            var ticker = _symbolMapper.GetBrokerageSymbol(request.Symbol);
+            var ticker = _symbolMapper.GetBrokerageSymbol(request.Symbol, true);
             var resolutionTimeSpan = request.Resolution.ToTimeSpan();
             // Aggregates API gets timestamps in milliseconds
             var start = Time.DateTimeToUnixTimeStampMilliseconds(request.StartTimeUtc.RoundDown(resolutionTimeSpan));
