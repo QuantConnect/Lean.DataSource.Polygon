@@ -32,8 +32,7 @@
                 "IndexOption"
             ],
             "markets": [
-                "USA",
-                "CBOE"
+                "USA"
             ]
         }
     }
