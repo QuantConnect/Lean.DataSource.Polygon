@@ -11,5 +11,29 @@
     ],
     "data-supported": [ "Equity", "Equity Options", "Indexes", "Index Options" ], 
     "documentation": "/docs/v2/lean-cli/datasets/polygon",
-    "more-information": "https://www.polygon.io/"
+    "more-information": "https://www.polygon.io/",
+    "module-specification": {
+        "download": {
+            "data-types": [
+                "Trade",
+                "Quote"
+            ],
+            "resolutions": [
+                "Tick",
+                "Second",
+                "Minute",
+                "Hour",
+                "Daily"
+            ],
+            "security-types": [
+                "Equity",
+                "Option",
+                "Index",
+                "IndexOption"
+            ],
+            "markets": [
+                "USA"
+            ]
+        }
+    }
 }
