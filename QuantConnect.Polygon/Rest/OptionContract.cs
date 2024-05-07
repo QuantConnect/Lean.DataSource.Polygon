@@ -52,5 +52,62 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         [JsonProperty("ticker")]
         public string Ticker { get; set; }
+
+        /// <summary>
+        /// The option open interest (number of open contracts)
+        /// </summary>
+        [JsonProperty("open_interest")]
+        public int OpenInterest { get; set; }
+
+        /// <summary>
+        /// The option implied volatility
+        /// </summary>
+        [JsonProperty("implied_volatility")]
+        public double ImpliedVolatility { get; set; }
+
+        /// <summary>
+        /// The option Greeks
+        /// </summary>
+        [JsonProperty("greeks")]
+        public Greeks Greeks { get; set; }
+
+        /// <summary>
+        /// The option last trade
+        /// </summary>
+        [JsonProperty("previous_close")]
+        public int Close { get; set; }
+
+        /// <summary>
+        /// The option volume
+        /// </summary>
+        [JsonProperty("volume")]
+        public int Volume { get; set; }
+    }
+
+    public class Greeks
+    {
+        /// <summary>
+        /// The option delta
+        /// </summary>
+        [JsonProperty("delta")]
+        public double Delta { get; set; }
+
+        /// <summary>
+        /// The option gamma
+        /// </summary>
+        [JsonProperty("gamma")]
+        public double Gamma { get; set; }
+        
+        /// <summary>
+        /// \The option theta
+        /// </summary>
+        [JsonProperty("theta")]
+        public double Theta { get; set; }
+
+        /// <summary>
+        /// The option vega
+        /// </summary>
+        [JsonProperty("vega")]
+        public double Vega { get; set; }
     }
 }

@@ -66,11 +66,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             var underlying = symbol.SecurityType.IsOption() ? symbol.Underlying : symbol;
             var optionsSecurityType = underlying.SecurityType == SecurityType.Index ? SecurityType.IndexOption : SecurityType.Option;
+            
+            Log.Trace($"PolygonOptionChainProvider Underlying Ticker: {underlying.Value}");
 
-            var request = new RestRequest("/v3/reference/options/contracts", Method.GET);
-            request.AddQueryParameter("underlying_ticker", underlying.Value);
-            request.AddQueryParameter("as_of", date.ToStringInvariant("yyyy-MM-dd"));
-            request.AddQueryParameter("limit", "1000");
+            var request = new RestRequest($"/v3/snapshot/options/{underlying.Value}", Method.GET);
+            request.AddQueryParameter("expiration_date", date.ToStringInvariant("yyyy-MM-dd"));
+            request.AddQueryParameter("limit", "250");
 
             foreach (var contract in _restApiClient.DownloadAndParseData<OptionChainResponse>(request).SelectMany(response => response.Results))
             {
