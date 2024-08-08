@@ -42,7 +42,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         public void SetUp()
         {
             _historyProvider = new PolygonDataProvider(_apiKey, streamingEnabled: false);
-            _historyProvider.Initialize(new HistoryProviderInitializeParameters(null, null, null, null, null, null, null, false, null, null));
+            _historyProvider.Initialize(new HistoryProviderInitializeParameters(null, null, null, null, null, null, null, false, null, null, null));
 
         }
 
