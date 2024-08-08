@@ -13,11 +13,12 @@
  * limitations under the License.
 */
 
-using Newtonsoft.Json.Linq;
 using RestSharp;
+using Newtonsoft.Json;
+using QuantConnect.Util;
+using Newtonsoft.Json.Linq;
 using QuantConnect.Logging;
 using QuantConnect.Configuration;
-using QuantConnect.Util;
 
 namespace QuantConnect.Lean.DataSource.Polygon
 {
@@ -29,6 +30,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private readonly static string RestApiBaseUrl = Config.Get("polygon-api-url", "https://api.polygon.io");
 
         private readonly RestClient _restClient;
+
+        /// <summary>
+        /// The maximum number of retry attempts for downloading data or executing a request.
+        /// </summary>
+        private const int MaxRetries = 10;
 
         private readonly string _apiKey;
 
@@ -63,6 +69,29 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 Log.Debug($"PolygonRestApi.DownloadAndParseData(): Downloading {request.Resource}");
 
+                var responseContent = DownloadWithRetries(request);
+                if (string.IsNullOrEmpty(responseContent))
+                {
+                    throw new Exception($"{nameof(PolygonRestApiClient)}.{nameof(DownloadAndParseData)}: Failed to download data for {request.Resource} after {MaxRetries} attempts.");
+                }
+
+                var result = ParseResponse<T>(responseContent);
+
+                if (result == null)
+                {
+                    yield break;
+                }
+
+                yield return result;
+
+                request = result.NextUrl != null ? new RestRequest(result.NextUrl, Method.GET) : null;
+            }
+        }
+
+        private string? DownloadWithRetries(RestRequest request)
+        {
+            for (int attempt = 0; attempt < MaxRetries; attempt++)
+            {
                 if (RateLimiter != null)
                 {
                     if (RateLimiter.IsRateLimited)
@@ -72,35 +101,38 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     RateLimiter.WaitToProceed();
                 }
 
-                request.AddHeader("Authorization", $"Bearer {_apiKey}");
+                request.AddOrUpdateHeader("Authorization", $"Bearer {_apiKey}");
 
                 var response = _restClient.Execute(request);
-                if (response == null || response.Content.Length == 0)
+
+                var baseResponse = JsonConvert.DeserializeObject<BaseResponse>(response.Content);
+
+                if (response != null && response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
                 {
-                    Log.Debug($"PolygonRestApi.DownloadAndParseData(): No response for {request.Resource}, Error: {response.ErrorMessage}");
-                    yield break;
+                    Log.Debug($"PolygonRestApi.DownloadAndParseData(): Attempt {attempt + 1} failed. Error: {baseResponse?.Error ?? "Unknown error"}");
+                    continue;
                 }
 
-                // If the data download was not successful, log the reason
-                var resultJson = JObject.Parse(response.Content);
-                if (resultJson["status"]?.ToString().ToUpperInvariant() != "OK")
+                if (response != null && response.Content.Length > 0 && response.StatusCode == System.Net.HttpStatusCode.OK)
                 {
-                    Log.Debug($"PolygonRestApi.DownloadAndParseData(): No data for {request.Resource}. Reason: {response.Content}");
-                    yield break;
+                    return response.Content;
                 }
-
-                var result = resultJson.ToObject<T>();
-                if (result == null)
-                {
-                    Log.Debug($"PolygonRestApi.DownloadAndParseData(): Unable to parse response for {request.Resource}. " +
-                        $"Response: {response.Content}");
-                    yield break;
-                }
-
-                yield return result;
-
-                request = result.NextUrl != null ? new RestRequest(result.NextUrl, Method.GET) : null;
             }
+
+            Log.Debug($"PolygonRestApi.DownloadAndParseData(): Failed after {MaxRetries} attempts for {request.Resource}");
+            return null;
+        }
+
+        private T? ParseResponse<T>(string responseContent) where T : BaseResponse
+        {
+            var result = JObject.Parse(responseContent).ToObject<T>();
+
+            if (result == null)
+            {
+                throw new ArgumentException($"{nameof(PolygonRestApiClient)}.{nameof(ParseResponse)}: Unable to parse response. Response: {responseContent}");
+            }
+
+            return result;
         }
 
         public void Dispose()
