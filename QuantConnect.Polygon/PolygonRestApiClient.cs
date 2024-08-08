@@ -75,9 +75,9 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 request.AddHeader("Authorization", $"Bearer {_apiKey}");
 
                 var response = _restClient.Execute(request);
-                if (response == null)
+                if (response == null || response.Content.Length == 0)
                 {
-                    Log.Debug($"PolygonRestApi.DownloadAndParseData(): No response for {request.Resource}");
+                    Log.Debug($"PolygonRestApi.DownloadAndParseData(): No response for {request.Resource}, Error: {response.ErrorMessage}");
                     yield break;
                 }
 
