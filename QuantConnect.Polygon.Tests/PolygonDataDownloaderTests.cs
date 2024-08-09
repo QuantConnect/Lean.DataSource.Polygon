@@ -107,6 +107,30 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             Assert.That(distinctSymbols, Has.Count.GreaterThan(1).And.All.Matches<Symbol>(x => x.Canonical == symbol));
         }
 
+        [Test]
+        public void OptionTradeHistoryIsSortedByTimeTest()
+        {
+            var under = Symbol.Create("OXY", SecurityType.Equity, Market.USA);
+            var symbol = Symbol.CreateOption(under, Market.USA, OptionStyle.American, OptionRight.Call, 55m, new DateTime(2024, 7, 19));
+
+            var startDateTime = new DateTime(2024, 7, 18);
+            var endDateTime = new DateTime(2024, 7, 19);
+
+            var parameters = new DataDownloaderGetParameters(symbol, Resolution.Minute, startDateTime, endDateTime, TickType.Trade);
+
+            using var downloader = new TestablePolygonDataDownloader();
+            var history = downloader.Get(parameters)?.ToList();
+
+            Assert.IsNotNull(history);
+            Assert.IsNotEmpty(history);
+
+            for (int i = 1; i < history.Count; i++)
+            {
+                if (history[i].Time < history[i - 1].Time)
+                    Assert.Fail();
+            }
+        }
+
         /// <summary>
         /// Downloads historical data of an hardcoded index [SPX] based on specified parameters.
         /// </summary>
