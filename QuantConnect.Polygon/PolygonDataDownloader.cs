@@ -140,11 +140,15 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
         protected virtual IEnumerable<Symbol> GetOptions(Symbol symbol, DateTime startUtc, DateTime endUtc)
         {
+            HashSet<Symbol> seenOptions = new();
             foreach (var date in Time.EachDay(startUtc.Date, endUtc.Date))
             {
                 foreach (var option in _historyProvider.GetOptionChain(symbol, date))
                 {
-                    yield return option;
+                    if (seenOptions.Add(option))
+                    {
+                        yield return option;
+                    }
                 }
             }
         }
