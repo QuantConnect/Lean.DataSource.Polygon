@@ -51,7 +51,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         public PolygonRestApiClient(string apiKey)
         {
             _apiKey = apiKey;
-            _restClient = new RestClient(RestApiBaseUrl);
+            _restClient = new RestClient(RestApiBaseUrl) { Timeout = 300000 }; // 5 minutes in milliseconds
         }
 
         /// <summary>
