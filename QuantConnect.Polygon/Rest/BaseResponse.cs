@@ -29,6 +29,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
         public string Status { get; set; }
 
         /// <summary>
+        /// The error message of response
+        /// </summary>
+        [JsonProperty("error")]
+        public string? Error { get; set; }
+
+        /// <summary>
         /// The URL to the next page of results. This is null if there are no more results.
         /// </summary>
         [JsonProperty("next_url", NullValueHandling = NullValueHandling.Ignore)]

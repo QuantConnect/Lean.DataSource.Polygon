@@ -16,6 +16,7 @@
 using NodaTime;
 using QuantConnect.Data;
 using QuantConnect.Util;
+using QuantConnect.Logging;
 using QuantConnect.Securities;
 using QuantConnect.Configuration;
 using System.Collections.Concurrent;
@@ -115,9 +116,15 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 {
                     blockingOptionCollection.Add(data);
                 }
-            })).ContinueWith(_ =>
+            })).ContinueWith(task =>
             {
                 blockingOptionCollection.CompleteAdding();
+                if (task.IsFaulted && task.Exception != null)
+                {
+                    var aggregateException = task.Exception.Flatten();
+                    var errorMessages = string.Join("; ", aggregateException.InnerExceptions.Select(e => e.Message));
+                    Log.Error($"{nameof(PolygonDataDownloader)}.{nameof(GetCanonicalOptionHistory)}: Task failed with error(s): {errorMessages}");
+                }
             });
 
             var options = blockingOptionCollection.GetConsumingEnumerable();
@@ -133,11 +140,15 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
         protected virtual IEnumerable<Symbol> GetOptions(Symbol symbol, DateTime startUtc, DateTime endUtc)
         {
+            HashSet<Symbol> seenOptions = new();
             foreach (var date in Time.EachDay(startUtc.Date, endUtc.Date))
             {
                 foreach (var option in _historyProvider.GetOptionChain(symbol, date))
                 {
-                    yield return option;
+                    if (seenOptions.Add(option))
+                    {
+                        yield return option;
+                    }
                 }
             }
         }
