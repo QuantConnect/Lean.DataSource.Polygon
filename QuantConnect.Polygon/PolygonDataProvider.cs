@@ -158,6 +158,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     maxSubscriptionsPerWebSocket,
                     (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage));
             }
+            var openInterestManager = new PolygonOpenInterestProcessorManager(TimeProvider, RestApiClient, _symbolMapper, _subscriptionManager, _dataAggregator, GetTickTime);
+            openInterestManager.ScheduleNextRun();
         }
 
         #region IDataQueueHandler implementation

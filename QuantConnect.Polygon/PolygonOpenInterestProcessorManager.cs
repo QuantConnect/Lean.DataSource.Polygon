@@ -14,9 +14,11 @@
  */
 
 using NodaTime;
+using RestSharp;
+using QuantConnect.Data;
+using QuantConnect.Securities;
 using QuantConnect.Data.Market;
 using QuantConnect.Lean.DataSource.Polygon.Rest;
-using RestSharp;
 
 namespace QuantConnect.Lean.DataSource.Polygon
 {
@@ -50,7 +52,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <summary>
         /// Subscription manager to handle the subscriptions for the Polygon data queue handler.
         /// </summary>
-        private readonly PolygonSubscriptionManager _polygonSubscriptionManager;
+        private readonly EventBasedDataQueueHandlerSubscriptionManager _polygonSubscriptionManager;
 
         /// <summary>
         /// Aggregates Polygon.io trade bars into same or higher resolution bars
@@ -77,23 +79,21 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <param name="dataAggregator"></param>
         /// <param name="getTickTime"></param>
         public PolygonOpenInterestProcessorManager(ITimeProvider timeProvider, PolygonRestApiClient polygonRestApiClient, PolygonSymbolMapper symbolMapper,
-            PolygonSubscriptionManager polygonSubscriptionManager, PolygonAggregationManager dataAggregator, Func<Symbol, DateTime, DateTime> getTickTime)
+            EventBasedDataQueueHandlerSubscriptionManager polygonSubscriptionManager, PolygonAggregationManager dataAggregator, Func<Symbol, DateTime, DateTime> getTickTime)
         {
+            _getTickTime = getTickTime;
             _timeProvider = timeProvider;
             _symbolMapper = symbolMapper;
             _dataAggregator = dataAggregator;
             _polygonRestApiClient = polygonRestApiClient;
             _polygonSubscriptionManager = polygonSubscriptionManager;
-            _getTickTime = getTickTime;
-            
-            ScheduleNextRun();
         }
 
         /// <summary>
         /// Schedules the next execution of the <see cref="ProcessOpenInterest"/> method
         /// based on the current time in New York (Eastern Time).
         /// </summary>
-        private void ScheduleNextRun()
+        public void ScheduleNextRun()
         {
             var now = _timeProvider.GetUtcNow().ConvertFromUtc(_nyTimeZone);
             var nextRunTime = GetNextRunTime(now);
@@ -111,13 +111,16 @@ namespace QuantConnect.Lean.DataSource.Polygon
         {
             var subscribedSymbol = _polygonSubscriptionManager.GetSubscribedSymbols().ToList();
 
-            ProcessOpenInterest(subscribedSymbol);
+            if (subscribedSymbol.Count != 0)
+            {
+                ProcessOpenInterest(subscribedSymbol);
+            }
 
             // Reschedule for the next execution at either 9:30 AM or 3:30 PM
             ScheduleNextRun();
         }
 
-        public void ProcessOpenInterest(IReadOnlyCollection<Symbol> subscribedSymbols)
+        private void ProcessOpenInterest(IReadOnlyCollection<Symbol> subscribedSymbols)
         {
             var subscribedBrokerageSymbols = subscribedSymbols.Select(x => _symbolMapper.GetBrokerageSymbol(x));
             //var symbols = dataConfigs.Select(x => x.Symbol).ToList();
@@ -128,11 +131,23 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             foreach (var universalSnapshot in _polygonRestApiClient.DownloadAndParseData<UniversalSnapshotResponse>(restRequest).SelectMany(response => response.Results))
             {
+                if (universalSnapshot.OpenInterest == 0)
+                {
+                    continue;
+                }
+
                 var leanSymbol = _symbolMapper.GetLeanSymbol(universalSnapshot.Ticker!);
                 var time = _getTickTime(leanSymbol, DateTime.UtcNow);
-                var openInterest = new OpenInterest(time, leanSymbol, universalSnapshot.OpenInterest);
 
-                _dataAggregator.Update(openInterest);
+                var tickOpenInterest = new Tick()
+                {
+                    Time = time,
+                    Symbol = leanSymbol,
+                    TickType = TickType.OpenInterest,
+                    Value = universalSnapshot.OpenInterest
+                };
+
+                _dataAggregator.Update(tickOpenInterest);
             }
         }
 
@@ -143,8 +158,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <returns>The next execution time at either 9:30 AM or 3:30 PM.</returns>
         private DateTime GetNextRunTime(DateTime currentTime)
         {
-            DateTime today930AM = currentTime.Date.AddHours(9).AddMinutes(30);
-            DateTime today330PM = currentTime.Date.AddHours(15).AddMinutes(30);
+            var today930AM = currentTime.Date.AddHours(9).AddMinutes(30);
+            var today330PM = currentTime.Date.AddHours(15).AddMinutes(30);
 
             if (currentTime < today930AM)
             {
