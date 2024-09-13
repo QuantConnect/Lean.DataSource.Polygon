@@ -28,36 +28,28 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
     public class PolygonOpenInterestProcessorManagerTests : PolygonDataProviderBaseTests
     {
-        private readonly string _apiKey = Config.Get("polygon-api-key");
+        private readonly PolygonRestApiClient _restApiClient = new(Config.Get("polygon-api-key"));
 
-        private ManualTimeProvider _timeProviderInstance = new ManualTimeProvider();
+        private readonly PolygonSymbolMapper symbolMapper = new();
 
-        private object _locker = new object();
+        private readonly PolygonAggregationManager dataAggregator = new();
 
-        /// <summary>
-        /// Tests that the next run time is 9:30 AM if the current time is before 9:30 AM.
-        /// </summary>
+        private readonly ManualTimeProvider _timeProviderInstance = new();
+
+        private readonly EventBasedDataQueueHandlerSubscriptionManager _subscriptionManager = new()
+        {
+            SubscribeImpl = (symbols, _) => { return true; },
+            UnsubscribeImpl = (symbols, _) => { return true; }
+        };
+
+        private object _locker = new();
+
         [Test]
-        public void GetNextRunTime_Before930AM_Returns930AM()
+        public void GetOpenInterestScheduleNextRun()
         {
             var resetEvent = new AutoResetEvent(false);
             var cancellationTokenSource = new CancellationTokenSource();
-
-            var restApiClient = new PolygonRestApiClient(_apiKey);
-            var symbolMapper = new PolygonSymbolMapper();
-
-            //var subscriptionManager = new PolygonSubscriptionManager(_supportedSecurityTypes, 1,
-            //    (securityType) => new PolygonWebSocketClientWrapper(_apiKey, symbolMapper, securityType, (s) => { }));
-
-            var dataAggregator = new PolygonAggregationManager();
-
-            var configs = GetConfigs();
-
-            var subscriptionManager = new EventBasedDataQueueHandlerSubscriptionManager()
-            {
-                SubscribeImpl = (symbols, _) => { return true; },
-                UnsubscribeImpl = (symbols, _) => { return true; }
-            };
+            var optionContractsConfigs = GetConfigs();
 
             var symbolOpenInterest = new ConcurrentDictionary<Symbol, decimal>();
             Action<BaseData> callback = (baseData) =>
@@ -78,9 +70,9 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                 }
             };
 
-            foreach (var config in configs)
+            foreach (var config in optionContractsConfigs)
             {
-                subscriptionManager.Subscribe(config);
+                _subscriptionManager.Subscribe(config);
                 ProcessFeed(
                     Subscribe(dataAggregator, config, (sender, args) => { }),
                     cancellationTokenSource.Token,
@@ -88,15 +80,15 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                     );
             }
 
-            var date = new DateTime(2014, 10, 7, 9, 29, 59).ConvertTo(TimeZones.NewYork, TimeZones.Utc);
+            var mockDateTimeFromNYToUtc = new DateTime(2014, 10, 7, 9, 29, 59).ConvertTo(TimeZones.NewYork, TimeZones.Utc);
+            _timeProviderInstance.SetCurrentTimeUtc(mockDateTimeFromNYToUtc);
 
-            _timeProviderInstance.SetCurrentTimeUtc(date);
-            var processor = new PolygonOpenInterestProcessorManager(_timeProviderInstance, restApiClient, symbolMapper, subscriptionManager, dataAggregator, GetTickTime);
+            var processor = new PolygonOpenInterestProcessorManager(_timeProviderInstance, _restApiClient, symbolMapper, _subscriptionManager, dataAggregator, GetTickTime);
+            processor.ScheduleNextRun();
 
             resetEvent.WaitOne(TimeSpan.FromSeconds(30), cancellationTokenSource.Token);
 
             Assert.Greater(symbolOpenInterest.Count, 0);
-
             foreach (var (symbol, openInterest) in symbolOpenInterest)
             {
                 Assert.Greater(openInterest, 0);
@@ -107,7 +99,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         {
             var configs = new List<SubscriptionDataConfig>();
 
-            var expiryContractDate = new DateTime(2024, 09, 13);
+            var expiryContractDate = new DateTime(2024, 09, 20);
             var strikesAAPL = new decimal[] { 100m, 105m, 110m, 115m, 120m, 125m, 130m, 135m, 140m, 145m };
 
             foreach (var strike in strikesAAPL)
