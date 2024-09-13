@@ -123,8 +123,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private void ProcessOpenInterest(IReadOnlyCollection<Symbol> subscribedSymbols)
         {
             var subscribedBrokerageSymbols = subscribedSymbols.Select(x => _symbolMapper.GetBrokerageSymbol(x));
-            //var symbols = dataConfigs.Select(x => x.Symbol).ToList();
-            //var subscribedSymbols = symbols.Select(x => _symbolMapper.GetBrokerageSymbol(x)).Distinct();
 
             var restRequest = new RestRequest($"v3/snapshot?ticker.any_of={string.Join(',', subscribedBrokerageSymbols)}", Method.GET);
             restRequest.AddQueryParameter("limit", "250");
