@@ -16,6 +16,7 @@
 using NodaTime;
 using RestSharp;
 using QuantConnect.Data;
+using QuantConnect.Logging;
 using QuantConnect.Securities;
 using QuantConnect.Data.Market;
 using QuantConnect.Lean.DataSource.Polygon.Rest;
@@ -109,15 +110,23 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         private void RunProcessOpenInterest(object? _)
         {
-            var subscribedSymbol = _polygonSubscriptionManager.GetSubscribedSymbols().ToList();
-
-            if (subscribedSymbol.Count != 0)
+            try
             {
-                ProcessOpenInterest(subscribedSymbol);
-            }
+                var subscribedSymbol = _polygonSubscriptionManager.GetSubscribedSymbols(TickType.OpenInterest).ToList();
 
-            // Reschedule for the next execution at either 9:30 AM or 3:30 PM
-            ScheduleNextRun();
+                if (subscribedSymbol.Count != 0)
+                {
+                    ProcessOpenInterest(subscribedSymbol);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"{nameof(PolygonOpenInterestProcessorManager)}.{nameof(RunProcessOpenInterest)}: {ex.Message}");
+            }
+            finally
+            {
+                ScheduleNextRun();
+            }
         }
 
         private void ProcessOpenInterest(IReadOnlyCollection<Symbol> subscribedSymbols)
@@ -137,15 +146,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 var leanSymbol = _symbolMapper.GetLeanSymbol(universalSnapshot.Ticker!);
                 var time = _getTickTime(leanSymbol, DateTime.UtcNow);
 
-                var tickOpenInterest = new Tick()
-                {
-                    Time = time,
-                    Symbol = leanSymbol,
-                    TickType = TickType.OpenInterest,
-                    Value = universalSnapshot.OpenInterest
-                };
-
-                _dataAggregator.Update(tickOpenInterest);
+                _dataAggregator.Update(new Tick(time, leanSymbol, universalSnapshot.OpenInterest));
             }
         }
 
