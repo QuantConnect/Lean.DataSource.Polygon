@@ -101,8 +101,14 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             TimeSpan delay = nextRunTime - now;
 
-            // Initialize the timer to run the method at the calculated delay
-            _openInterestScheduler = new Timer(RunProcessOpenInterest, null, delay, Timeout.InfiniteTimeSpan);
+            if (_openInterestScheduler != null)
+            {
+                _openInterestScheduler.Change(delay, Timeout.InfiniteTimeSpan);
+            }
+            else
+            {
+                _openInterestScheduler = new Timer(RunProcessOpenInterest, null, delay, Timeout.InfiniteTimeSpan);
+            }
         }
 
         /// <summary>
