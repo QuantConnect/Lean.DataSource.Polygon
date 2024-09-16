@@ -113,6 +113,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <param name="tickType">Type of tick data</param>
         protected override bool Subscribe(IEnumerable<Symbol> symbols, TickType tickType)
         {
+            if (tickType == TickType.OpenInterest)
+            {
+                // Skip subscribing to OpenInterest and consider using PolygonOpenInterestProcessorManager instead, as Polygon doesn't support live updating of OpenInterest.
+                return true;
+            }
+
             Log.Trace($"PolygonSubscriptionManager.Subscribe(): {string.Join(",", symbols.Select(x => x.Value))}");
 
             foreach (var symbol in symbols)
