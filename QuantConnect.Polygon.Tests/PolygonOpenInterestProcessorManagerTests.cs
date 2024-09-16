@@ -44,9 +44,12 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
         private object _locker = new();
 
-        [Test]
-        public void GetOpenInterestScheduleNextRun()
+        [TestCase("2024-09-16T09:30:59", true, Description = "Market: After Opening")]
+        [TestCase("2024-09-16T15:28:59", true, Description = "Market: Before Closing")]
+        [TestCase("2024-09-16T16:28:59", false, Description = "Market: Closed")]
+        public void GetOpenInterestAfterExchangeOpenTime(string mockDateTime, bool isShouldReturnData)
         {
+            var waitOneDelay = isShouldReturnData ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(5);
             var resetEvent = new AutoResetEvent(false);
             var cancellationTokenSource = new CancellationTokenSource();
             var optionContractsConfigs = GetConfigs();
@@ -80,19 +83,29 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                     );
             }
 
-            var mockDateTimeFromNYToUtc = new DateTime(2014, 10, 7, 9, 29, 59).ConvertTo(TimeZones.NewYork, TimeZones.Utc);
-            _timeProviderInstance.SetCurrentTimeUtc(mockDateTimeFromNYToUtc);
-
+            var mockDateTimeAfterOpenExchange = DateTime.Parse(mockDateTime).ConvertTo(TimeZones.NewYork, TimeZones.Utc);
+            _timeProviderInstance.SetCurrentTimeUtc(mockDateTimeAfterOpenExchange);
             var processor = new PolygonOpenInterestProcessorManager(_timeProviderInstance, _restApiClient, symbolMapper, _subscriptionManager, dataAggregator, GetTickTime);
             processor.ScheduleNextRun();
+            resetEvent.WaitOne(waitOneDelay, cancellationTokenSource.Token);
 
-            resetEvent.WaitOne(TimeSpan.FromSeconds(30), cancellationTokenSource.Token);
-
-            Assert.Greater(symbolOpenInterest.Count, 0);
-            foreach (var (symbol, openInterest) in symbolOpenInterest)
+            if (isShouldReturnData)
             {
-                Assert.Greater(openInterest, 0);
+                Assert.Greater(symbolOpenInterest.Count, 0);
+                foreach (var (symbol, openInterest) in symbolOpenInterest)
+                {
+                    Assert.Greater(openInterest, 0);
+                }
             }
+            else
+            {
+                Assert.Zero(symbolOpenInterest.Count);
+            }
+
+            cancellationTokenSource.Cancel();
+            cancellationTokenSource.Dispose();
+            processor.Dispose();
+            symbolOpenInterest.Clear();
         }
 
         protected override List<SubscriptionDataConfig> GetConfigs(Resolution resolution = Resolution.Second)

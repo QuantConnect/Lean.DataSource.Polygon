@@ -96,10 +96,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         public void ScheduleNextRun()
         {
-            var now = _timeProvider.GetUtcNow().ConvertFromUtc(_nyTimeZone);
-            var nextRunTime = GetNextRunTime(now);
+            var nowNewYork = _timeProvider.GetUtcNow().ConvertFromUtc(_nyTimeZone);
+            var nextRunTimeNewYork = GetNextRunTime(nowNewYork);
 
-            TimeSpan delay = nextRunTime - now;
+            TimeSpan delay = nextRunTimeNewYork - nowNewYork;
 
             if (_openInterestScheduler != null)
             {
@@ -118,7 +118,9 @@ namespace QuantConnect.Lean.DataSource.Polygon
         {
             try
             {
-                var subscribedSymbol = _polygonSubscriptionManager.GetSubscribedSymbols(TickType.OpenInterest).ToList();
+                var nowNewYork = _timeProvider.GetUtcNow();
+                var subscribedSymbol = _polygonSubscriptionManager.GetSubscribedSymbols(TickType.OpenInterest)
+                    .Where(symbol => symbol.IsMarketOpen(nowNewYork, extendedMarketHours: false)).ToList();
 
                 if (subscribedSymbol.Count != 0)
                 {
@@ -159,19 +161,19 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <summary>
         /// Calculates the next run time (9:30 AM or 3:30 PM New York Time) based on the current time.
         /// </summary>
-        /// <param name="currentTime">The current time in the New York time zone.</param>
+        /// <param name="currentTimeNewYork">The current time in the New York time zone.</param>
         /// <returns>The next execution time at either 9:30 AM or 3:30 PM.</returns>
-        private DateTime GetNextRunTime(DateTime currentTime)
+        private DateTime GetNextRunTime(DateTime currentTimeNewYork)
         {
-            var today930AM = currentTime.Date.AddHours(9).AddMinutes(30);
-            var today330PM = currentTime.Date.AddHours(15).AddMinutes(30);
+            var today930AM = currentTimeNewYork.Date.AddHours(9).AddMinutes(31);
+            var today330PM = currentTimeNewYork.Date.AddHours(15).AddMinutes(29);
 
-            if (currentTime < today930AM)
+            if (currentTimeNewYork < today930AM)
             {
                 // If it's before 9:30 AM, schedule the next run for 9:30 AM today
                 return today930AM;
             }
-            else if (currentTime >= today930AM && currentTime < today330PM)
+            else if (currentTimeNewYork >= today930AM && currentTimeNewYork < today330PM)
             {
                 // If it's between 9:30 AM and 3:30 PM, schedule the next run for 3:30 PM today
                 return today330PM;
