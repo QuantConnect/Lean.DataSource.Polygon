@@ -95,6 +95,16 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 return null;
             }
 
+            if (request.TickType == TickType.OpenInterest)
+            {
+                if (!_unsupportedTickTypeMessagedLogged)
+                {
+                    _unsupportedTickTypeMessagedLogged = true;
+                    Log.Trace($"PolygonDataProvider.GetHistory(): Unsupported tick type: {TickType.OpenInterest}");
+                }
+                return null;
+            }
+
             // Quote data can only be fetched from Polygon from their Quote Tick endpoint,
             // which would be too slow for anything above second resolution or long time spans.
             if (request.TickType == TickType.Quote && request.Resolution > Resolution.Second)

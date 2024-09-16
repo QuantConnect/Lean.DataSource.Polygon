@@ -430,18 +430,9 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 return false;
             }
 
-            if (tickType == TickType.OpenInterest)
-            {
-                if (!_unsupportedTickTypeMessagedLogged)
-                {
-                    _unsupportedTickTypeMessagedLogged = true;
-                    Log.Trace($"PolygonDataProvider.IsSupported(): Unsupported tick type: {tickType}");
-                }
-                return false;
-            }
-
             if (!dataType.IsAssignableFrom(typeof(TradeBar)) &&
                 !dataType.IsAssignableFrom(typeof(QuoteBar)) &&
+!dataType.IsAssignableFrom(typeof(OpenInterest)) &&
                 !dataType.IsAssignableFrom(typeof(Tick)))
             {
                 if (!_unsupportedDataTypeMessageLogged)
