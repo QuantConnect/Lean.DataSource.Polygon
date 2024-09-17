@@ -298,7 +298,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var period = TimeSpan.FromMilliseconds(aggregate.EndingTickTimestamp - aggregate.StartingTickTimestamp);
             var bar = new TradeBar(time, symbol, aggregate.Open, aggregate.High, aggregate.Low, aggregate.Close, aggregate.Volume, period);
 
-            _dataAggregator.Update(bar);
+            lock (_dataAggregator)
+            {
+                _dataAggregator.Update(bar);
+            }
         }
 
         /// <summary>
@@ -310,7 +313,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var time = GetTickTime(symbol, trade.Timestamp);
             // TODO: Map trade.Conditions to Lean sale conditions
             var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(trade.ExchangeID), trade.Size, trade.Price);
-            _dataAggregator.Update(tick);
+            lock (_dataAggregator)
+            {
+                _dataAggregator.Update(tick);
+            }
         }
 
         /// <summary>
@@ -324,7 +330,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
             // Note: Polygon's quotes have bid/ask exchange IDs, but Lean only has one exchange per tick. We'll use the bid exchange.
             var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(quote.BidExchangeID),
                 quote.BidSize, quote.BidPrice, quote.AskSize, quote.AskPrice);
-            _dataAggregator.Update(tick);
+            lock (_dataAggregator)
+            {
+                _dataAggregator.Update(tick);
+            }
         }
 
         /// <summary>

@@ -155,9 +155,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 var leanSymbol = _symbolMapper.GetLeanSymbol(universalSnapshot.Ticker!);
                 var time = _getTickTime(leanSymbol, nowUtc);
 
+                var openInterestTick = new Tick(time, leanSymbol, universalSnapshot.OpenInterest);
                 lock (_dataAggregator)
                 {
-                    _dataAggregator.Update(new Tick(time, leanSymbol, universalSnapshot.OpenInterest));
+                    _dataAggregator.Update(openInterestTick);
                 }
             }
         }
