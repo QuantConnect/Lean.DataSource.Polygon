@@ -158,6 +158,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     maxSubscriptionsPerWebSocket,
                     (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage));
             }
+            var openInterestManager = new PolygonOpenInterestProcessorManager(TimeProvider, RestApiClient, _symbolMapper, _subscriptionManager, _dataAggregator, GetTickTime);
+            openInterestManager.ScheduleNextRun();
         }
 
         #region IDataQueueHandler implementation
@@ -296,7 +298,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var period = TimeSpan.FromMilliseconds(aggregate.EndingTickTimestamp - aggregate.StartingTickTimestamp);
             var bar = new TradeBar(time, symbol, aggregate.Open, aggregate.High, aggregate.Low, aggregate.Close, aggregate.Volume, period);
 
-            _dataAggregator.Update(bar);
+            lock (_dataAggregator)
+            {
+                _dataAggregator.Update(bar);
+            }
         }
 
         /// <summary>
@@ -308,7 +313,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var time = GetTickTime(symbol, trade.Timestamp);
             // TODO: Map trade.Conditions to Lean sale conditions
             var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(trade.ExchangeID), trade.Size, trade.Price);
-            _dataAggregator.Update(tick);
+            lock (_dataAggregator)
+            {
+                _dataAggregator.Update(tick);
+            }
         }
 
         /// <summary>
@@ -322,7 +330,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
             // Note: Polygon's quotes have bid/ask exchange IDs, but Lean only has one exchange per tick. We'll use the bid exchange.
             var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(quote.BidExchangeID),
                 quote.BidSize, quote.BidPrice, quote.AskSize, quote.AskPrice);
-            _dataAggregator.Update(tick);
+            lock (_dataAggregator)
+            {
+                _dataAggregator.Update(tick);
+            }
         }
 
         /// <summary>
@@ -428,18 +439,9 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 return false;
             }
 
-            if (tickType == TickType.OpenInterest)
-            {
-                if (!_unsupportedTickTypeMessagedLogged)
-                {
-                    _unsupportedTickTypeMessagedLogged = true;
-                    Log.Trace($"PolygonDataProvider.IsSupported(): Unsupported tick type: {tickType}");
-                }
-                return false;
-            }
-
             if (!dataType.IsAssignableFrom(typeof(TradeBar)) &&
                 !dataType.IsAssignableFrom(typeof(QuoteBar)) &&
+                !dataType.IsAssignableFrom(typeof(OpenInterest)) &&
                 !dataType.IsAssignableFrom(typeof(Tick)))
             {
                 if (!_unsupportedDataTypeMessageLogged)

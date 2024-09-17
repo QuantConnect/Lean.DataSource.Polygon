@@ -41,11 +41,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         protected override IDataConsolidator GetConsolidator(SubscriptionDataConfig config)
         {
-            if (config.TickType == TickType.OpenInterest)
-            {
-                throw new ArgumentException($"Unsupported subscription tick type {config.TickType}");
-            }
-
             if (_usingAggregates)
             {
                 // Starter plan only supports streaming aggregated data.

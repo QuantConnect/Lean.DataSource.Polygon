@@ -201,6 +201,44 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             });
         }
 
+        protected Task ProcessFeed(
+           IEnumerator<BaseData> enumerator,
+           CancellationToken cancellationToken,
+           int cancellationTokenDelayMilliseconds = 100,
+           Action<BaseData> callback = null,
+           Action throwExceptionCallback = null)
+        {
+            return Task.Factory.StartNew(() =>
+            {
+                try
+                {
+                    while (enumerator.MoveNext() && !cancellationToken.IsCancellationRequested)
+                    {
+                        BaseData tick = enumerator.Current;
+
+                        if (tick != null)
+                        {
+                            callback?.Invoke(tick);
+                        }
+
+                        cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(cancellationTokenDelayMilliseconds));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug($"{nameof(PolygonOpenInterestProcessorManagerTests)}.{nameof(ProcessFeed)}.Exception: {ex.Message}");
+                    throw;
+                }
+            }, cancellationToken).ContinueWith(task =>
+            {
+                if (throwExceptionCallback != null)
+                {
+                    throwExceptionCallback();
+                }
+                Log.Debug("The throwExceptionCallback is null.");
+            }, TaskContinuationOptions.OnlyOnFaulted);
+        }
+
         protected SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)
         {
             return new SubscriptionDataConfig(
