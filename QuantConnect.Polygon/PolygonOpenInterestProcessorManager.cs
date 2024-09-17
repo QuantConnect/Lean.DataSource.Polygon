@@ -144,6 +144,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var restRequest = new RestRequest($"v3/snapshot?ticker.any_of={string.Join(',', subscribedBrokerageSymbols)}", Method.GET);
             restRequest.AddQueryParameter("limit", "250");
 
+            var nowUtc = DateTime.UtcNow;
             foreach (var universalSnapshot in _polygonRestApiClient.DownloadAndParseData<UniversalSnapshotResponse>(restRequest).SelectMany(response => response.Results))
             {
                 if (universalSnapshot.OpenInterest == 0)
@@ -152,9 +153,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 }
 
                 var leanSymbol = _symbolMapper.GetLeanSymbol(universalSnapshot.Ticker!);
-                var time = _getTickTime(leanSymbol, DateTime.UtcNow);
+                var time = _getTickTime(leanSymbol, nowUtc);
 
-                _dataAggregator.Update(new Tick(time, leanSymbol, universalSnapshot.OpenInterest));
+                lock (_dataAggregator)
+                {
+                    _dataAggregator.Update(new Tick(time, leanSymbol, universalSnapshot.OpenInterest));
+                }
             }
         }
 
