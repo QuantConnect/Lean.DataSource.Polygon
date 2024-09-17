@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -145,11 +145,12 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                 .Select(strike =>
                 {
                     var symbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, strike,
-                        new DateTime(2024, 01, 05));
+                        new DateTime(2024, 09, 20));
                     return new[]
                     {
                         GetSubscriptionDataConfig<TradeBar>(symbol, resolution),
-                        GetSubscriptionDataConfig<QuoteBar>(symbol, resolution)
+                        GetSubscriptionDataConfig<QuoteBar>(symbol, resolution),
+                        GetSubscriptionDataConfig<OpenInterest>(symbol, resolution)
                     };
                 })
                 .SelectMany(x => x);
@@ -158,11 +159,12 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                 .Select(strike =>
                 {
                     var symbol = Symbol.CreateOption(Symbols.SPX, "SPXW", Market.USA, OptionStyle.American, OptionRight.Call, strike,
-                        new DateTime(2024, 01, 05));
+                        new DateTime(2024, 09, 20));
                     return new[]
                     {
                         GetSubscriptionDataConfig<TradeBar>(symbol, resolution),
-                        GetSubscriptionDataConfig<QuoteBar>(symbol, resolution)
+                        GetSubscriptionDataConfig<QuoteBar>(symbol, resolution),
+                        GetSubscriptionDataConfig<OpenInterest>(symbol, resolution)
                     };
                 })
                 .SelectMany(x => x);
