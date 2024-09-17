@@ -432,7 +432,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             if (!dataType.IsAssignableFrom(typeof(TradeBar)) &&
                 !dataType.IsAssignableFrom(typeof(QuoteBar)) &&
-!dataType.IsAssignableFrom(typeof(OpenInterest)) &&
+                !dataType.IsAssignableFrom(typeof(OpenInterest)) &&
                 !dataType.IsAssignableFrom(typeof(Tick)))
             {
                 if (!_unsupportedDataTypeMessageLogged)
