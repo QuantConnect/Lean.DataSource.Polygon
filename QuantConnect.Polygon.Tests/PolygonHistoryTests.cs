@@ -55,31 +55,32 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             }
         }
 
-        internal static TestCaseData[] HistoricalDataTestCases
+        internal static IEnumerable<TestCaseData> HistoricalDataTestCases
         {
             get
             {
-                var equitySymbol = Symbols.SPY;
-                var optionSymbol = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 469m, new DateTime(2023, 12, 15));
-                var symbols = new[] { equitySymbol, optionSymbol };
-                var tickTypes = new[] { TickType.Trade, TickType.Quote };
+                var SPY = Symbols.SPY;
+                yield return new TestCaseData(SPY, Resolution.Tick, TimeSpan.FromMinutes(5), TickType.Trade);
+                yield return new TestCaseData(SPY, Resolution.Second, TimeSpan.FromMinutes(30), TickType.Trade);
+                yield return new TestCaseData(SPY, Resolution.Minute, TimeSpan.FromDays(15), TickType.Trade);
+                yield return new TestCaseData(SPY, Resolution.Hour, TimeSpan.FromDays(180), TickType.Trade);
+                yield return new TestCaseData(SPY, Resolution.Daily, TimeSpan.FromDays(3650), TickType.Trade);
 
-                return symbols
-                    .Select(symbol => new[]
-                    {
-                        // Trades
-                        new TestCaseData(symbol, Resolution.Tick, TimeSpan.FromMinutes(5), TickType.Trade),
-                        new TestCaseData(symbol, Resolution.Second, TimeSpan.FromMinutes(30), TickType.Trade),
-                        new TestCaseData(symbol, Resolution.Minute, TimeSpan.FromDays(15), TickType.Trade),
-                        new TestCaseData(symbol, Resolution.Hour, TimeSpan.FromDays(180), TickType.Trade),
-                        new TestCaseData(symbol, Resolution.Daily, TimeSpan.FromDays(3650), TickType.Trade),
+                // Quotes (Only Tick and Second resolutions are supported)
+                yield return new TestCaseData(SPY, Resolution.Tick, TimeSpan.FromMinutes(5), TickType.Quote);
+                yield return new TestCaseData(SPY, Resolution.Second, TimeSpan.FromMinutes(5), TickType.Quote);
 
-                        // Quotes (Only Tick and Second resolutions are supported)
-                        new TestCaseData(symbol, Resolution.Tick, TimeSpan.FromMinutes(5), TickType.Quote),
-                        new TestCaseData(symbol, Resolution.Second, TimeSpan.FromMinutes(5), TickType.Quote),
-                    })
-                    .SelectMany(x => x)
-                    .ToArray();
+                var SPY_Option = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, 469m, new DateTime(2023, 12, 15));
+
+                yield return new TestCaseData(SPY_Option, Resolution.Tick, TimeSpan.FromMinutes(5), TickType.Trade);
+                yield return new TestCaseData(SPY_Option, Resolution.Second, TimeSpan.FromMinutes(30), TickType.Trade);
+                yield return new TestCaseData(SPY_Option, Resolution.Minute, TimeSpan.FromDays(15), TickType.Trade);
+                yield return new TestCaseData(SPY_Option, Resolution.Hour, TimeSpan.FromDays(180), TickType.Trade);
+                yield return new TestCaseData(SPY_Option, Resolution.Daily, TimeSpan.FromDays(3650), TickType.Trade);
+
+                // Quotes (Only Tick and Second resolutions are supported)
+                yield return new TestCaseData(SPY_Option, Resolution.Tick, TimeSpan.FromMinutes(5), TickType.Quote);
+                yield return new TestCaseData(SPY_Option, Resolution.Second, TimeSpan.FromMinutes(5), TickType.Quote);
             }
         }
 

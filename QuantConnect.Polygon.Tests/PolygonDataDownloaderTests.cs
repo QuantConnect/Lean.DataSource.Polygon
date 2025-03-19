@@ -41,7 +41,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             _downloader.DisposeSafely();
         }
 
-        private static TestCaseData[] HistoricalDataTestCases => PolygonHistoryTests.HistoricalDataTestCases;
+        private static TestCaseData[] HistoricalDataTestCases => PolygonHistoryTests.HistoricalDataTestCases.ToArray();
 
         [TestCaseSource(nameof(HistoricalDataTestCases))]
         [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
