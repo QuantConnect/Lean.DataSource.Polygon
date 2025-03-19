@@ -114,9 +114,13 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
                 var baseResponse = JsonConvert.DeserializeObject<BaseResponse>(response.Content);
 
-                if (response != null && response.StatusCode == System.Net.HttpStatusCode.TooManyRequests && _cancellationTokenSource.Token.WaitHandle.WaitOne(TimeSpan.FromSeconds(10 * attempt)))
+                if (response?.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
                 {
-                    Log.Debug($"PolygonRestApi.DownloadAndParseData(): Attempt {attempt + 1} failed. Error: {baseResponse?.Error ?? "Unknown error"}");
+                    var waitTime = TimeSpan.FromSeconds(10 * attempt);
+
+                    Log.Trace($"PolygonRestApi.DownloadAndParseData(): Attempt {attempt + 1} was throttled due to too many requests. Waiting {waitTime.TotalSeconds} seconds before retrying... (Last error: {baseResponse?.Error ?? "Unknown error"})");
+
+                    _cancellationTokenSource.Token.WaitHandle.WaitOne(waitTime);
                     continue;
                 }
 
