@@ -119,7 +119,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     if (_cancellationTokenSource.Token.WaitHandle.WaitOne(waitTime))
                     {
                         // shutting down
-                        _cancellationTokenSource.Cancel();
+                        return null;
                     }
                     continue;
                 }
