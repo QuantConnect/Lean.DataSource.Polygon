@@ -72,6 +72,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 Log.Debug($"PolygonRestApi.DownloadAndParseData(): Downloading {request.Resource}");
 
                 var responseContent = DownloadWithRetries(request);
+                if (string.IsNullOrEmpty(responseContent))
+                {
+                    throw new Exception($"{nameof(PolygonRestApiClient)}.{nameof(DownloadAndParseData)}: Failed to download data for {request.Resource} after {MaxRetries} attempts.");
+                }
 
                 var result = ParseResponse<T>(responseContent);
 
@@ -86,7 +90,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             }
         }
 
-        private string DownloadWithRetries(RestRequest request)
+        private string? DownloadWithRetries(RestRequest request)
         {
             var response = default(IRestResponse);
             for (var attempt = 0; attempt < MaxRetries; attempt++)
@@ -122,7 +126,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 }
             }
 
-            throw new Exception($"Failed after {MaxRetries} attempts for {request.Resource}. Content: {response?.Content}");
+            Log.Trace($"Failed after {MaxRetries} attempts for {request.Resource}. Content: {response?.Content}");
+            return null;
         }
 
         private T? ParseResponse<T>(string responseContent) where T : BaseResponse
