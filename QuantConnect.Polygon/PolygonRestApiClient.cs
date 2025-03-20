@@ -116,7 +116,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
                     Log.Trace($"PolygonRestApi.DownloadAndParseData(): Attempt {attempt + 1} was throttled due to too many requests. Waiting {waitTime.TotalSeconds} seconds before retrying... (Last error: {baseResponse?.Error ?? "Unknown error"})");
 
-                    _cancellationTokenSource.Token.WaitHandle.WaitOne(waitTime);
+                    if (_cancellationTokenSource.Token.WaitHandle.WaitOne(waitTime))
+                    {
+                        // shutting down
+                        _cancellationTokenSource.Cancel();
+                    }
                     continue;
                 }
 
