@@ -71,15 +71,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 Log.Debug($"PolygonRestApi.DownloadAndParseData(): Downloading {request.Resource}");
 
-                var responseContent = default(string);
-                try
-                {
-                    responseContent = DownloadWithRetries(request);
-                }
-                catch (Exception)
-                {
-                    throw;
-                }
+                var responseContent = DownloadWithRetries(request);
 
                 var result = ParseResponse<T>(responseContent);
 
