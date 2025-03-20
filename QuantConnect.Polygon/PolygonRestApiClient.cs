@@ -31,6 +31,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
         private readonly RestClient _restClient;
 
+        private readonly CancellationTokenSource _cancellationTokenSource = new();
+
         /// <summary>
         /// The maximum number of retry attempts for downloading data or executing a request.
         /// </summary>
@@ -90,7 +92,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
         private string? DownloadWithRetries(RestRequest request)
         {
-            for (int attempt = 0; attempt < MaxRetries; attempt++)
+            var response = default(IRestResponse);
+            for (var attempt = 0; attempt < MaxRetries; attempt++)
             {
                 if (RateLimiter != null)
                 {
@@ -103,13 +106,21 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
                 request.AddOrUpdateHeader("Authorization", $"Bearer {_apiKey}");
 
-                var response = _restClient.Execute(request);
+                response = _restClient.Execute(request);
 
                 var baseResponse = JsonConvert.DeserializeObject<BaseResponse>(response.Content);
 
-                if (response != null && response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
                 {
-                    Log.Debug($"PolygonRestApi.DownloadAndParseData(): Attempt {attempt + 1} failed. Error: {baseResponse?.Error ?? "Unknown error"}");
+                    var waitTime = TimeSpan.FromSeconds(10 * attempt);
+
+                    Log.Trace($"PolygonRestApi.DownloadAndParseData(): Attempt {attempt + 1} was throttled due to too many requests. Waiting {waitTime.TotalSeconds} seconds before retrying... (Last error: {baseResponse?.Error ?? "Unknown error"})");
+
+                    if (_cancellationTokenSource.Token.WaitHandle.WaitOne(waitTime))
+                    {
+                        // shutting down
+                        return null;
+                    }
                     continue;
                 }
 
@@ -119,7 +130,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 }
             }
 
-            Log.Debug($"PolygonRestApi.DownloadAndParseData(): Failed after {MaxRetries} attempts for {request.Resource}");
+            Log.Trace($"Failed after {MaxRetries} attempts for {request.Resource}. Content: {response?.Content}");
             return null;
         }
 
@@ -138,6 +149,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
         public void Dispose()
         {
             RateLimiter?.DisposeSafely();
+            _cancellationTokenSource?.Cancel();
+            _cancellationTokenSource?.DisposeSafely();
         }
     }
 }
