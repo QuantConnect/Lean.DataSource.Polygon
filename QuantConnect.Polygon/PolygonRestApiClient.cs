@@ -145,7 +145,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
         public void Dispose()
         {
             RateLimiter?.DisposeSafely();
-            _cancellationTokenSource?.Dispose();
+            _cancellationTokenSource?.Cancel();
+            _cancellationTokenSource?.DisposeSafely();
         }
     }
 }
