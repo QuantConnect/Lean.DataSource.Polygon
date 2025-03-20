@@ -106,7 +106,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
                 var baseResponse = JsonConvert.DeserializeObject<BaseResponse>(response.Content);
 
-                if (response?.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
                 {
                     var waitTime = TimeSpan.FromSeconds(10 * attempt);
 
