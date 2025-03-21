@@ -13,6 +13,7 @@
  * limitations under the License.
 */
 
+using System.Text;
 using System.Runtime.CompilerServices;
 using Newtonsoft.Json.Linq;
 using QuantConnect.Brokerages;
@@ -130,9 +131,9 @@ namespace QuantConnect.Lean.DataSource.Polygon
                         $"[MaxSymbolsPerWebSocket={_maxSubscriptionsPerWebSocket}");
                 }
 
-                if (!webSocket.IsOpen)
+                if (!webSocket.IsOpen && !ConnectWebSocket(webSocket))
                 {
-                    ConnectWebSocket(webSocket);
+                    continue;
                 }
 
                 var config = _subscriptionsDataConfigs.Single(x => x.Symbol == symbol && x.TickType == tickType);
@@ -173,11 +174,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
             return _webSockets.FirstOrDefault(x => x.SupportedSecurityTypes.Contains(securityType));
         }
 
-        private void ConnectWebSocket(PolygonWebSocketClientWrapper webSocket)
+        private bool ConnectWebSocket(PolygonWebSocketClientWrapper webSocket)
         {
             using var authenticatedEvent = new AutoResetEvent(false);
             using var failedAuthenticationEvent = new AutoResetEvent(false);
 
+            var error = new StringBuilder();
             EventHandler<WebSocketMessage> callback = (sender, e) =>
             {
                 var data = (TextMessage)e.Data;
@@ -192,7 +194,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 var message = jsonMessage["message"]?.ToString() ?? string.Empty;
                 if (status.Contains("auth_failed", StringComparison.InvariantCultureIgnoreCase))
                 {
-                    Log.Error($"PolygonSubscriptionManager.ConnectWebSocket(): Failed authentication: {message}.");
+                    error.AppendLine($"Failed authentication: {message}");
                     failedAuthenticationEvent.Set();
                 }
                 else if (status.Contains("auth_success", StringComparison.InvariantCultureIgnoreCase))
@@ -205,7 +207,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             webSocket.Message += callback;
             webSocket.Connect();
 
-            var result = WaitHandle.WaitAny(new [] { failedAuthenticationEvent, authenticatedEvent  }, TimeSpan.FromSeconds(60));
+            var result = WaitHandle.WaitAny(new[] { failedAuthenticationEvent, authenticatedEvent }, TimeSpan.FromSeconds(60));
             webSocket.Message -= callback;
 
             if (result == WaitHandle.WaitTimeout)
@@ -215,10 +217,13 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             if (result == 0)
             {
-                throw new PolygonAuthenticationException($"WebSocket authentication failed for security types: {string.Join(", ", webSocket.SupportedSecurityTypes)}. Make sure your API key is valid and has the right permissions.");
+                webSocket.Close();
+                Log.Error($"WebSocket authentication failed for security types: {string.Join(", ", webSocket.SupportedSecurityTypes)}. {error?.ToString()}");
+                return false;
             }
 
             Log.Trace($"PolygonSubscriptionManager.ConnectWebSocket(): Successfully connected websocket.");
+            return true;
         }
 
         /// <summary>
