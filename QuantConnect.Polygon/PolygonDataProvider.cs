@@ -210,7 +210,19 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             Log.Trace($"PolygonDataProvider.Subscribe(): Subscribing to {dataConfig.Symbol} | {dataConfig.TickType}");
 
-            _subscriptionManager.Subscribe(dataConfig);
+            if (_subscriptionManager.GetWebSocket(dataConfig.SecurityType) == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                _subscriptionManager.Subscribe(dataConfig);
+            }
+            catch (PolygonAuthenticationException)
+            {
+                return null;
+            }
 
             _dataAggregator.SetUsingAggregates(_subscriptionManager.UsingAggregates);
             var enumerator = _dataAggregator.Add(dataConfig, newDataAvailableHandler);

@@ -125,15 +125,21 @@ namespace QuantConnect.Lean.DataSource.Polygon
             foreach (var symbol in symbols)
             {
                 var webSocket = GetWebSocket(symbol.SecurityType);
+
+                if (webSocket == null)
+                {
+                    return false;
+                }
+
                 if (IsWebSocketFull(webSocket))
                 {
                     throw new NotSupportedException("Maximum symbol count reached for the current configuration " +
                         $"[MaxSymbolsPerWebSocket={_maxSubscriptionsPerWebSocket}");
                 }
 
-                if (!webSocket.IsOpen && !ConnectWebSocket(webSocket))
+                if (!webSocket.IsOpen)
                 {
-                    continue;
+                    ConnectWebSocket(webSocket);
                 }
 
                 var config = _subscriptionsDataConfigs.Single(x => x.Symbol == symbol && x.TickType == tickType);
@@ -169,12 +175,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// Adds a symbol to an existing or new websocket connection
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private PolygonWebSocketClientWrapper GetWebSocket(SecurityType securityType)
+        public PolygonWebSocketClientWrapper GetWebSocket(SecurityType securityType)
         {
             return _webSockets.FirstOrDefault(x => x.SupportedSecurityTypes.Contains(securityType));
         }
 
-        private bool ConnectWebSocket(PolygonWebSocketClientWrapper webSocket)
+        private void ConnectWebSocket(PolygonWebSocketClientWrapper webSocket)
         {
             using var authenticatedEvent = new AutoResetEvent(false);
             using var failedAuthenticationEvent = new AutoResetEvent(false);
@@ -218,12 +224,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
             if (result == 0)
             {
                 webSocket.Close();
-                Log.Error($"WebSocket authentication failed for security types: {string.Join(", ", webSocket.SupportedSecurityTypes)}. {error?.ToString()}");
-                return false;
+                _webSockets.Remove(webSocket);
+                throw new PolygonAuthenticationException($"WebSocket authentication failed for security types: {string.Join(", ", webSocket.SupportedSecurityTypes)}. {error?.ToString()}");
             }
 
             Log.Trace($"PolygonSubscriptionManager.ConnectWebSocket(): Successfully connected websocket.");
-            return true;
         }
 
         /// <summary>
