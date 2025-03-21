@@ -213,7 +213,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             webSocket.Message += callback;
             webSocket.Connect();
 
-            var result = WaitHandle.WaitAny(new[] { failedAuthenticationEvent, authenticatedEvent }, TimeSpan.FromSeconds(60));
+            var result = WaitHandle.WaitAny(new[]{ failedAuthenticationEvent, authenticatedEvent  }, TimeSpan.FromSeconds(60));
             webSocket.Message -= callback;
 
             if (result == WaitHandle.WaitTimeout)
