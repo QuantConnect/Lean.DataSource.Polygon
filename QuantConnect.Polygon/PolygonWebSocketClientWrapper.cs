@@ -126,6 +126,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         private void TrySubscribe(string ticker, SubscriptionDataConfig config, out bool usingAggregates)
         {
+            var error = string.Empty;
             usingAggregates = false;
 
             // We'll try subscribing assuming the highest subscription plan and work our way down if we get an error
@@ -150,7 +151,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 }
                 else
                 {
-                    Log.Debug($"PolygonWebSocketClientWrapper.Subscribe(): error: '{message}'.");
+                    error = message;
                     errorEvent.Set();
                 }
             }
@@ -158,7 +159,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
             Message += ProcessMessage;
 
             var waitHandles = new WaitHandle[] { subscribedEvent.WaitHandle, errorEvent.WaitHandle };
-            var subscribed = false;
             var triedSubscription = false;
 
             foreach (var protentialPrefix in GetSubscriptionPefixes(config.SecurityType, config.TickType, config.Resolution))
@@ -184,16 +184,14 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 AddSubscription(subscriptionTicker);
                 _prefixes[(config.SecurityType, config.TickType)] = protentialPrefix;
                 usingAggregates = protentialPrefix == "A";
-                subscribed = true;
                 break;
             }
 
             Message -= ProcessMessage;
 
-            if (triedSubscription && !subscribed)
+            if (triedSubscription && !string.IsNullOrWhiteSpace(error))
             {
-                throw new Exception($"PolygonWebSocketClientWrapper.Subscribe(): Failed to subscribe to {ticker}. " +
-                    $"Make sure your subscription plan allows streaming {config.TickType.ToString().ToLowerInvariant()} data.");
+                throw new Exception($"PolygonWebSocketClientWrapper.Subscribe(): Failed to subscribe to {ticker} {config.TickType.ToString().ToLowerInvariant()} data. {error}");
             }
         }
 
