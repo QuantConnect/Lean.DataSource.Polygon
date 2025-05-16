@@ -157,7 +157,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     _supportedSecurityTypes,
                     maxSubscriptionsPerWebSocket,
                     (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage),
-                    new PolygonOpenInterestProcessorManager(TimeProvider, RestApiClient, _symbolMapper, _subscriptionManager, _dataAggregator, GetTickTime));
+                    new PolygonOpenInterestProcessorManager(TimeProvider, RestApiClient, _symbolMapper, _dataAggregator, GetTickTime));
             }
         }
 

@@ -52,11 +52,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private readonly PolygonSymbolMapper _symbolMapper;
 
         /// <summary>
-        /// Subscription manager to handle the subscriptions for the Polygon data queue handler.
-        /// </summary>
-        private readonly EventBasedDataQueueHandlerSubscriptionManager _polygonSubscriptionManager;
-
-        /// <summary>
         /// Aggregates Polygon.io trade bars into same or higher resolution bars
         /// </summary>
         private readonly PolygonAggregationManager _dataAggregator;
@@ -82,18 +77,16 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <param name="timeProvider"></param>
         /// <param name="polygonRestApiClient"></param>
         /// <param name="symbolMapper"></param>
-        /// <param name="polygonSubscriptionManager"></param>
         /// <param name="dataAggregator"></param>
         /// <param name="getTickTime"></param>
         public PolygonOpenInterestProcessorManager(ITimeProvider timeProvider, PolygonRestApiClient polygonRestApiClient, PolygonSymbolMapper symbolMapper,
-            EventBasedDataQueueHandlerSubscriptionManager polygonSubscriptionManager, PolygonAggregationManager dataAggregator, Func<Symbol, DateTime, DateTime> getTickTime)
+            PolygonAggregationManager dataAggregator, Func<Symbol, DateTime, DateTime> getTickTime)
         {
             _getTickTime = getTickTime;
             _timeProvider = timeProvider;
             _symbolMapper = symbolMapper;
             _dataAggregator = dataAggregator;
             _polygonRestApiClient = polygonRestApiClient;
-            _polygonSubscriptionManager = polygonSubscriptionManager;
         }
 
         /// <summary>
