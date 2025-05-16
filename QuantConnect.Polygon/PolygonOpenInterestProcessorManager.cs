@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -19,6 +19,7 @@ using QuantConnect.Data;
 using QuantConnect.Logging;
 using QuantConnect.Securities;
 using QuantConnect.Data.Market;
+using System.Collections.Concurrent;
 using QuantConnect.Lean.DataSource.Polygon.Rest;
 
 namespace QuantConnect.Lean.DataSource.Polygon
@@ -71,6 +72,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private readonly Func<Symbol, DateTime, DateTime> _getTickTime;
 
         /// <summary>
+        /// Stores the last request time for open interest per symbol.
+        /// </summary>
+        private readonly ConcurrentDictionary<Symbol, DateTime> _lastOpenInterestRequestTimeBySymbol = new();
+
+        /// <summary>
         /// 
         /// </summary>
         /// <param name="timeProvider"></param>
@@ -91,15 +97,51 @@ namespace QuantConnect.Lean.DataSource.Polygon
         }
 
         /// <summary>
-        /// Schedules the next execution of the <see cref="ProcessOpenInterest"/> method
-        /// based on the current time in New York (Eastern Time).
+        /// Adds the given symbols to the tracking dictionary and resets their last request time.
         /// </summary>
-        public void ScheduleNextRun()
+        /// <param name="symbols">The symbols to add.</param>
+        public void AddSymbols(IEnumerable<Symbol> symbols)
         {
-            var nowNewYork = _timeProvider.GetUtcNow().ConvertFromUtc(_nyTimeZone);
-            var nextRunTimeNewYork = GetNextRunTime(nowNewYork);
+            foreach (var symbol in symbols)
+            {
+                _lastOpenInterestRequestTimeBySymbol[symbol] = default;
+            }
+            ScheduleNextRun(false);
+        }
 
-            TimeSpan delay = nextRunTimeNewYork - nowNewYork;
+
+        /// <summary>
+        /// Removes the given symbols from the tracking dictionary.
+        /// </summary>
+        /// <param name="symbols">The symbols to remove.</param>
+        public void RemoveSymbols(IEnumerable<Symbol> symbols)
+        {
+            foreach (var symbol in symbols)
+            {
+                _lastOpenInterestRequestTimeBySymbol.Remove(symbol, out _);
+            }
+        }
+
+        /// <summary>
+        /// Schedules the next execution of the <see cref="ProcessOpenInterest"/> method
+        /// based on whether the scheduler should apply the planned delay.
+        /// </summary>
+        /// <param name="useScheduledDelay">
+        /// Indicates whether the full scheduled delay should be used before the next run.
+        /// </param>
+        private void ScheduleNextRun(bool useScheduledDelay = false)
+        {
+            var delay = default(TimeSpan);
+            if (useScheduledDelay)
+            {
+                var nowNewYork = _timeProvider.GetUtcNow().ConvertFromUtc(_nyTimeZone);
+                var nextRunTimeNewYork = GetNextRunTime(nowNewYork);
+                delay = nextRunTimeNewYork - nowNewYork;
+            }
+            else
+            {
+                delay = TimeSpan.FromMinutes(1);
+            }
 
             if (_openInterestScheduler != null)
             {
@@ -116,15 +158,25 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         private void RunProcessOpenInterest(object? _)
         {
+            var useScheduledDelay = false;
+
+            var subscribedSymbol = new List<Symbol>();
+            var utcNow = DateTime.UtcNow;
+            foreach (var (symbol, lastOpenInterestRequestTime) in _lastOpenInterestRequestTimeBySymbol)
+            {
+                // Add symbols never requested or not requested today
+                if (utcNow.Date != lastOpenInterestRequestTime.Date)
+                {
+                    subscribedSymbol.Add(symbol);
+                }
+            }
+
             try
             {
-                var nowNewYork = _timeProvider.GetUtcNow();
-                var subscribedSymbol = _polygonSubscriptionManager.GetSubscribedSymbols(TickType.OpenInterest)
-                    .Where(symbol => symbol.IsMarketOpen(nowNewYork, extendedMarketHours: false)).ToList();
-
                 if (subscribedSymbol.Count != 0)
                 {
                     ProcessOpenInterest(subscribedSymbol);
+                    useScheduledDelay = true;
                 }
             }
             catch (Exception ex)
@@ -133,13 +185,13 @@ namespace QuantConnect.Lean.DataSource.Polygon
             }
             finally
             {
-                ScheduleNextRun();
+                ScheduleNextRun(useScheduledDelay);
             }
         }
 
         private void ProcessOpenInterest(IReadOnlyCollection<Symbol> subscribedSymbols)
         {
-            var subscribedBrokerageSymbols = subscribedSymbols.Select(x => _symbolMapper.GetBrokerageSymbol(x));
+            var subscribedBrokerageSymbols = subscribedSymbols.Select(_symbolMapper.GetBrokerageSymbol);
 
             var restRequest = new RestRequest($"v3/snapshot?ticker.any_of={string.Join(',', subscribedBrokerageSymbols)}", Method.GET);
             restRequest.AddQueryParameter("limit", "250");
@@ -147,12 +199,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var nowUtc = DateTime.UtcNow;
             foreach (var universalSnapshot in _polygonRestApiClient.DownloadAndParseData<UniversalSnapshotResponse>(restRequest).SelectMany(response => response.Results))
             {
-                if (universalSnapshot.OpenInterest == 0)
-                {
-                    continue;
-                }
-
                 var leanSymbol = _symbolMapper.GetLeanSymbol(universalSnapshot.Ticker!);
+                _lastOpenInterestRequestTimeBySymbol[leanSymbol] = nowUtc;
                 var time = _getTickTime(leanSymbol, nowUtc);
 
                 var openInterestTick = new Tick(time, leanSymbol, universalSnapshot.OpenInterest);
@@ -164,29 +212,26 @@ namespace QuantConnect.Lean.DataSource.Polygon
         }
 
         /// <summary>
-        /// Calculates the next run time (9:30 AM or 3:30 PM New York Time) based on the current time.
+        /// Determines the next scheduled run time, either 8:00 AM today or 8:00 AM tomorrow in New York time,
+        /// depending on the current time.
         /// </summary>
-        /// <param name="currentTimeNewYork">The current time in the New York time zone.</param>
-        /// <returns>The next execution time at either 9:30 AM or 3:30 PM.</returns>
-        private DateTime GetNextRunTime(DateTime currentTimeNewYork)
+        /// <param name="currentTimeNewYork">The current local time in the New York time zone.</param>
+        /// <returns>
+        /// A <see cref="DateTime"/> representing the next run time at 8:00 AM, either today or the next day.
+        /// </returns>
+        private static DateTime GetNextRunTime(DateTime currentTimeNewYork)
         {
-            var today930AM = currentTimeNewYork.Date.AddHours(9).AddMinutes(31);
-            var today330PM = currentTimeNewYork.Date.AddHours(15).AddMinutes(29);
+            var today8AM = currentTimeNewYork.Date.AddHours(8);
 
-            if (currentTimeNewYork < today930AM)
+            if (currentTimeNewYork < today8AM)
             {
-                // If it's before 9:30 AM, schedule the next run for 9:30 AM today
-                return today930AM;
-            }
-            else if (currentTimeNewYork >= today930AM && currentTimeNewYork < today330PM)
-            {
-                // If it's between 9:30 AM and 3:30 PM, schedule the next run for 3:30 PM today
-                return today330PM;
+                // Schedule for today at 8:00 AM
+                return today8AM;
             }
             else
             {
-                // If it's after 3:30 PM, schedule the next run for 9:30 AM tomorrow
-                return today930AM.AddDays(1);
+                // Schedule for tomorrow at 8:00 AM
+                return today8AM.AddDays(1);
             }
         }
 
