@@ -15,7 +15,6 @@
 
 using NodaTime;
 using RestSharp;
-using QuantConnect.Data;
 using QuantConnect.Logging;
 using QuantConnect.Securities;
 using QuantConnect.Data.Market;
@@ -154,7 +153,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var useScheduledDelay = false;
 
             var subscribedSymbol = new List<Symbol>();
-            var utcNow = DateTime.UtcNow;
+            var utcNow = _timeProvider.GetUtcNow();
             foreach (var (symbol, lastOpenInterestRequestTime) in _lastOpenInterestRequestTimeBySymbol)
             {
                 // Add symbols never requested or not requested today

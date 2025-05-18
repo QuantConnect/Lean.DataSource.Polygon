@@ -37,14 +37,15 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
         private readonly ManualTimeProvider _timeProviderInstance = new();
 
-        private object _locker = new();
+        private readonly Lock _locker = new();
 
         [Test]
         public void GetOpenInterestOfOptionSymbolsByPolygonOpenInterestProcessorManager()
         {
-            var resetEvent = new AutoResetEvent(false);
+            var resetEvent = new ManualResetEvent(false);
             var cancellationTokenSource = new CancellationTokenSource();
             var optionContractsConfigs = GetConfigs();
+            var amountOfConfigs = optionContractsConfigs.Count;
 
             var symbolOpenInterest = new ConcurrentDictionary<Symbol, decimal>();
             Action<BaseData> callback = (baseData) =>
@@ -58,14 +59,14 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                 {
                     symbolOpenInterest[baseData.Symbol] = baseData.Value;
 
-                    if (symbolOpenInterest.Count > 5)
+                    if (symbolOpenInterest.Count == amountOfConfigs)
                     {
                         resetEvent.Set();
                     }
                 }
             };
 
-            _timeProviderInstance.SetCurrentTimeUtc(DateTime.UtcNow);
+            _timeProviderInstance.SetCurrentTimeUtc(DateTime.UtcNow.ConvertFromUtc(TimeZones.NewYork).Date.AddHours(8).AddSeconds(-5).ConvertToUtc(TimeZones.NewYork));
             var processor = new PolygonOpenInterestProcessorManager(_timeProviderInstance, _restApiClient, symbolMapper, dataAggregator, GetTickTime);
 
             processor.AddSymbols([.. optionContractsConfigs.Select(x => x.Symbol)]);
@@ -81,6 +82,17 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
             // Internal delay to respect the 1-minute request interval for OpenInterest data.
             resetEvent.WaitOne(TimeSpan.FromSeconds(70), cancellationTokenSource.Token);
+
+            Assert.Greater(symbolOpenInterest.Count, 0);
+
+            // Advance the current UTC time by 1 day to simulate the next day.
+            // This ensures that any new OpenInterest requests are validated against the updated time.
+            _timeProviderInstance.SetCurrentTimeUtc(DateTime.UtcNow.AddDays(1));
+
+            resetEvent.Reset();
+            symbolOpenInterest.Clear();
+
+            resetEvent.WaitOne(TimeSpan.FromSeconds(30), cancellationTokenSource.Token);
 
             Assert.Greater(symbolOpenInterest.Count, 0);
 
