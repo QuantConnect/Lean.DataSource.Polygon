@@ -71,12 +71,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private readonly ConcurrentDictionary<Symbol, DateTime> _lastOpenInterestRequestTimeBySymbol = new();
 
         /// <summary>
-        /// Synchronization lock used to ensure thread-safe access to the
-        /// <c>_lastOpenInterestRequestTimeBySymbol</c> dictionary.
-        /// </summary>
-        private readonly Lock _lock = new();
-
-        /// <summary>
         /// 
         /// </summary>
         /// <param name="timeProvider"></param>
@@ -102,10 +96,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         {
             foreach (var symbol in symbols)
             {
-                lock (_lock)
-                {
-                    _lastOpenInterestRequestTimeBySymbol[symbol] = default;
-                }
+                _lastOpenInterestRequestTimeBySymbol.TryAdd(symbol, default);
             }
             ScheduleNextRun(false);
         }
@@ -119,10 +110,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         {
             foreach (var symbol in symbols)
             {
-                lock (_lock)
-                {
-                    _lastOpenInterestRequestTimeBySymbol.Remove(symbol, out _);
-                }
+                _lastOpenInterestRequestTimeBySymbol.TryRemove(symbol, out _);
             }
         }
 
@@ -170,23 +158,17 @@ namespace QuantConnect.Lean.DataSource.Polygon
             // Between 8:00 and 8:01 AM NY time: include all symbols
             if (nyNow >= nyNow.Date.AddHours(8) && nyNow < nyNow.Date.AddHours(8).AddMinutes(1))
             {
-                lock (_lock)
-                {
-                    subscribedSymbol.AddRange(_lastOpenInterestRequestTimeBySymbol.Keys);
-                }
+                subscribedSymbol.AddRange(_lastOpenInterestRequestTimeBySymbol.Keys);
             }
             else
             {
                 // Outside 8:00–8:01 AM: include only symbols not requested today
-                lock (_lock)
+                foreach (var (symbol, lastOpenInterestRequestTime) in _lastOpenInterestRequestTimeBySymbol)
                 {
-                    foreach (var (symbol, lastOpenInterestRequestTime) in _lastOpenInterestRequestTimeBySymbol)
+                    // Add symbols never requested or not requested today
+                    if (nyNow.Date != lastOpenInterestRequestTime.Date)
                     {
-                        // Add symbols never requested or not requested today
-                        if (nyNow.Date != lastOpenInterestRequestTime.Date)
-                        {
-                            subscribedSymbol.Add(symbol);
-                        }
+                        subscribedSymbol.Add(symbol);
                     }
                 }
             }
@@ -221,12 +203,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 var leanSymbol = _symbolMapper.GetLeanSymbol(universalSnapshot.Ticker!);
                 var time = _getTickTime(leanSymbol, nowUtc);
-
-                lock (_lock)
-                {
-                    _lastOpenInterestRequestTimeBySymbol[leanSymbol] = time;
-                }
-
+                _lastOpenInterestRequestTimeBySymbol[leanSymbol] = time;
                 var openInterestTick = new Tick(time, leanSymbol, universalSnapshot.OpenInterest);
                 lock (_dataAggregator)
                 {
