@@ -33,7 +33,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="QuantConnect.Lean.Engine" Version="2.5.*" />
-		<PackageReference Include="QuantConnect.Common" Version="2.5.*" />
+	  <ProjectReference Include="..\..\Lean\Common\QuantConnect.csproj" />
+	  <ProjectReference Include="..\..\Lean\Engine\QuantConnect.Lean.Engine.csproj" />
 	</ItemGroup>
 </Project>

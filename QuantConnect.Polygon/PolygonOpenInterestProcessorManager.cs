@@ -1,4 +1,4 @@
-/*
+﻿/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -20,6 +20,7 @@ using QuantConnect.Securities;
 using QuantConnect.Data.Market;
 using System.Collections.Concurrent;
 using QuantConnect.Lean.DataSource.Polygon.Rest;
+using System.Text;
 
 namespace QuantConnect.Lean.DataSource.Polygon
 {
@@ -134,7 +135,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 delay = TimeSpan.FromMinutes(1);
             }
-
+            Log.Trace($"{nameof(PolygonOpenInterestProcessorManager)}.{nameof(ScheduleNextRun)} - Delay: {delay}, OpenInterestScheduler is null: {_openInterestScheduler == null}");
             if (_openInterestScheduler != null)
             {
                 _openInterestScheduler.Change(delay, Timeout.InfiniteTimeSpan);
@@ -173,6 +174,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 }
             }
 
+            Log.Trace($"{nameof(PolygonOpenInterestProcessorManager)}.{nameof(RunProcessOpenInterest)} - UseScheduledDelay: {useScheduledDelay}, UtcNow: {nyNow:u}, TotalSymbols: {_lastOpenInterestRequestTimeBySymbol.Count}, SubscribedSymbols: {subscribedSymbol.Count}");
             try
             {
                 if (subscribedSymbol.Count != 0)
@@ -199,8 +201,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
             restRequest.AddQueryParameter("limit", "250");
 
             var nowUtc = DateTime.UtcNow;
+            var str = new StringBuilder($"{nameof(PolygonOpenInterestProcessorManager)}.{nameof(ProcessOpenInterest)}.universalSnapshot: ");
             foreach (var universalSnapshot in _polygonRestApiClient.DownloadAndParseData<UniversalSnapshotResponse>(restRequest).SelectMany(response => response.Results))
             {
+                str.Append(universalSnapshot + " ");
                 var leanSymbol = _symbolMapper.GetLeanSymbol(universalSnapshot.Ticker!);
                 var time = _getTickTime(leanSymbol, nowUtc);
                 _lastOpenInterestRequestTimeBySymbol[leanSymbol] = time;
@@ -210,6 +214,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     _dataAggregator.Update(openInterestTick);
                 }
             }
+            Log.Trace(str.ToString());
         }
 
         /// <summary>
