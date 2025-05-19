@@ -153,13 +153,23 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var useScheduledDelay = false;
 
             var subscribedSymbol = new List<Symbol>();
-            var utcNow = _timeProvider.GetUtcNow();
-            foreach (var (symbol, lastOpenInterestRequestTime) in _lastOpenInterestRequestTimeBySymbol)
+            var nyNow = _timeProvider.GetUtcNow().ConvertFromUtc(_nyTimeZone);
+
+            // Between 8:00 and 8:01 AM NY time: include all symbols
+            if (nyNow >= nyNow.Date.AddHours(8) && nyNow < nyNow.Date.AddHours(8).AddMinutes(1))
             {
-                // Add symbols never requested or not requested today
-                if (utcNow.Date != lastOpenInterestRequestTime.Date)
+                subscribedSymbol.AddRange(_lastOpenInterestRequestTimeBySymbol.Keys);
+            }
+            else
+            {
+                // Outside 8:00–8:01 AM: include only symbols not requested today
+                foreach (var (symbol, lastOpenInterestRequestTime) in _lastOpenInterestRequestTimeBySymbol)
                 {
-                    subscribedSymbol.Add(symbol);
+                    // Add symbols never requested or not requested today
+                    if (nyNow.Date != lastOpenInterestRequestTime.Date)
+                    {
+                        subscribedSymbol.Add(symbol);
+                    }
                 }
             }
 
@@ -192,8 +202,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
             foreach (var universalSnapshot in _polygonRestApiClient.DownloadAndParseData<UniversalSnapshotResponse>(restRequest).SelectMany(response => response.Results))
             {
                 var leanSymbol = _symbolMapper.GetLeanSymbol(universalSnapshot.Ticker!);
-                _lastOpenInterestRequestTimeBySymbol[leanSymbol] = nowUtc;
                 var time = _getTickTime(leanSymbol, nowUtc);
+                _lastOpenInterestRequestTimeBySymbol[leanSymbol] = time;
 
                 var openInterestTick = new Tick(time, leanSymbol, universalSnapshot.OpenInterest);
                 lock (_dataAggregator)
