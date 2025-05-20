@@ -58,6 +58,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
         protected PolygonSubscriptionManager _subscriptionManager;
 
+        private PolygonOpenInterestProcessorManager _polygonOpenInterestProcessorManager;
+
         private List<ExchangeMapping> _exchangeMappings;
         private readonly PolygonSymbolMapper _symbolMapper = new();
         private readonly MarketHoursDatabase _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
@@ -150,6 +152,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
             // Initialize the exchange mappings
             _exchangeMappings = FetchExchangeMappings();
 
+            _polygonOpenInterestProcessorManager = new PolygonOpenInterestProcessorManager(TimeProvider, RestApiClient, _symbolMapper, _dataAggregator, GetTickTime);
+
             // Initialize the subscription manager if this instance is going to be used as a data queue handler
             if (streamingEnabled)
             {
@@ -157,7 +161,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     _supportedSecurityTypes,
                     maxSubscriptionsPerWebSocket,
                     (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage),
-                    new PolygonOpenInterestProcessorManager(TimeProvider, RestApiClient, _symbolMapper, _dataAggregator, GetTickTime));
+                    _polygonOpenInterestProcessorManager);
             }
         }
 
@@ -341,8 +345,15 @@ namespace QuantConnect.Lean.DataSource.Polygon
             // Note: Polygon's quotes have bid/ask exchange IDs, but Lean only has one exchange per tick. We'll use the bid exchange.
             var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(quote.BidExchangeID),
                 quote.BidSize, quote.BidPrice, quote.AskSize, quote.AskPrice);
+
+            var openInterest = _polygonOpenInterestProcessorManager.GetOpenInterestTick(symbol, time);
             lock (_dataAggregator)
             {
+                if (openInterest != null)
+                {
+                    _dataAggregator.Update(openInterest);
+                }
+
                 _dataAggregator.Update(tick);
             }
         }

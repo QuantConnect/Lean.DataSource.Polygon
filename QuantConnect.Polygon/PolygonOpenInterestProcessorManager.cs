@@ -68,7 +68,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <summary>
         /// Stores the last request time for open interest per symbol.
         /// </summary>
-        private readonly ConcurrentDictionary<Symbol, DateTime> _lastOpenInterestRequestTimeBySymbol = new();
+        private readonly ConcurrentDictionary<Symbol, (DateTime lastDateTimeUpdate, decimal openInterest)> _lastOpenInterestRequestTimeBySymbol = new();
 
         /// <summary>
         /// 
@@ -101,7 +101,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
             ScheduleNextRun(false);
         }
 
-
         /// <summary>
         /// Removes the given symbols from the tracking dictionary.
         /// </summary>
@@ -112,6 +111,23 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 _lastOpenInterestRequestTimeBySymbol.TryRemove(symbol, out _);
             }
+        }
+
+        /// <summary>
+        /// Retrieves the latest open interest data for the specified symbol and creates a corresponding <see cref="Tick"/>.
+        /// </summary>
+        /// <param name="symbol">The symbol for which to generate the open interest tick.</param>
+        /// <param name="tickTime">The timestamp to assign to the generated <see cref="Tick"/>.</param>
+        /// <returns>
+        /// A <see cref="Tick"/> containing the open interest data if available; otherwise, <c>null</c>.
+        /// </returns>
+        public Tick? GetOpenInterestTick(Symbol symbol, DateTime tickTime)
+        {
+            if (_lastOpenInterestRequestTimeBySymbol.TryGetValue(symbol, out var value))
+            {
+                return new Tick(tickTime, symbol, value.openInterest);
+            }
+            return null;
         }
 
         /// <summary>
@@ -166,7 +182,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 foreach (var (symbol, lastOpenInterestRequestTime) in _lastOpenInterestRequestTimeBySymbol)
                 {
                     // Add symbols never requested or not requested today
-                    if (nyNow.Date != lastOpenInterestRequestTime.Date)
+                    if (nyNow.Date != lastOpenInterestRequestTime.lastDateTimeUpdate)
                     {
                         subscribedSymbol.Add(symbol);
                     }
@@ -203,7 +219,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 var leanSymbol = _symbolMapper.GetLeanSymbol(universalSnapshot.Ticker!);
                 var time = _getTickTime(leanSymbol, nowUtc);
-                _lastOpenInterestRequestTimeBySymbol[leanSymbol] = time;
+                _lastOpenInterestRequestTimeBySymbol[leanSymbol] = (time, universalSnapshot.OpenInterest);
                 var openInterestTick = new Tick(time, leanSymbol, universalSnapshot.OpenInterest);
                 lock (_dataAggregator)
                 {
