@@ -52,15 +52,5 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         [JsonProperty("ticker")]
         public string Ticker { get; set; }
-
-        public override string ToString()
-        {
-            return $"{nameof(OptionContract)}: " +
-                   $"Ticker={Ticker}, " +
-                   $"Right={Right}, " +
-                   $"Style={Style}, " +
-                   $"ExpirationDate={ExpirationDate:yyyy-MM-dd}, " +
-                   $"StrikePrice={StrikePrice}";
-        }
     }
 }

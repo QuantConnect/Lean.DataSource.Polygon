@@ -42,14 +42,5 @@ namespace QuantConnect.Lean.DataSource.Polygon.Rest
         /// </summary>
         [JsonProperty("type")]
         public string? Type { get; set; }
-
-        public override string ToString()
-        {
-            return $"{nameof(UniversalSnapshot)}: " +
-                   $"Ticker={Ticker ?? "null"}, " +
-                   $"Type={Type ?? "null"}, " +
-                   $"OpenInterest={OpenInterest}, " +
-                   $"OptionContract=[{OptionContract?.ToString() ?? "null"}]";
-        }
     }
 }
