@@ -353,6 +353,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// This method retrieves the open interest tick corresponding to the symbol and time of the provided tick.
         /// If an open interest tick is found, both the open interest tick and the main tick are passed to the data aggregator
         /// in a thread-safe manner.
+        /// We do this to sync the open interest tick (which is one for the whole day) with the quote/trade tick.
         /// </remarks>
         private void ProcessTickWithOpenInterestTick(Tick mainTick)
         {

@@ -71,7 +71,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private readonly ConcurrentDictionary<Symbol, (DateTime lastDateTimeUpdate, decimal openInterest)> _lastOpenInterestRequestTimeBySymbol = new();
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="timeProvider"></param>
         /// <param name="polygonRestApiClient"></param>
@@ -98,7 +98,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 _lastOpenInterestRequestTimeBySymbol.TryAdd(symbol, default);
             }
-            ScheduleNextRun(false);
+            ScheduleNextRun(useScheduledDelay: false, newSubscription: true);
         }
 
         /// <summary>
@@ -137,7 +137,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <param name="useScheduledDelay">
         /// Indicates whether the full scheduled delay should be used before the next run.
         /// </param>
-        private void ScheduleNextRun(bool useScheduledDelay = false)
+        private void ScheduleNextRun(bool useScheduledDelay = false, bool newSubscription = false)
         {
             var delay = default(TimeSpan);
             if (useScheduledDelay)
@@ -148,7 +148,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             }
             else
             {
-                delay = TimeSpan.FromMinutes(1);
+                delay = newSubscription ? TimeSpan.FromSeconds(5) : TimeSpan.FromMinutes(1);
             }
 
             if (_openInterestScheduler != null)
