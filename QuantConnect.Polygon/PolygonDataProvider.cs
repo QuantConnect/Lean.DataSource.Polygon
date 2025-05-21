@@ -58,6 +58,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
         protected PolygonSubscriptionManager _subscriptionManager;
 
+        private PolygonOpenInterestProcessorManager _polygonOpenInterestProcessorManager;
+
         private List<ExchangeMapping> _exchangeMappings;
         private readonly PolygonSymbolMapper _symbolMapper = new();
         private readonly MarketHoursDatabase _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
@@ -150,16 +152,17 @@ namespace QuantConnect.Lean.DataSource.Polygon
             // Initialize the exchange mappings
             _exchangeMappings = FetchExchangeMappings();
 
+            _polygonOpenInterestProcessorManager = new PolygonOpenInterestProcessorManager(TimeProvider, RestApiClient, _symbolMapper, _dataAggregator, GetTickTime);
+
             // Initialize the subscription manager if this instance is going to be used as a data queue handler
             if (streamingEnabled)
             {
                 _subscriptionManager = new PolygonSubscriptionManager(
                     _supportedSecurityTypes,
                     maxSubscriptionsPerWebSocket,
-                    (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage));
+                    (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage),
+                    _polygonOpenInterestProcessorManager);
             }
-            var openInterestManager = new PolygonOpenInterestProcessorManager(TimeProvider, RestApiClient, _symbolMapper, _subscriptionManager, _dataAggregator, GetTickTime);
-            openInterestManager.ScheduleNextRun();
         }
 
         #region IDataQueueHandler implementation
@@ -325,10 +328,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var time = GetTickTime(symbol, trade.Timestamp);
             // TODO: Map trade.Conditions to Lean sale conditions
             var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(trade.ExchangeID), trade.Size, trade.Price);
-            lock (_dataAggregator)
-            {
-                _dataAggregator.Update(tick);
-            }
+            ProcessTickWithOpenInterestTick(tick);
         }
 
         /// <summary>
@@ -342,9 +342,30 @@ namespace QuantConnect.Lean.DataSource.Polygon
             // Note: Polygon's quotes have bid/ask exchange IDs, but Lean only has one exchange per tick. We'll use the bid exchange.
             var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(quote.BidExchangeID),
                 quote.BidSize, quote.BidPrice, quote.AskSize, quote.AskPrice);
+            ProcessTickWithOpenInterestTick(tick);
+        }
+
+        /// <summary>
+        /// Processes a tick and its corresponding open interest tick, if available.
+        /// </summary>
+        /// <param name="mainTick">The primary tick (trade or quote) to process.</param>
+        /// <remarks>
+        /// This method retrieves the open interest tick corresponding to the symbol and time of the provided tick.
+        /// If an open interest tick is found, both the open interest tick and the main tick are passed to the data aggregator
+        /// in a thread-safe manner.
+        /// We do this to sync the open interest tick (which is one for the whole day) with the quote/trade tick.
+        /// </remarks>
+        private void ProcessTickWithOpenInterestTick(Tick mainTick)
+        {
+            var openInterest = _polygonOpenInterestProcessorManager.GetOpenInterestTick(mainTick.Symbol, mainTick.Time);
             lock (_dataAggregator)
             {
-                _dataAggregator.Update(tick);
+                if (openInterest != null)
+                {
+                    _dataAggregator.Update(openInterest);
+                }
+
+                _dataAggregator.Update(mainTick);
             }
         }
 

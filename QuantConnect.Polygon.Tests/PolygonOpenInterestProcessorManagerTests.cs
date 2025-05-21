@@ -14,6 +14,7 @@
  */
 
 using System;
+using System.Linq;
 using NUnit.Framework;
 using System.Threading;
 using QuantConnect.Data;
@@ -36,23 +37,15 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
         private readonly ManualTimeProvider _timeProviderInstance = new();
 
-        private readonly EventBasedDataQueueHandlerSubscriptionManager _subscriptionManager = new()
-        {
-            SubscribeImpl = (symbols, _) => { return true; },
-            UnsubscribeImpl = (symbols, _) => { return true; }
-        };
+        private readonly Lock _locker = new();
 
-        private object _locker = new();
-
-        [TestCase("2024-09-16T09:30:59", true, Description = "Market: After Opening")]
-        [TestCase("2024-09-16T15:28:59", true, Description = "Market: Before Closing")]
-        [TestCase("2024-09-16T16:28:59", false, Description = "Market: Closed")]
-        public void GetOpenInterestInDifferentTimeExchangeTime(string mockDateTime, bool isShouldReturnData)
+        [Test]
+        public void GetOpenInterestOfOptionSymbolsByPolygonOpenInterestProcessorManager()
         {
-            var waitOneDelay = isShouldReturnData ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(5);
-            var resetEvent = new AutoResetEvent(false);
+            var resetEvent = new ManualResetEvent(false);
             var cancellationTokenSource = new CancellationTokenSource();
             var optionContractsConfigs = GetConfigs();
+            var amountOfConfigs = optionContractsConfigs.Count;
 
             var symbolOpenInterest = new ConcurrentDictionary<Symbol, decimal>();
             Action<BaseData> callback = (baseData) =>
@@ -66,16 +59,20 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                 {
                     symbolOpenInterest[baseData.Symbol] = baseData.Value;
 
-                    if (symbolOpenInterest.Count > 5)
+                    if (symbolOpenInterest.Count == amountOfConfigs)
                     {
                         resetEvent.Set();
                     }
                 }
             };
 
+            _timeProviderInstance.SetCurrentTimeUtc(DateTime.UtcNow.ConvertFromUtc(TimeZones.NewYork).Date.AddHours(8).AddSeconds(-5).ConvertToUtc(TimeZones.NewYork));
+            var processor = new PolygonOpenInterestProcessorManager(_timeProviderInstance, _restApiClient, symbolMapper, dataAggregator, GetTickTime);
+
+            processor.AddSymbols([.. optionContractsConfigs.Select(x => x.Symbol)]);
+
             foreach (var config in optionContractsConfigs)
             {
-                _subscriptionManager.Subscribe(config);
                 ProcessFeed(
                     Subscribe(dataAggregator, config, (sender, args) => { }),
                     cancellationTokenSource.Token,
@@ -83,24 +80,21 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                     );
             }
 
-            var mockDateTimeAfterOpenExchange = DateTime.Parse(mockDateTime).ConvertTo(TimeZones.NewYork, TimeZones.Utc);
-            _timeProviderInstance.SetCurrentTimeUtc(mockDateTimeAfterOpenExchange);
-            var processor = new PolygonOpenInterestProcessorManager(_timeProviderInstance, _restApiClient, symbolMapper, _subscriptionManager, dataAggregator, GetTickTime);
-            processor.ScheduleNextRun();
-            resetEvent.WaitOne(waitOneDelay, cancellationTokenSource.Token);
+            // Internal delay to respect the 1-minute request interval for OpenInterest data.
+            resetEvent.WaitOne(TimeSpan.FromSeconds(70), cancellationTokenSource.Token);
 
-            if (isShouldReturnData)
-            {
-                Assert.Greater(symbolOpenInterest.Count, 0);
-                foreach (var (symbol, openInterest) in symbolOpenInterest)
-                {
-                    Assert.Greater(openInterest, 0);
-                }
-            }
-            else
-            {
-                Assert.Zero(symbolOpenInterest.Count);
-            }
+            Assert.Greater(symbolOpenInterest.Count, 0);
+
+            // Advance the current UTC time by 1 day to simulate the next day.
+            // This ensures that any new OpenInterest requests are validated against the updated time.
+            _timeProviderInstance.SetCurrentTimeUtc(DateTime.UtcNow.AddDays(1));
+
+            resetEvent.Reset();
+            symbolOpenInterest.Clear();
+
+            resetEvent.WaitOne(TimeSpan.FromSeconds(30), cancellationTokenSource.Token);
+
+            Assert.Greater(symbolOpenInterest.Count, 0);
 
             cancellationTokenSource.Cancel();
             cancellationTokenSource.Dispose();
@@ -112,7 +106,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         {
             var configs = new List<SubscriptionDataConfig>();
 
-            var expiryContractDate = new DateTime(2024, 09, 20);
+            var expiryContractDate = new DateTime(2025, 05, 16);
             var strikesAAPL = new decimal[] { 100m, 105m, 110m, 115m, 120m, 125m, 130m, 135m, 140m, 145m };
 
             foreach (var strike in strikesAAPL)
