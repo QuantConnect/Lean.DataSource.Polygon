@@ -23,6 +23,10 @@ using QuantConnect.Lean.DataSource.Polygon.Rest;
 
 namespace QuantConnect.Lean.DataSource.Polygon
 {
+    /// <summary>
+    /// Schedules and handles the processing of open interest data for options.
+    /// It retrieves open interest data from the Polygon.io API and updates the corresponding <see cref="Tick"/> objects.
+    /// </summary>
     public class PolygonOpenInterestProcessorManager : IDisposable
     {
         /// <summary>
@@ -71,7 +75,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private readonly ConcurrentDictionary<Symbol, (DateTime lastDateTimeUpdate, decimal openInterest)> _lastOpenInterestRequestTimeBySymbol = new();
 
         /// <summary>
-        ///
+        /// Initializes a new instance of the <see cref="PolygonOpenInterestProcessorManager"/> class.
         /// </summary>
         /// <param name="timeProvider"></param>
         /// <param name="polygonRestApiClient"></param>
@@ -136,6 +140,9 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         /// <param name="useScheduledDelay">
         /// Indicates whether the full scheduled delay should be used before the next run.
+        /// </param>
+        /// <param name="newSubscription">
+        /// Indicates whether to use a small delay to fetch open interest data for new subscriptions as soon as possible.
         /// </param>
         private void ScheduleNextRun(bool useScheduledDelay = false, bool newSubscription = false)
         {
