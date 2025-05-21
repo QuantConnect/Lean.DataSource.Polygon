@@ -328,10 +328,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var time = GetTickTime(symbol, trade.Timestamp);
             // TODO: Map trade.Conditions to Lean sale conditions
             var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(trade.ExchangeID), trade.Size, trade.Price);
-            lock (_dataAggregator)
-            {
-                _dataAggregator.Update(tick);
-            }
+            ProcessTickWithOpenInterestTick(tick);
         }
 
         /// <summary>
@@ -345,8 +342,21 @@ namespace QuantConnect.Lean.DataSource.Polygon
             // Note: Polygon's quotes have bid/ask exchange IDs, but Lean only has one exchange per tick. We'll use the bid exchange.
             var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(quote.BidExchangeID),
                 quote.BidSize, quote.BidPrice, quote.AskSize, quote.AskPrice);
+            ProcessTickWithOpenInterestTick(tick);
+        }
 
-            var openInterest = _polygonOpenInterestProcessorManager.GetOpenInterestTick(symbol, time);
+        /// <summary>
+        /// Processes a tick and its corresponding open interest tick, if available.
+        /// </summary>
+        /// <param name="mainTick">The primary tick (trade or quote) to process.</param>
+        /// <remarks>
+        /// This method retrieves the open interest tick corresponding to the symbol and time of the provided tick.
+        /// If an open interest tick is found, both the open interest tick and the main tick are passed to the data aggregator
+        /// in a thread-safe manner.
+        /// </remarks>
+        private void ProcessTickWithOpenInterestTick(Tick mainTick)
+        {
+            var openInterest = _polygonOpenInterestProcessorManager.GetOpenInterestTick(mainTick.Symbol, mainTick.Time);
             lock (_dataAggregator)
             {
                 if (openInterest != null)
@@ -354,7 +364,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     _dataAggregator.Update(openInterest);
                 }
 
-                _dataAggregator.Update(tick);
+                _dataAggregator.Update(mainTick);
             }
         }
 
