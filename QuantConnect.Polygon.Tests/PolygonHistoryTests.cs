@@ -26,9 +26,10 @@ using System.Diagnostics;
 using System;
 using System.Linq;
 using System.Collections.Generic;
-using RestSharp;
 using QuantConnect.Tests;
 using NodaTime;
+using System.Net.Http;
+using System.Threading.Tasks;
 
 namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
@@ -385,12 +386,11 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
             public TestPolygonRestApiClient() : base(string.Empty) { }
 
-            public override IEnumerable<T> DownloadAndParseData<T>(RestRequest request)
+            public override async IAsyncEnumerable<T> DownloadAndParseData<T>(HttpRequestMessage request)
             {
-                return new List<T>
-                {
-                    JsonConvert.DeserializeObject<T>(DownloadData())
-                };
+                await Task.Yield();
+
+                yield return JsonConvert.DeserializeObject<T>(DownloadData())!;
             }
 
             private string DownloadData()

@@ -16,12 +16,13 @@
 
 using Moq;
 using System;
-using RestSharp;
 using System.Linq;
 using NUnit.Framework;
 using QuantConnect.Logging;
 using QuantConnect.Configuration;
 using System.Collections.Generic;
+using System.Net.Http;
+using System.Threading.Tasks;
 
 namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
@@ -59,7 +60,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                 ("VIX", SecurityType.Index),
                 ("DAX", SecurityType.Index),
             }
-            .Select(t => Symbol.Create(t.Ticker, t.SecurityType, Market.USA) )
+            .Select(t => Symbol.Create(t.Ticker, t.SecurityType, Market.USA))
             .ToArray();
 
         [TestCaseSource(nameof(Underlyings))]
@@ -127,11 +128,12 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         [TestCaseSource(nameof(Underlyings))]
         public void ValidateQueryParameterToSpecificSymbolValue(Symbol underlyingSymbol)
         {
-            IRestRequest request = default;
+            HttpRequestMessage capturedRequest = null;
             var mock = new Mock<PolygonRestApiClient>("api-key");
 
-            mock.Setup(m => m.DownloadAndParseData<OptionChainResponse>(It.IsAny<RestRequest>()))
-                .Callback((RestRequest r) => request = r);
+            mock.Setup(m => m.DownloadAndParseData<OptionChainResponse>(It.IsAny<HttpRequestMessage>()))
+                .Callback((HttpRequestMessage r) => capturedRequest = r)
+                .Returns(GetAsyncOptionChain());
 
             var optionChainProvider = new PolygonOptionChainProvider(mock.Object, new PolygonSymbolMapper());
 
@@ -141,7 +143,13 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             var optionContracts = optionChainProvider.GetOptionContractList(option, expiryDate).ToList();
 
             Assert.IsNotNull(optionContracts);
-            Assert.IsTrue(request.Parameters[0].Value.ToString().EndsWith(option.Underlying.Value));
+            Assert.IsTrue(capturedRequest.RequestUri.ToString().Contains(underlyingSymbol.Value));
+        }
+
+        private async IAsyncEnumerable<OptionChainResponse> GetAsyncOptionChain()
+        {
+            yield return new OptionChainResponse { Results = new List<OptionContract>() };
+            await Task.CompletedTask;
         }
 
         [TestCaseSource(nameof(Underlyings))]
