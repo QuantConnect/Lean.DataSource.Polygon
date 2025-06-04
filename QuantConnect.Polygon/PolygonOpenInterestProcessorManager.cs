@@ -216,12 +216,17 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private void ProcessOpenInterest(IReadOnlyCollection<Symbol> subscribedSymbols)
         {
             var subscribedBrokerageSymbols = subscribedSymbols.Select(_symbolMapper.GetBrokerageSymbol);
-            var tickers = string.Join(',', subscribedBrokerageSymbols);
-            var uri = $"{PolygonRestApiClient.RestApiBaseUrl}/v3/snapshot?ticker.any_of={tickers}&limit=250";
-            var restRequest = new HttpRequestMessage(HttpMethod.Get, uri);
+
+            var resource = "v3/snapshot";
+            var parameters = new Dictionary<string, string>
+            {
+                ["ticker.any_of"] = string.Join(',', subscribedBrokerageSymbols),
+                ["limit"] = "250"
+            };
 
             var nowUtc = DateTime.UtcNow;
-            foreach (var universalSnapshot in _polygonRestApiClient.DownloadAndParseData<UniversalSnapshotResponse>(restRequest).ToBlockingEnumerable().SelectMany(response => response.Results))
+            foreach (var universalSnapshot in _polygonRestApiClient.DownloadAndParseData<UniversalSnapshotResponse>(resource, parameters)
+                                                                   .SelectMany(response => response.Results))
             {
                 var leanSymbol = _symbolMapper.GetLeanSymbol(universalSnapshot.Ticker!);
                 var time = _getTickTime(leanSymbol, nowUtc);

@@ -21,8 +21,6 @@ using NUnit.Framework;
 using QuantConnect.Logging;
 using QuantConnect.Configuration;
 using System.Collections.Generic;
-using System.Net.Http;
-using System.Threading.Tasks;
 
 namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
@@ -128,28 +126,27 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         [TestCaseSource(nameof(Underlyings))]
         public void ValidateQueryParameterToSpecificSymbolValue(Symbol underlyingSymbol)
         {
-            HttpRequestMessage capturedRequest = null;
-            var mock = new Mock<PolygonRestApiClient>("api-key");
+            string capturedResource = null;
+            Dictionary<string, string> capturedParameters = null;
 
-            mock.Setup(m => m.DownloadAndParseData<OptionChainResponse>(It.IsAny<HttpRequestMessage>()))
-                .Callback((HttpRequestMessage r) => capturedRequest = r)
-                .Returns(GetAsyncOptionChain());
+            var mock = new Mock<PolygonRestApiClient>("api-key");
+            mock.Setup(m => m.DownloadAndParseData<OptionChainResponse>(It.IsAny<string>(), It.IsAny<Dictionary<string, string>>()))
+                .Callback((string resource, Dictionary<string, string> parameters) =>
+                {
+                    capturedResource = resource;
+                    capturedParameters = parameters;
+                })
+                .Returns(new List<OptionChainResponse>());
 
             var optionChainProvider = new PolygonOptionChainProvider(mock.Object, new PolygonSymbolMapper());
-
             var expiryDate = new DateTime(2024, 03, 15);
             var option = Symbol.CreateOption(underlyingSymbol, Market.USA, OptionStyle.American, OptionRight.Call, 1000m, expiryDate);
-
             var optionContracts = optionChainProvider.GetOptionContractList(option, expiryDate).ToList();
 
             Assert.IsNotNull(optionContracts);
-            Assert.IsTrue(capturedRequest.RequestUri.ToString().Contains(underlyingSymbol.Value));
-        }
-
-        private async IAsyncEnumerable<OptionChainResponse> GetAsyncOptionChain()
-        {
-            yield return new OptionChainResponse { Results = new List<OptionContract>() };
-            await Task.CompletedTask;
+            Assert.IsNotNull(capturedParameters);
+            Assert.IsTrue(capturedParameters.ContainsKey("underlying_ticker"));
+            Assert.AreEqual(option.Underlying.Value, capturedParameters["underlying_ticker"]);
         }
 
         [TestCaseSource(nameof(Underlyings))]

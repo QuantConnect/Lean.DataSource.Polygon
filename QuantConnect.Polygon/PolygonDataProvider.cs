@@ -417,9 +417,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
         protected virtual List<ExchangeMapping> FetchExchangeMappings()
         {
             // This url is not paginated, so we expect a single response
-            string uri = $"{PolygonRestApiClient.RestApiBaseUrl}/v3/reference/exchanges";
-            var request = new HttpRequestMessage(HttpMethod.Get, uri);
-            var response = RestApiClient.DownloadAndParseData<ExchangesResponse>(request).ToBlockingEnumerable().SingleOrDefault();
+            const string uri = "v3/reference/exchanges";
+            var response = RestApiClient.DownloadAndParseData<ExchangesResponse>(uri).SingleOrDefault();
             if (response == null)
             {
                 throw new PolygonAuthenticationException($"Failed to download exchange mappings from {uri}. Make sure your API key is valid.");

@@ -28,8 +28,6 @@ using System.Linq;
 using System.Collections.Generic;
 using QuantConnect.Tests;
 using NodaTime;
-using System.Net.Http;
-using System.Threading.Tasks;
 
 namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
@@ -133,6 +131,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             {
                 // No repeating bars
                 var timesArray = history.Select(x => x.Time).ToList();
+                var x = timesArray.Distinct().Count();
                 Assert.That(timesArray.Distinct().Count(), Is.EqualTo(timesArray.Count));
 
                 // Resolution is respected
@@ -386,11 +385,12 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
             public TestPolygonRestApiClient() : base(string.Empty) { }
 
-            public override async IAsyncEnumerable<T> DownloadAndParseData<T>(HttpRequestMessage request)
+            public override IEnumerable<T> DownloadAndParseData<T>(string resource, Dictionary<string, string> parameters = null)
             {
-                await Task.Yield();
-
-                yield return JsonConvert.DeserializeObject<T>(DownloadData())!;
+                return new List<T>
+                {
+                    JsonConvert.DeserializeObject<T>(DownloadData())
+                };
             }
 
             private string DownloadData()

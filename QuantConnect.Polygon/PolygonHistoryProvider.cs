@@ -21,7 +21,6 @@ using QuantConnect.Lean.Engine.HistoricalData;
 using QuantConnect.Logging;
 using QuantConnect.Util;
 using QuantConnect.Data.Consolidators;
-using System.Web;
 
 namespace QuantConnect.Lean.DataSource.Polygon
 {
@@ -198,19 +197,17 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var end = Time.DateTimeToUnixTimeStampMilliseconds(request.EndTimeUtc.RoundDown(resolutionTimeSpan));
             var historyTimespan = GetHistoryTimespan(request.Resolution);
 
-            var uri = $"{PolygonRestApiClient.RestApiBaseUrl}/v2/aggs/ticker/{ticker}/range/1/{historyTimespan}/{start}/{end}";
-            var restRequest = new HttpRequestMessage(HttpMethod.Get, uri);
-            var uriBuilder = new UriBuilder(restRequest.RequestUri);
-            var query = HttpUtility.ParseQueryString(uriBuilder.Query);
-            query["adjusted"] = (request.DataNormalizationMode != DataNormalizationMode.Raw).ToString();
-            uriBuilder.Query = query.ToString();
-            restRequest.RequestUri = uriBuilder.Uri;
+            var resource = $"v2/aggs/ticker/{ticker}/range/1/{historyTimespan}/{start}/{end}";
+            var parameters = new Dictionary<string, string>
+            {
+                ["adjusted"] = (request.DataNormalizationMode != DataNormalizationMode.Raw).ToString()
+            };
 
-            foreach (var bar in RestApiClient.DownloadAndParseData<AggregatesResponse>(restRequest).ToBlockingEnumerable().SelectMany(response => response.Results))
+            foreach (var bar in RestApiClient.DownloadAndParseData<AggregatesResponse>(resource, parameters)
+                                             .SelectMany(response => response.Results))
             {
                 var utcTime = Time.UnixMillisecondTimeStampToDateTime(bar.Timestamp);
                 var time = GetTickTime(request.Symbol, utcTime);
-
                 Interlocked.Increment(ref _dataPointCount);
                 yield return new TradeBar(time, request.Symbol, bar.Open, bar.High, bar.Low, bar.Close,
                     bar.Volume, resolutionTimeSpan);
@@ -253,23 +250,21 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var start = Time.DateTimeToUnixTimeStampNanoseconds(request.StartTimeUtc.RoundDown(resolutionTimeSpan));
             var end = Time.DateTimeToUnixTimeStampNanoseconds(request.EndTimeUtc.RoundDown(resolutionTimeSpan));
             var ticker = _symbolMapper.GetBrokerageSymbol(request.Symbol);
-
             var tickTypeStr = request.TickType == TickType.Trade ? "trades" : "quotes";
-            var uri = $"{PolygonRestApiClient.RestApiBaseUrl}/v3/{tickTypeStr}/{ticker}";
-            var restRequest = new HttpRequestMessage(HttpMethod.Get, uri);
-            var uriBuilder = new UriBuilder(restRequest.RequestUri);
-            var query = HttpUtility.ParseQueryString(uriBuilder.Query);
-            query["timestamp.gte"] = start.ToString();
-            query["timestamp.lt"] = end.ToString();
-            query["order"] = "asc";
-            uriBuilder.Query = query.ToString();
-            restRequest.RequestUri = uriBuilder.Uri;
 
-            foreach (var tick in RestApiClient.DownloadAndParseData<TResponse>(restRequest).ToBlockingEnumerable().SelectMany(response => response.Results))
+            var resource = $"v3/{tickTypeStr}/{ticker}";
+            var parameters = new Dictionary<string, string>
+            {
+                ["timestamp.gte"] = start.ToString(),
+                ["timestamp.lt"] = end.ToString(),
+                ["order"] = "asc"
+            };
+
+            foreach (var tick in RestApiClient.DownloadAndParseData<TResponse>(resource, parameters)
+                                             .SelectMany(response => response.Results))
             {
                 var utcTime = Time.UnixNanosecondTimeStampToDateTime(tick.Timestamp);
                 var time = GetTickTime(request.Symbol, utcTime);
-
                 yield return tickFactory(time, request.Symbol, tick);
             }
         }

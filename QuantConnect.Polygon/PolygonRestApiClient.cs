@@ -13,7 +13,7 @@
  * limitations under the License.
 */
 
-using System.Net.Http.Headers;
+using System.Web;
 using Newtonsoft.Json;
 using QuantConnect.Util;
 using Newtonsoft.Json.Linq;
@@ -27,9 +27,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
     /// </summary>
     public class PolygonRestApiClient : IDisposable
     {
-        public readonly static string RestApiBaseUrl = Config.Get("polygon-api-url", "https://api.polygon.io");
+        private readonly static string RestApiBaseUrl = Config.Get("polygon-api-url", "https://api.polygon.io");
 
         private readonly HttpClient _httpClient;
+
         private readonly CancellationTokenSource _cancellationTokenSource = new();
 
         /// <summary>
@@ -52,36 +53,32 @@ namespace QuantConnect.Lean.DataSource.Polygon
         public PolygonRestApiClient(string apiKey)
         {
             _apiKey = apiKey;
-            _httpClient = new HttpClient
+            _httpClient = new HttpClient()
             {
                 BaseAddress = new Uri(RestApiBaseUrl),
-                Timeout = TimeSpan.FromMinutes(5)
+                Timeout = TimeSpan.FromMinutes(5) // 5 minutes
             };
+
+            // Set default Authorization header for all API requests
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_apiKey}");
         }
 
         /// <summary>
         /// Downloads data and tries to parse the JSON response data into the specified type
         /// </summary>
-        public virtual async IAsyncEnumerable<T> DownloadAndParseData<T>(HttpRequestMessage? request)
+        public virtual IEnumerable<T> DownloadAndParseData<T>(string resource, Dictionary<string, string> parameters = null)
             where T : BaseResponse
         {
-            if (request != null && !request.RequestUri.Query.Contains("limit="))
-            {
-                var uriBuilder = new UriBuilder(request.RequestUri);
-                var query = System.Web.HttpUtility.ParseQueryString(uriBuilder.Query);
-                query["limit"] = ApiResponseLimit;
-                uriBuilder.Query = query.ToString();
-                request.RequestUri = uriBuilder.Uri;
-            }
+            var requestUri = BuildRequestUri(resource, parameters);
 
-            while (request != null)
+            while (requestUri != null)
             {
-                Log.Debug($"PolygonRestApi.DownloadAndParseData(): Downloading {request.RequestUri}");
+                Log.Debug($"PolygonRestApi.DownloadAndParseData(): Downloading {requestUri}");
 
-                var responseContent = await DownloadWithRetries(request);
+                var responseContent = DownloadWithRetries(requestUri);
                 if (string.IsNullOrEmpty(responseContent))
                 {
-                    throw new Exception($"{nameof(PolygonRestApiClient)}.{nameof(DownloadAndParseData)}: Failed to download data for {request.RequestUri} after {MaxRetries} attempts.");
+                    throw new Exception($"{nameof(PolygonRestApiClient)}.{nameof(DownloadAndParseData)}: Failed to download data for {requestUri} after {MaxRetries} attempts.");
                 }
 
                 var result = ParseResponse<T>(responseContent);
@@ -93,13 +90,42 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
                 yield return result;
 
-                request = result.NextUrl != null ? new HttpRequestMessage(HttpMethod.Get, result.NextUrl) : null;
+                requestUri = result.NextUrl;
             }
         }
 
-        private async Task<string?> DownloadWithRetries(HttpRequestMessage request)
+        private string BuildRequestUri(string resource, Dictionary<string, string> parameters)
         {
-            var response = default(HttpResponseMessage);
+            if (string.IsNullOrEmpty(resource))
+            {
+                return null;
+            }
+
+            var uriBuilder = new UriBuilder(RestApiBaseUrl + "/" + resource.TrimStart('/'));
+            var query = HttpUtility.ParseQueryString(uriBuilder.Query);
+
+            // Add default limit if not specified
+            if (parameters == null || !parameters.ContainsKey("limit"))
+            {
+                query["limit"] = ApiResponseLimit;
+            }
+
+            // Add custom parameters
+            if (parameters != null)
+            {
+                foreach (var param in parameters)
+                {
+                    query[param.Key] = param.Value;
+                }
+            }
+
+            uriBuilder.Query = query.ToString();
+            return uriBuilder.ToString();
+        }
+
+        private string DownloadWithRetries(string requestUri)
+        {
+            HttpResponseMessage response = null;
             for (var attempt = 0; attempt < MaxRetries; attempt++)
             {
                 if (RateLimiter != null)
@@ -111,19 +137,16 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     RateLimiter.WaitToProceed();
                 }
 
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
-
                 try
                 {
-                    response = await _httpClient.SendAsync(request, _cancellationTokenSource.Token);
-
-                    var content = await response.Content.ReadAsStringAsync();
-                    var baseResponse = JsonConvert.DeserializeObject<BaseResponse>(content);
+                    response = _httpClient.GetAsync(requestUri, _cancellationTokenSource.Token).Result;
+                    var content = response.Content.ReadAsStringAsync().Result;
 
                     if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
                     {
                         var waitTime = TimeSpan.FromSeconds(10 * attempt);
 
+                        var baseResponse = JsonConvert.DeserializeObject<BaseResponse>(content);
                         Log.Trace($"PolygonRestApi.DownloadAndParseData(): Attempt {attempt + 1} was throttled due to too many requests. Waiting {waitTime.TotalSeconds} seconds before retrying... (Last error: {baseResponse?.Error ?? "Unknown error"})");
 
                         if (_cancellationTokenSource.Token.WaitHandle.WaitOne(waitTime))
@@ -134,19 +157,22 @@ namespace QuantConnect.Lean.DataSource.Polygon
                         continue;
                     }
 
-                    if (response != null && response.IsSuccessStatusCode && !string.IsNullOrEmpty(content))
+                    if (response.IsSuccessStatusCode && !string.IsNullOrEmpty(content))
                     {
                         return content;
                     }
                 }
                 catch (Exception ex)
                 {
-                    Log.Error($"PolygonRestApi.DownloadWithRetries(): Error during request attempt {attempt + 1} - {ex.Message}");
+                    Log.Error($"PolygonRestApi.DownloadWithRetries(): Attempt {attempt + 1} failed with exception: {ex.Message}");
+                }
+                finally
+                {
+                    response?.Dispose();
                 }
             }
 
-            var responseContent = response != null ? await response.Content.ReadAsStringAsync() : string.Empty;
-            Log.Trace($"Failed after {MaxRetries} attempts for {request.RequestUri}. Content: {responseContent}");
+            Log.Trace($"Failed after {MaxRetries} attempts for {requestUri}. Last response: {response?.StatusCode}");
             return null;
         }
 
