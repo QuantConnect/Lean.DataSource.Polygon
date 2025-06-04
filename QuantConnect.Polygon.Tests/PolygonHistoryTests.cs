@@ -26,7 +26,6 @@ using System.Diagnostics;
 using System;
 using System.Linq;
 using System.Collections.Generic;
-using RestSharp;
 using QuantConnect.Tests;
 using NodaTime;
 
@@ -132,6 +131,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             {
                 // No repeating bars
                 var timesArray = history.Select(x => x.Time).ToList();
+                var x = timesArray.Distinct().Count();
                 Assert.That(timesArray.Distinct().Count(), Is.EqualTo(timesArray.Count));
 
                 // Resolution is respected
@@ -385,7 +385,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
             public TestPolygonRestApiClient() : base(string.Empty) { }
 
-            public override IEnumerable<T> DownloadAndParseData<T>(RestRequest request)
+            public override IEnumerable<T> DownloadAndParseData<T>(string resource, Dictionary<string, string> parameters = null)
             {
                 return new List<T>
                 {

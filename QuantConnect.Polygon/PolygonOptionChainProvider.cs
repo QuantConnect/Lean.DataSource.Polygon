@@ -15,7 +15,6 @@
 
 using QuantConnect.Interfaces;
 using QuantConnect.Logging;
-using RestSharp;
 
 namespace QuantConnect.Lean.DataSource.Polygon
 {
@@ -60,19 +59,22 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     Log.Trace($"PolygonOptionChainProvider.GetOptionContractList(): Unsupported security type {symbol.SecurityType}");
                     _unsupportedSecurityTypeLogSent = true;
                 }
-
                 yield break;
             }
 
             var underlying = symbol.SecurityType.IsOption() ? symbol.Underlying : symbol;
             var optionsSecurityType = underlying.SecurityType == SecurityType.Index ? SecurityType.IndexOption : SecurityType.Option;
 
-            var request = new RestRequest("/v3/reference/options/contracts", Method.GET);
-            request.AddQueryParameter("underlying_ticker", underlying.Value);
-            request.AddQueryParameter("as_of", date.ToStringInvariant("yyyy-MM-dd"));
-            request.AddQueryParameter("limit", "1000");
+            var resource = "v3/reference/options/contracts";
+            var parameters = new Dictionary<string, string>
+            {
+                ["underlying_ticker"] = underlying.Value,
+                ["as_of"] = date.ToStringInvariant("yyyy-MM-dd"),
+                ["limit"] = "1000"
+            };
 
-            foreach (var contract in _restApiClient.DownloadAndParseData<OptionChainResponse>(request).SelectMany(response => response.Results))
+            foreach (var contract in _restApiClient.DownloadAndParseData<OptionChainResponse>(resource, parameters)
+                                                  .SelectMany(response => response.Results))
             {
                 // Unsupported option style (e.g. bermudan) or right (e.g. "other" in rare cases according to the endpoint's docs)
                 if (!Enum.TryParse<OptionStyle>(contract.Style, ignoreCase: true, out var optionStyle) ||

@@ -16,7 +16,6 @@
 
 using Moq;
 using System;
-using RestSharp;
 using System.Linq;
 using NUnit.Framework;
 using QuantConnect.Logging;
@@ -59,7 +58,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                 ("VIX", SecurityType.Index),
                 ("DAX", SecurityType.Index),
             }
-            .Select(t => Symbol.Create(t.Ticker, t.SecurityType, Market.USA) )
+            .Select(t => Symbol.Create(t.Ticker, t.SecurityType, Market.USA))
             .ToArray();
 
         [TestCaseSource(nameof(Underlyings))]
@@ -127,21 +126,27 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         [TestCaseSource(nameof(Underlyings))]
         public void ValidateQueryParameterToSpecificSymbolValue(Symbol underlyingSymbol)
         {
-            IRestRequest request = default;
-            var mock = new Mock<PolygonRestApiClient>("api-key");
+            string capturedResource = null;
+            Dictionary<string, string> capturedParameters = null;
 
-            mock.Setup(m => m.DownloadAndParseData<OptionChainResponse>(It.IsAny<RestRequest>()))
-                .Callback((RestRequest r) => request = r);
+            var mock = new Mock<PolygonRestApiClient>("api-key");
+            mock.Setup(m => m.DownloadAndParseData<OptionChainResponse>(It.IsAny<string>(), It.IsAny<Dictionary<string, string>>()))
+                .Callback((string resource, Dictionary<string, string> parameters) =>
+                {
+                    capturedResource = resource;
+                    capturedParameters = parameters;
+                })
+                .Returns(new List<OptionChainResponse>());
 
             var optionChainProvider = new PolygonOptionChainProvider(mock.Object, new PolygonSymbolMapper());
-
             var expiryDate = new DateTime(2024, 03, 15);
             var option = Symbol.CreateOption(underlyingSymbol, Market.USA, OptionStyle.American, OptionRight.Call, 1000m, expiryDate);
-
             var optionContracts = optionChainProvider.GetOptionContractList(option, expiryDate).ToList();
 
             Assert.IsNotNull(optionContracts);
-            Assert.IsTrue(request.Parameters[0].Value.ToString().EndsWith(option.Underlying.Value));
+            Assert.IsNotNull(capturedParameters);
+            Assert.IsTrue(capturedParameters.ContainsKey("underlying_ticker"));
+            Assert.AreEqual(option.Underlying.Value, capturedParameters["underlying_ticker"]);
         }
 
         [TestCaseSource(nameof(Underlyings))]
