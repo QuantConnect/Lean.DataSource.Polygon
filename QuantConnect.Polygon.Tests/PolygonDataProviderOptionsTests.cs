@@ -40,7 +40,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             const int maxSubscriptions = 1000;
 
             using var polygon = new PolygonDataProvider(ApiKey, maxSubscriptions);
-            var optionChainProvider = new LiveOptionChainProvider();
+            var optionChainProvider = new LiveOptionChainProvider(TestGlobals.DataCacheProvider, TestGlobals.MapFileProvider);
 
             var underlyingTickers = new[] { "SPY", "AAPL", "GOOG", "IBM" };
             var subscriptionsCount = 0;
