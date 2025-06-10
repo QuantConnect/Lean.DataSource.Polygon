@@ -1,4 +1,4 @@
-/*
+﻿/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -36,11 +36,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private object _lock = new();
 
         private List<SubscriptionDataConfig> _subscriptionsDataConfigs = new();
-
-        /// <summary>
-        /// Handles retrieving open interest data for symbols.
-        /// </summary>
-        private readonly PolygonOpenInterestProcessorManager _openInterestProcessorManager;
 
         /// <summary>
         /// Indicates whether data is being streamed using aggregates or ticks
@@ -81,12 +76,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <param name="securityTypes">The supported security types</param>
         /// <param name="maxSubscriptionsPerWebSocket">Maximum number of subscriptions allowed per websocket</param>
         /// <param name="websSocketFactory">Function to create websockets</param>
-        /// <param name="openInterestProcessorManager">The handler of OpenInterest data.</param>
         public PolygonSubscriptionManager(
             IEnumerable<SecurityType> securityTypes,
             int maxSubscriptionsPerWebSocket,
-            Func<SecurityType, PolygonWebSocketClientWrapper> websSocketFactory,
-            PolygonOpenInterestProcessorManager openInterestProcessorManager)
+            Func<SecurityType, PolygonWebSocketClientWrapper> websSocketFactory)
         {
             _maxSubscriptionsPerWebSocket = maxSubscriptionsPerWebSocket;
             _webSockets = new List<PolygonWebSocketClientWrapper>();
@@ -99,7 +92,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     _webSockets.Add(websSocketFactory(securityType));
                 }
             }
-            _openInterestProcessorManager = openInterestProcessorManager;
         }
 
         /// <summary>
@@ -124,7 +116,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         {
             if (tickType == TickType.OpenInterest)
             {
-                _openInterestProcessorManager.AddSymbols(symbols);
+                // Skip subscribing to OpenInterest and consider using PolygonOpenInterestProcessorManager instead, as Polygon doesn't support live updating of OpenInterest.
                 return true;
             }
 
@@ -165,11 +157,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <param name="tickType">Type of tick data</param>
         protected override bool Unsubscribe(IEnumerable<Symbol> symbols, TickType tickType)
         {
-            if (tickType == TickType.OpenInterest)
-            {
-                _openInterestProcessorManager.RemoveSymbols(symbols);
-            }
-
             Log.Trace($"PolygonSubscriptionManager.Unsubscribe(): {string.Join(",", symbols.Select(x => x.Value))}");
 
             foreach (var symbol in symbols)
