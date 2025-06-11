@@ -14,7 +14,6 @@
  */
 
 using NodaTime;
-using RestSharp;
 using QuantConnect.Data;
 using QuantConnect.Logging;
 using QuantConnect.Securities;
@@ -141,11 +140,16 @@ namespace QuantConnect.Lean.DataSource.Polygon
         {
             var subscribedBrokerageSymbols = subscribedSymbols.Select(x => _symbolMapper.GetBrokerageSymbol(x));
 
-            var restRequest = new RestRequest($"v3/snapshot?ticker.any_of={string.Join(',', subscribedBrokerageSymbols)}", Method.GET);
-            restRequest.AddQueryParameter("limit", "250");
+            var resource = "v3/snapshot";
+            var parameters = new Dictionary<string, string>
+            {
+                ["ticker.any_of"] = string.Join(',', subscribedBrokerageSymbols),
+                ["limit"] = "250"
+            };
 
             var nowUtc = DateTime.UtcNow;
-            foreach (var universalSnapshot in _polygonRestApiClient.DownloadAndParseData<UniversalSnapshotResponse>(restRequest).SelectMany(response => response.Results))
+            foreach (var universalSnapshot in _polygonRestApiClient.DownloadAndParseData<UniversalSnapshotResponse>(resource, parameters)
+                                                                   .SelectMany(response => response.Results))
             {
                 if (universalSnapshot.OpenInterest == 0)
                 {

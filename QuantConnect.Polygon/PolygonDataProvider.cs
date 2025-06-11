@@ -397,8 +397,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         {
             // This url is not paginated, so we expect a single response
             const string uri = "v3/reference/exchanges";
-            var request = new RestRequest(uri, Method.GET);
-            var response = RestApiClient.DownloadAndParseData<ExchangesResponse>(request).SingleOrDefault();
+            var response = RestApiClient.DownloadAndParseData<ExchangesResponse>(uri).SingleOrDefault();
             if (response == null)
             {
                 throw new PolygonAuthenticationException($"Failed to download exchange mappings from {uri}. Make sure your API key is valid.");

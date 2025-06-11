@@ -108,6 +108,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         }
 
         [Test]
+        [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
         public void OptionTradeHistoryIsSortedByTimeTest()
         {
             var under = Symbol.Create("OXY", SecurityType.Equity, Market.USA);
@@ -139,7 +140,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         /// <param name="tickType">The type of ticks for the historical data.</param>
         /// <returns>A list of <see cref="BaseData"/> containing downloaded historical data of the index.</returns>
         /// <remarks>
-        /// The <paramref name="resolution"/> parameter determines the granularity of the historical data, 
+        /// The <paramref name="resolution"/> parameter determines the granularity of the historical data,
         /// while the <paramref name="period"/> parameter specifies the duration of the historical data to be downloaded.
         /// The <paramref name="tickType"/> parameter specifies the type of ticks to be included in the historical data.
         /// </remarks>

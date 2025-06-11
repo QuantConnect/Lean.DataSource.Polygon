@@ -14,7 +14,6 @@
 */
 
 using NodaTime;
-using RestSharp;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
 using QuantConnect.Lean.Engine.DataFeeds;
@@ -198,15 +197,17 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var end = Time.DateTimeToUnixTimeStampMilliseconds(request.EndTimeUtc.RoundDown(resolutionTimeSpan));
             var historyTimespan = GetHistoryTimespan(request.Resolution);
 
-            var uri = $"v2/aggs/ticker/{ticker}/range/1/{historyTimespan}/{start}/{end}";
-            var restRequest = new RestRequest(uri, Method.GET);
-            restRequest.AddQueryParameter("adjusted", (request.DataNormalizationMode != DataNormalizationMode.Raw).ToString());
+            var resource = $"v2/aggs/ticker/{ticker}/range/1/{historyTimespan}/{start}/{end}";
+            var parameters = new Dictionary<string, string>
+            {
+                ["adjusted"] = (request.DataNormalizationMode != DataNormalizationMode.Raw).ToString()
+            };
 
-            foreach (var bar in RestApiClient.DownloadAndParseData<AggregatesResponse>(restRequest).SelectMany(response => response.Results))
+            foreach (var bar in RestApiClient.DownloadAndParseData<AggregatesResponse>(resource, parameters)
+                                             .SelectMany(response => response.Results))
             {
                 var utcTime = Time.UnixMillisecondTimeStampToDateTime(bar.Timestamp);
                 var time = GetTickTime(request.Symbol, utcTime);
-
                 Interlocked.Increment(ref _dataPointCount);
                 yield return new TradeBar(time, request.Symbol, bar.Open, bar.High, bar.Low, bar.Close,
                     bar.Volume, resolutionTimeSpan);
@@ -249,19 +250,21 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var start = Time.DateTimeToUnixTimeStampNanoseconds(request.StartTimeUtc.RoundDown(resolutionTimeSpan));
             var end = Time.DateTimeToUnixTimeStampNanoseconds(request.EndTimeUtc.RoundDown(resolutionTimeSpan));
             var ticker = _symbolMapper.GetBrokerageSymbol(request.Symbol);
-
             var tickTypeStr = request.TickType == TickType.Trade ? "trades" : "quotes";
-            var uri = $"v3/{tickTypeStr}/{ticker}";
-            var restRequest = new RestRequest(uri, Method.GET);
-            restRequest.AddQueryParameter("timestamp.gte", start.ToString());
-            restRequest.AddQueryParameter("timestamp.lt", end.ToString());
-            restRequest.AddQueryParameter("order", "asc");
 
-            foreach (var tick in RestApiClient.DownloadAndParseData<TResponse>(restRequest).SelectMany(response => response.Results))
+            var resource = $"v3/{tickTypeStr}/{ticker}";
+            var parameters = new Dictionary<string, string>
+            {
+                ["timestamp.gte"] = start.ToString(),
+                ["timestamp.lt"] = end.ToString(),
+                ["order"] = "asc"
+            };
+
+            foreach (var tick in RestApiClient.DownloadAndParseData<TResponse>(resource, parameters)
+                                             .SelectMany(response => response.Results))
             {
                 var utcTime = Time.UnixNanosecondTimeStampToDateTime(tick.Timestamp);
                 var time = GetTickTime(request.Symbol, utcTime);
-
                 yield return tickFactory(time, request.Symbol, tick);
             }
         }
