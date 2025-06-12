@@ -47,6 +47,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         [TestCase("2024-09-16T09:30:59", true, Description = "Market: After Opening")]
         [TestCase("2024-09-16T15:28:59", true, Description = "Market: Before Closing")]
         [TestCase("2024-09-16T16:28:59", false, Description = "Market: Closed")]
+        [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
         public void GetOpenInterestInDifferentTimeExchangeTime(string mockDateTime, bool isShouldReturnData)
         {
             var waitOneDelay = isShouldReturnData ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(5);

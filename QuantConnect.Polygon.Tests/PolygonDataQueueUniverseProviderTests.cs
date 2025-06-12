@@ -53,6 +53,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             .ToArray();
 
         [TestCaseSource(nameof(OptionChainTestCases))]
+        [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
         public void GetsOptionChain(Symbol symbol)
         {
             var date = new DateTime(2014, 10, 7);
@@ -72,7 +73,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
         private class TestablePolygonDataProvider : PolygonDataProvider
         {
-            public ManualTimeProvider TimeProviderInstance = new ManualTimeProvider();
+            public ManualTimeProvider TimeProviderInstance = new ManualTimeProvider(DateTime.UtcNow);
 
             protected override ITimeProvider TimeProvider => TimeProviderInstance;
 
