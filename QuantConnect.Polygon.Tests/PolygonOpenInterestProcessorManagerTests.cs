@@ -14,10 +14,13 @@
  */
 
 using System;
+using System.Linq;
 using NUnit.Framework;
 using System.Threading;
 using QuantConnect.Data;
 using QuantConnect.Tests;
+using QuantConnect.Logging;
+using System.Threading.Tasks;
 using QuantConnect.Data.Market;
 using System.Collections.Generic;
 using QuantConnect.Configuration;
@@ -107,6 +110,120 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             cancellationTokenSource.Dispose();
             processor.Dispose();
             symbolOpenInterest.Clear();
+        }
+
+        [Test]
+        public void GetOpenInterestWithHugeAmountSymbols()
+        {
+            var symbol = Symbol.CreateCanonicalOption(Symbols.AAPL);
+            var resetEvent = new AutoResetEvent(false);
+            var cancellationTokenSource = new CancellationTokenSource();
+
+            using var polygon = new PolygonDataProvider(ApiKey);
+
+            var optionChain = polygon.LookupSymbols(symbol, true).ToList();
+
+            var expectedAmountOptinContractWithOpenInterest = optionChain.Count;
+
+            var symbolOpenInterest = new ConcurrentDictionary<Symbol, decimal>();
+            Action<BaseData> callback = (baseData) =>
+            {
+                if (baseData == null)
+                {
+                    return;
+                }
+
+                lock (_locker)
+                {
+                    symbolOpenInterest[baseData.Symbol] = baseData.Value;
+
+                    if (symbolOpenInterest.Count == expectedAmountOptinContractWithOpenInterest)
+                    {
+                        resetEvent.Set();
+                    }
+                }
+            };
+
+            foreach (var optionContract in optionChain)
+            {
+                var config = GetSubscriptionDataConfig<OpenInterest>(optionContract, Resolution.Second);
+                _subscriptionManager.Subscribe(config);
+                StartDataFeed(
+                    optionContract,
+                    Subscribe(dataAggregator, config, (sender, args) => { }),
+                    cancellationTokenSource.Token,
+                    cancellationTokenDelayMilliseconds: (int)TimeSpan.FromSeconds(1).TotalMilliseconds,
+                    callback: callback
+                );
+            }
+
+            var mockDateTimeAfterOpenExchange = DateTime.Parse("2024-09-16T09:30:59").ConvertTo(TimeZones.NewYork, TimeZones.Utc);
+            _timeProviderInstance.SetCurrentTimeUtc(mockDateTimeAfterOpenExchange);
+            var processor = new PolygonOpenInterestProcessorManager(_timeProviderInstance, _restApiClient, symbolMapper, _subscriptionManager, dataAggregator, GetTickTime);
+
+            processor.ScheduleNextRun();
+
+            resetEvent.WaitOne(TimeSpan.FromSeconds(20), cancellationTokenSource.Token);
+
+            cancellationTokenSource.Cancel();
+            cancellationTokenSource.Dispose();
+            processor.Dispose();
+
+            Assert.AreEqual(expectedAmountOptinContractWithOpenInterest, symbolOpenInterest.Count);
+            symbolOpenInterest.Clear();
+        }
+
+        private Task _processingTask;
+        private readonly ConcurrentDictionary<Symbol, IEnumerator<BaseData>> _activeEnumerators = new();
+
+        private void StartDataFeed(
+            Symbol symbol,
+            IEnumerator<BaseData> enumerator,
+            CancellationToken cancellationToken,
+            int cancellationTokenDelayMilliseconds = 100,
+            Action<BaseData> callback = null,
+            Action throwExceptionCallback = null)
+        {
+            _activeEnumerators[symbol] = enumerator;
+
+            if (_processingTask != null)
+            {
+                return;
+            }
+
+            _processingTask = Task.Factory.StartNew(() =>
+            {
+                try
+                {
+                    while (!cancellationToken.IsCancellationRequested)
+                    {
+                        foreach (var (_, enumerator) in _activeEnumerators)
+                        {
+                            if (enumerator.MoveNext())
+                            {
+                                if (enumerator.Current is BaseData tick && tick != null)
+                                {
+                                    callback?.Invoke(tick);
+                                }
+                            }
+                        }
+
+                        cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(cancellationTokenDelayMilliseconds));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug($"{nameof(PolygonOpenInterestProcessorManagerTests)}.{nameof(StartDataFeed)}.Exception: {ex.Message}");
+                    throw;
+                }
+            }, cancellationToken).ContinueWith(task =>
+            {
+                if (throwExceptionCallback != null)
+                {
+                    throwExceptionCallback();
+                }
+                Log.Debug("The throwExceptionCallback is null.");
+            }, TaskContinuationOptions.OnlyOnFaulted);
         }
 
         protected override List<SubscriptionDataConfig> GetConfigs(Resolution resolution = Resolution.Second)
