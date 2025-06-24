@@ -201,24 +201,28 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             });
         }
 
-        protected Task ProcessFeed(
-           IEnumerator<BaseData> enumerator,
-           CancellationToken cancellationToken,
-           int cancellationTokenDelayMilliseconds = 100,
-           Action<BaseData> callback = null,
-           Action throwExceptionCallback = null)
+        protected static Task StartEnumeratorProcessing(
+            Func<IEnumerable<IEnumerator<BaseData>>> enumeratorProvider,
+            Action<BaseData> callback,
+            int cancellationTokenDelayMilliseconds = 100,
+            Action throwExceptionCallback = null,
+            CancellationToken cancellationToken = default)
         {
             return Task.Factory.StartNew(() =>
             {
                 try
                 {
-                    while (enumerator.MoveNext() && !cancellationToken.IsCancellationRequested)
+                    while (!cancellationToken.IsCancellationRequested)
                     {
-                        BaseData tick = enumerator.Current;
-
-                        if (tick != null)
+                        foreach (var enumerator in enumeratorProvider())
                         {
-                            callback?.Invoke(tick);
+                            if (enumerator.MoveNext())
+                            {
+                                if (enumerator.Current is BaseData tick && tick != null)
+                                {
+                                    callback?.Invoke(tick);
+                                }
+                            }
                         }
 
                         cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(cancellationTokenDelayMilliseconds));
@@ -226,16 +230,13 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                 }
                 catch (Exception ex)
                 {
-                    Log.Debug($"{nameof(PolygonOpenInterestProcessorManagerTests)}.{nameof(ProcessFeed)}.Exception: {ex.Message}");
+                    Log.Debug($"Enumerator Processing Exception: {ex.Message}");
                     throw;
                 }
             }, cancellationToken).ContinueWith(task =>
             {
-                if (throwExceptionCallback != null)
-                {
-                    throwExceptionCallback();
-                }
-                Log.Debug("The throwExceptionCallback is null.");
+                throwExceptionCallback?.Invoke();
+                Log.Debug("Enumerator processing encountered an exception.");
             }, TaskContinuationOptions.OnlyOnFaulted);
         }
 

@@ -138,31 +138,27 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
         private void ProcessOpenInterest(IReadOnlyCollection<Symbol> subscribedSymbols)
         {
-            var subscribedBrokerageSymbols = subscribedSymbols.Select(x => _symbolMapper.GetBrokerageSymbol(x));
-
-            var resource = "v3/snapshot";
-            var parameters = new Dictionary<string, string>
+            foreach (var subscribedBrokerageSymbols in subscribedSymbols.Select(_symbolMapper.GetBrokerageSymbol).Chunk(200))
             {
-                ["ticker.any_of"] = string.Join(',', subscribedBrokerageSymbols),
-                ["limit"] = "250"
-            };
-
-            var nowUtc = DateTime.UtcNow;
-            foreach (var universalSnapshot in _polygonRestApiClient.DownloadAndParseData<UniversalSnapshotResponse>(resource, parameters)
-                                                                   .SelectMany(response => response.Results))
-            {
-                if (universalSnapshot.OpenInterest == 0)
+                var resource = "v3/snapshot";
+                var parameters = new Dictionary<string, string>
                 {
-                    continue;
-                }
+                    ["ticker.any_of"] = string.Join(',', subscribedBrokerageSymbols),
+                    ["limit"] = "250"
+                };
 
-                var leanSymbol = _symbolMapper.GetLeanSymbol(universalSnapshot.Ticker!);
-                var time = _getTickTime(leanSymbol, nowUtc);
-
-                var openInterestTick = new Tick(time, leanSymbol, universalSnapshot.OpenInterest);
-                lock (_dataAggregator)
+                var nowUtc = DateTime.UtcNow;
+                foreach (var universalSnapshot in _polygonRestApiClient.DownloadAndParseData<UniversalSnapshotResponse>(resource, parameters)
+                                                                       .SelectMany(response => response.Results))
                 {
-                    _dataAggregator.Update(openInterestTick);
+                    var leanSymbol = _symbolMapper.GetLeanSymbol(universalSnapshot.Ticker!);
+                    var time = _getTickTime(leanSymbol, nowUtc);
+
+                    var openInterestTick = new Tick(time, leanSymbol, universalSnapshot.OpenInterest);
+                    lock (_dataAggregator)
+                    {
+                        _dataAggregator.Update(openInterestTick);
+                    }
                 }
             }
         }

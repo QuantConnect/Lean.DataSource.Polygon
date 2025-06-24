@@ -14,6 +14,7 @@
  */
 
 using System;
+using System.Linq;
 using NUnit.Framework;
 using System.Threading;
 using QuantConnect.Data;
@@ -42,18 +43,22 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             UnsubscribeImpl = (symbols, _) => { return true; }
         };
 
-        private object _locker = new();
+        private readonly Lock _locker = new();
 
-        [TestCase("2024-09-16T09:30:59", true, Description = "Market: After Opening")]
-        [TestCase("2024-09-16T15:28:59", true, Description = "Market: Before Closing")]
-        [TestCase("2024-09-16T16:28:59", false, Description = "Market: Closed")]
-        [Explicit("This tests require a Polygon.io api key, requires internet and are long.")]
-        public void GetOpenInterestInDifferentTimeExchangeTime(string mockDateTime, bool isShouldReturnData)
+        [Test]
+        [Explicit("This tests require a Polygon.io api key")]
+        public void GetOpenInterestWithHugeAmountSymbols()
         {
-            var waitOneDelay = isShouldReturnData ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(5);
+            var symbol = Symbol.CreateCanonicalOption(Symbols.AAPL);
             var resetEvent = new AutoResetEvent(false);
             var cancellationTokenSource = new CancellationTokenSource();
-            var optionContractsConfigs = GetConfigs();
+            var _activeEnumerators = new ConcurrentDictionary<Symbol, IEnumerator<BaseData>>();
+
+            using var polygon = new PolygonDataProvider(ApiKey);
+
+            var optionChain = polygon.LookupSymbols(symbol, true).ToList();
+
+            var expectedAmountOptinContractWithOpenInterest = optionChain.Count;
 
             var symbolOpenInterest = new ConcurrentDictionary<Symbol, decimal>();
             Action<BaseData> callback = (baseData) =>
@@ -67,71 +72,39 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                 {
                     symbolOpenInterest[baseData.Symbol] = baseData.Value;
 
-                    if (symbolOpenInterest.Count > 5)
+                    if (symbolOpenInterest.Count == expectedAmountOptinContractWithOpenInterest)
                     {
                         resetEvent.Set();
                     }
                 }
             };
 
-            foreach (var config in optionContractsConfigs)
+            foreach (var optionContract in optionChain)
             {
+                var config = GetSubscriptionDataConfig<OpenInterest>(optionContract, Resolution.Second);
                 _subscriptionManager.Subscribe(config);
-                ProcessFeed(
-                    Subscribe(dataAggregator, config, (sender, args) => { }),
-                    cancellationTokenSource.Token,
-                    callback: callback
-                    );
+                _activeEnumerators[optionContract] = Subscribe(dataAggregator, config, (sender, args) => { });
             }
 
-            var mockDateTimeAfterOpenExchange = DateTime.Parse(mockDateTime).ConvertTo(TimeZones.NewYork, TimeZones.Utc);
+            StartEnumeratorProcessing(() => _activeEnumerators.Values, callback, (int)TimeSpan.FromSeconds(1).TotalMilliseconds, cancellationToken: cancellationTokenSource.Token);
+
+            var mockDateTimeAfterOpenExchange = DateTime.Parse("2024-09-16T09:30:59").ConvertTo(TimeZones.NewYork, TimeZones.Utc);
             _timeProviderInstance.SetCurrentTimeUtc(mockDateTimeAfterOpenExchange);
             var processor = new PolygonOpenInterestProcessorManager(_timeProviderInstance, _restApiClient, symbolMapper, _subscriptionManager, dataAggregator, GetTickTime);
-            processor.ScheduleNextRun();
-            resetEvent.WaitOne(waitOneDelay, cancellationTokenSource.Token);
 
-            if (isShouldReturnData)
-            {
-                Assert.Greater(symbolOpenInterest.Count, 0);
-                foreach (var (symbol, openInterest) in symbolOpenInterest)
-                {
-                    Assert.Greater(openInterest, 0);
-                }
-            }
-            else
-            {
-                Assert.Zero(symbolOpenInterest.Count);
-            }
+            processor.ScheduleNextRun();
+
+            resetEvent.WaitOne(TimeSpan.FromSeconds(20), cancellationTokenSource.Token);
 
             cancellationTokenSource.Cancel();
             cancellationTokenSource.Dispose();
             processor.Dispose();
+
+            Assert.AreEqual(expectedAmountOptinContractWithOpenInterest, symbolOpenInterest.Count);
             symbolOpenInterest.Clear();
         }
 
-        protected override List<SubscriptionDataConfig> GetConfigs(Resolution resolution = Resolution.Second)
-        {
-            var configs = new List<SubscriptionDataConfig>();
-
-            var expiryContractDate = new DateTime(2024, 09, 20);
-            var strikesAAPL = new decimal[] { 100m, 105m, 110m, 115m, 120m, 125m, 130m, 135m, 140m, 145m };
-
-            foreach (var strike in strikesAAPL)
-            {
-                var optionContract = Symbol.CreateOption(Symbols.AAPL, Market.USA, OptionStyle.American, OptionRight.Call, strike, expiryContractDate);
-                configs.Add(GetSubscriptionDataConfig<OpenInterest>(optionContract, resolution));
-            }
-
-            var strikesSPY = new decimal[] { 300m, 320m, 360m, 365m, 380m, 400m, 415m, 420m, 430m, 435m };
-
-            foreach (var strike in strikesSPY)
-            {
-                var optionContract = Symbol.CreateOption(Symbols.SPY, Market.USA, OptionStyle.American, OptionRight.Call, strike, expiryContractDate);
-                configs.Add(GetSubscriptionDataConfig<OpenInterest>(optionContract, resolution));
-            }
-
-            return configs;
-        }
+        protected override List<SubscriptionDataConfig> GetConfigs(Resolution resolution = Resolution.Second) => throw new NotImplementedException();
 
         private DateTime GetTickTime(Symbol symbol, DateTime utcTime) => utcTime.ConvertFromUtc(TimeZones.NewYork);
 
