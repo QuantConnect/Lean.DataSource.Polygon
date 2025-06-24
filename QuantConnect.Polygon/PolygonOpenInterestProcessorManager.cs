@@ -1,4 +1,4 @@
-/*
+﻿/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -151,11 +151,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 foreach (var universalSnapshot in _polygonRestApiClient.DownloadAndParseData<UniversalSnapshotResponse>(resource, parameters)
                                                                        .SelectMany(response => response.Results))
                 {
-                    if (universalSnapshot.OpenInterest == 0)
-                    {
-                        continue;
-                    }
-
                     var leanSymbol = _symbolMapper.GetLeanSymbol(universalSnapshot.Ticker!);
                     var time = _getTickTime(leanSymbol, nowUtc);
 
