@@ -135,6 +135,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
             void ProcessMessage(object? _, WebSocketMessage wsMessage)
             {
                 var jsonMessage = JArray.Parse(((TextMessage)wsMessage.Data).Message)[0];
+                if (Log.DebuggingEnabled)
+                {
+                    Log.Debug($"{nameof(TrySubscribe)}.{nameof(ProcessMessage)}.JSON: " + jsonMessage);
+                }
                 var eventType = jsonMessage["ev"]?.ToString() ?? string.Empty;
                 if (eventType != "status")
                 {
@@ -221,11 +225,16 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
         private void Subscribe(string ticker, bool subscribe)
         {
-            Send(JsonConvert.SerializeObject(new
+            var msg = JsonConvert.SerializeObject(new
             {
                 action = subscribe ? "subscribe" : "unsubscribe",
                 @params = ticker
-            }));
+            });
+            if (Log.DebuggingEnabled)
+            {
+                Log.Trace($"{nameof(PolygonWebSocketClientWrapper)}.{nameof(Subscribe)}.JSON: " + msg);
+            }
+            Send(msg);
         }
 
         /// <summary>
@@ -299,7 +308,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private void OnMessage(object? sender, WebSocketMessage webSocketMessage)
         {
             var e = (TextMessage)webSocketMessage.Data;
-
+            if (Log.DebuggingEnabled)
+            {
+                Log.Debug($"{nameof(PolygonWebSocketClientWrapper)}.{nameof(OnMessage)}.JSON: {e.Message}");
+            }
             // Find the authentication message
             var authenticationMessage = JArray.Parse(e.Message)
                 .FirstOrDefault(message => message["ev"].ToString() == "status" && message["status"].ToString() == "auth_success");
