@@ -263,6 +263,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
             if (tickType == TickType.Trade)
             {
                 yield return "T";
+                if (BaseUrl.Contains("business", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    yield return "FMV";
+                }
                 // Only use aggregates if resolution is not tick
                 if (resolution > Resolution.Tick)
                 {
