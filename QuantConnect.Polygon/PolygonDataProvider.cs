@@ -287,11 +287,17 @@ namespace QuantConnect.Lean.DataSource.Polygon
                         break;
 
                     case "T":
-                        ProcessTrade(parsedMessage.ToObject<TradeMessage>());
+                        var t = parsedMessage.ToObject<TradeMessage>()!;
+                        ProcessTrade(t.Symbol, Time.UnixMillisecondTimeStampToDateTime(t.Timestamp), t.Price, t.Size, GetExchangeCode(t.ExchangeID));
                         break;
 
                     case "Q":
                         ProcessQuote(parsedMessage.ToObject<QuoteMessage>());
+                        break;
+
+                    case "FMV":
+                        var fmv = parsedMessage.ToObject<FairMarketValueMessage>()!;
+                        ProcessTrade(fmv.Symbol, Time.UnixNanosecondTimeStampToDateTime(fmv.Timestamp), fmv.FairMarketValue);
                         break;
 
                     default:
@@ -319,12 +325,17 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <summary>
         /// Processes and incoming trade tick
         /// </summary>
-        private void ProcessTrade(TradeMessage trade)
+        /// <param name="brokerageSymbol">The symbol of the traded security as provided by the brokerage.</param>
+        /// <param name="timestamp">The timestamp of the trade tick as reported by the brokerage.</param>
+        /// <param name="price">The trade price.</param>
+        /// <param name="size">The traded quantity.</param>
+        /// <param name="exchange">The exchange identifier where the trade occurred.</param>
+        private void ProcessTrade(string brokerageSymbol, DateTime timestamp, decimal price, decimal size = 0m, string exchange = "")
         {
-            var symbol = _symbolMapper.GetLeanSymbol(trade.Symbol);
-            var time = GetTickTime(symbol, trade.Timestamp);
+            var leanSymbol = _symbolMapper.GetLeanSymbol(brokerageSymbol);
+            var time = GetTickTime(leanSymbol, timestamp);
             // TODO: Map trade.Conditions to Lean sale conditions
-            var tick = new Tick(time, symbol, string.Empty, GetExchangeCode(trade.ExchangeID), trade.Size, trade.Price);
+            var tick = new Tick(time, leanSymbol, string.Empty, exchange, size, price);
             lock (_dataAggregator)
             {
                 _dataAggregator.Update(tick);

@@ -23,12 +23,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
     public class AggregateMessage : BaseMessage
     {
         /// <summary>
-        /// The symbol these aggregates are for
-        /// </summary>
-        [JsonProperty("sym")]
-        public string Symbol { get; set; }
-
-        /// <summary>
         /// The tick volume
         /// </summary>
         [JsonProperty("v")]

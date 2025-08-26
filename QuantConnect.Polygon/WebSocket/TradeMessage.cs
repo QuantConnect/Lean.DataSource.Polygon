@@ -23,12 +23,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
     public class TradeMessage : BaseMessage
     {
         /// <summary>
-        /// The symbol these aggregates are for
-        /// </summary>
-        [JsonProperty("sym")]
-        public string Symbol { get; set; }
-
-        /// <summary>
         /// The exchange ID
         /// </summary>
         [JsonProperty("x")]
@@ -51,11 +45,5 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         [JsonProperty("c")]
         public long[] Conditions { get; set; }
-
-        /// <summary>
-        /// The trade timestamp in UNIX milliseconds
-        /// </summary>
-        [JsonProperty("t")]
-        public long Timestamp { get; set; }
     }
 }

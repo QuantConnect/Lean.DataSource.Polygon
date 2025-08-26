@@ -15,29 +15,14 @@
 
 using Newtonsoft.Json;
 
-namespace QuantConnect.Lean.DataSource.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon;
+
+public class FairMarketValueMessage : BaseMessage
 {
     /// <summary>
-    /// Base Polygon.io WebSocket response message properties
+    ///  It is our proprietary algorithm to generate a real-time, accurate, fair market value of a tradable security. 
     /// </summary>
-    public class BaseMessage
-    {
-        /// <summary>
-        /// The type of event this message represents (e.g. "A"/"AM" for second/minute aggregates)
-        /// </summary>
-        [JsonProperty("ev")]
-        public string EventType { get; set; }
-
-        /// <summary>
-        /// The symbol these aggregates are for
-        /// </summary>
-        [JsonProperty("sym")]
-        public string Symbol { get; set; }
-
-        /// <summary>
-        /// The message timestamp in milliseconds since Unix Epoch
-        /// </summary>
-        [JsonProperty("t")]
-        public long Timestamp { get; set; }
-    }
+    /// <remarks>Fair market value is only available on <c>Business plans</c>.</remarks>
+    [JsonProperty("fmv")]
+    public decimal FairMarketValue { get; set; }
 }
