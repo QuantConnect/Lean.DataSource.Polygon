@@ -240,7 +240,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             }, TaskContinuationOptions.OnlyOnFaulted);
         }
 
-        protected SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)
+        public static SubscriptionDataConfig GetSubscriptionDataConfig<T>(Symbol symbol, Resolution resolution)
         {
             return new SubscriptionDataConfig(
                 typeof(T),
