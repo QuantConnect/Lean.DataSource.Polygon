@@ -24,6 +24,7 @@ using QuantConnect.Logging;
 using QuantConnect.Data.Market;
 using QuantConnect.Configuration;
 using System.Collections.Generic;
+using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 
 namespace QuantConnect.Lean.DataSource.Polygon.Tests
@@ -40,11 +41,11 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                 Symbols.MSFT,
                 Symbol.CreateOption(Symbols.AAPL, Symbols.AAPL.ID.Market, SecurityType.Option.DefaultOptionStyle(), OptionRight.Call, 227.5m, new(2025, 08, 29)),
                 Symbol.CreateOption(Symbols.MSFT, Symbols.MSFT.ID.Market, SecurityType.Option.DefaultOptionStyle(), OptionRight.Call, 502.5m, new(2025, 08, 29)),
-                Symbols.SPX,
-                Symbol.CreateOption(Symbols.SPX, Symbols.SPX.ID.Market, SecurityType.IndexOption.DefaultOptionStyle(), OptionRight.Call, 6475m, new(2025, 08, 27))
+                //Symbols.SPX,
+                Symbol.CreateOption(Symbols.SPX, "SPXW", Symbols.SPX.ID.Market, SecurityType.IndexOption.DefaultOptionStyle(), OptionRight.Call, 6485m, new(2025, 08, 29))
             };
 
-            return [.. symbols.Select(symbol => GetSubscriptionDataConfigs(symbol, resolution))];
+            return [.. symbols.SelectMany(symbol => GetSubscriptionDataConfigs(symbol, resolution))];
         }
 
         [TestCase(Resolution.Tick, 10)]
@@ -53,7 +54,9 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         public void StreamDataOnDifferentSecuritiesTypes(Resolution resolution, int expectedReceiveAmountData)
         {
             Config.Set("polygon-ws-url", "wss://business.polygon.io");
-            using var polygon = new PolygonDataProvider(Config.Get("polygon-api-key"));
+            var mockDateTimeAfterOpenExchange = DateTime.UtcNow.Date.AddHours(9).AddMinutes(30).AddSeconds(59).ConvertToUtc(TimeZones.NewYork);
+            TestablePolygonDataProvider.TimeProviderInstance = new ManualTimeProvider(mockDateTimeAfterOpenExchange);
+            using var polygon = new TestablePolygonDataProvider(Config.Get("polygon-api-key"));
 
             var configs = GetConfigs(resolution);
 
@@ -74,6 +77,12 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                         lock (receivedData)
                         {
                             receivedData[bd.Symbol].Add(bd);
+
+                            if ((bd is Tick t && t.TickType == TickType.OpenInterest) || bd is OpenInterest)
+                            {
+                                // Prevent from repeating request
+                                TestablePolygonDataProvider.TimeProviderInstance.SetCurrentTimeUtc(DateTime.UtcNow);
+                            }
 
                             if (!receivedAllData && receivedData.Values.All(x => x.Count >= expectedReceiveAmountData))
                             {
@@ -100,16 +109,42 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
             Assert.IsTrue(receivedData.Values.All(d => d.Count >= expectedReceiveAmountData));
 
+            foreach (var (symbol, baseData) in receivedData.Where(x => x.Key.SecurityType.IsOption()))
+            {
+                var openInterestDetected = default(bool);
+                foreach (var data in baseData)
+                {
+                    if (data is Tick t && t.TickType == TickType.OpenInterest)
+                    {
+                        openInterestDetected = true;
+                        break;
+                    }
+                }
+                Assert.IsTrue(openInterestDetected);
+            }
+
             foreach (var (symbol, baseData) in receivedData)
             {
                 foreach (var data in baseData)
                 {
-                    Assert.IsInstanceOf(resolution == Resolution.Tick ? typeof(Tick) : typeof(TradeBar), data);
                     switch (data)
                     {
+                        case OpenInterest oi:
+                            Assert.Greater(oi.Value, 0m);
+                            break;
                         case Tick t:
-                            Assert.Greater(t.LastPrice, 0m);
-                            Assert.AreEqual(t.Quantity, 0m);
+                            switch (t.TickType)
+                            {
+                                case TickType.OpenInterest:
+                                    Assert.Greater(t.Value, 0m);
+                                    break;
+                                case TickType.Trade:
+                                    Assert.Greater(t.LastPrice, 0m);
+                                    Assert.AreEqual(t.Quantity, 0m);
+                                    break;
+                                default:
+                                    throw new NotSupportedException();
+                            }
                             break;
                         case TradeBar tb:
                             Assert.Greater(tb.Open, 0m);
@@ -125,11 +160,29 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             }
         }
 
-        private static SubscriptionDataConfig GetSubscriptionDataConfigs(Symbol symbol, Resolution resolution)
+        private static List<SubscriptionDataConfig> GetSubscriptionDataConfigs(Symbol symbol, Resolution resolution)
         {
-            return resolution == Resolution.Tick
-                ? new SubscriptionDataConfig(PolygonDataProviderBaseTests.GetSubscriptionDataConfig<Tick>(symbol, resolution), tickType: TickType.Trade)
-                : PolygonDataProviderBaseTests.GetSubscriptionDataConfig<TradeBar>(symbol, resolution);
+            var subs = new List<SubscriptionDataConfig>();
+            if (resolution == Resolution.Tick)
+            {
+                subs.Add(new SubscriptionDataConfig(PolygonDataProviderBaseTests.GetSubscriptionDataConfig<Tick>(symbol, resolution), tickType: TickType.Trade));
+
+                if (symbol.SecurityType.IsOption())
+                {
+                    subs.Add(new SubscriptionDataConfig(PolygonDataProviderBaseTests.GetSubscriptionDataConfig<Tick>(symbol, resolution), tickType: TickType.OpenInterest));
+                }
+
+                return subs;
+            }
+
+            subs.Add(PolygonDataProviderBaseTests.GetSubscriptionDataConfig<TradeBar>(symbol, resolution));
+
+            if (symbol.SecurityType.IsOption())
+            {
+                subs.Add(PolygonDataProviderBaseTests.GetSubscriptionDataConfig<OpenInterest>(symbol, resolution));
+            }
+
+            return subs;
         }
     }
 }
