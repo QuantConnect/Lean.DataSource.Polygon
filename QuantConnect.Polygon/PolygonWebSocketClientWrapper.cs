@@ -1,4 +1,4 @@
-/*
+﻿/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -257,6 +257,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             if (securityType == SecurityType.Index)
             {
+                if (IsBusinessUrl)
+                {
+                    yield return "V";
+                    yield break;
+                }
+
                 if (tickType != TickType.Trade || resolution == Resolution.Tick)
                 {
                     yield break;

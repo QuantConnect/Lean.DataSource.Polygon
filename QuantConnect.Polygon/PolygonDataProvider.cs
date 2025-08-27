@@ -306,6 +306,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
                         ProcessTrade(fmv.Symbol, Time.UnixNanosecondTimeStampToDateTime(fmv.Timestamp), fmv.FairMarketValue);
                         break;
 
+                    case "V":
+                        var v = parsedMessage.ToObject<ValueIndexMessage>()!;
+                        ProcessTrade(v.Symbol, Time.UnixMillisecondTimeStampToDateTime(v.Timestamp), v.Value);
+                        break;
+
                     default:
                         break;
                 }
