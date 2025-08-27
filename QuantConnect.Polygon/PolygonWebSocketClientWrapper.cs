@@ -143,7 +143,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 var jsonMessage = JArray.Parse(((TextMessage)wsMessage.Data).Message)[0];
                 if (Log.DebuggingEnabled)
                 {
-                    Log.Debug($"{nameof(TrySubscribe)}.{nameof(ProcessMessage)}.JSON: " + jsonMessage);
+                    Log.Debug($"{nameof(TrySubscribe)}.{nameof(ProcessMessage)}.JSON: " + jsonMessage.ToString(Formatting.None));
                 }
                 var eventType = jsonMessage["ev"]?.ToString() ?? string.Empty;
                 if (eventType != "status")
