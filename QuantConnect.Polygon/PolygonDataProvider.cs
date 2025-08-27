@@ -289,6 +289,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 switch (eventType)
                 {
                     case "A":
+                    case "AM": // Aggregates (Per Minute)
                         ProcessAggregate(parsedMessage.ToObject<AggregateMessage>());
                         break;
 

@@ -151,7 +151,16 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                             Assert.Greater(tb.High, 0m);
                             Assert.Greater(tb.Low, 0m);
                             Assert.Greater(tb.Close, 0m);
-                            Assert.AreEqual(tb.Volume, 0m);
+                            if (resolution >= Resolution.Minute)
+                            {
+                                // For aggregated data (minute or higher), volume should always be present
+                                Assert.Greater(tb.Volume, 0m);
+                            }
+                            else
+                            {
+                                // For tick/fmv data, volume is not reported and should remain zero
+                                Assert.AreEqual(tb.Volume, 0m);
+                            }
                             break;
                         default:
                             throw new NotSupportedException();

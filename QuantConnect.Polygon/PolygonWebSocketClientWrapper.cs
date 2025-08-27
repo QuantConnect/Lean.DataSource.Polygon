@@ -117,7 +117,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 var subscriptionTicker = MakeSubscriptionTicker(prefix, ticker);
                 Subscribe(subscriptionTicker, true);
                 AddSubscription(subscriptionTicker);
-                usingAggregates = prefix == "A";
+                usingAggregates = prefix is "A" or "AM";
 
                 Log.Trace($"PolygonWebSocketClientWrapper.Subscribe(): Subscribed to {subscriptionTicker}");
             }
@@ -193,7 +193,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 // Subscription was successful
                 AddSubscription(subscriptionTicker);
                 _prefixes[(config.SecurityType, config.TickType)] = protentialPrefix;
-                usingAggregates = protentialPrefix == "A";
+                usingAggregates = protentialPrefix is "A" or "AM";
                 subscribed = true;
                 break;
             }
@@ -252,6 +252,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
             if (_prefixes.TryGetValue((securityType, tickType), out var prefix))
             {
                 yield return prefix;
+                yield break;
+            }
+
+            if (tickType == TickType.Trade && resolution >= Resolution.Minute)
+            {
+                yield return "AM";
                 yield break;
             }
 

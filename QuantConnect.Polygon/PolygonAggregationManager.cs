@@ -46,7 +46,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 // Starter plan only supports streaming aggregated data.
                 // We use the TradeBarConsolidator for TradeBar data given that we are aggregating trade bars
                 // (that are already aggregated by Polygon) instead of ticks.
-                return new TradeBarConsolidator(config.Resolution.ToTimeSpan());
+                return config.TickType switch
+                {
+                    TickType.OpenInterest => new OpenInterestConsolidator(config.Resolution.ToTimeSpan()),
+                    TickType.Trade => new TradeBarConsolidator(config.Resolution.ToTimeSpan())
+                };
             }
 
             // Use base's method, since we can fetch ticks with Developer and Advanced plans
