@@ -215,6 +215,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 return null;
             }
 
+            // For business endpoints, only trade tick data is supported.
+            if (PolygonWebSocketClientWrapper.IsBusinessUrl && dataConfig.TickType != TickType.Trade)
+            {
+                return null;
+            }
+
             try
             {
                 _subscriptionManager.Subscribe(dataConfig);

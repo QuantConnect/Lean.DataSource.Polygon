@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -30,6 +30,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
     public class PolygonWebSocketClientWrapper : WebSocketClientWrapper
     {
         private static string BaseUrl = Config.Get("polygon-ws-url", "wss://socket.polygon.io");
+
+        /// <summary>
+        /// Indicates whether the <see cref="BaseUrl"/> targets a business-related endpoint,
+        /// determined by checking if it contains the keyword "business" (case-insensitive).
+        /// </summary>
+        public static bool IsBusinessUrl => BaseUrl.Contains("business", StringComparison.InvariantCultureIgnoreCase);
 
         private readonly string _apiKey;
         private readonly ISymbolMapper _symbolMapper;
@@ -249,12 +255,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 yield break;
             }
 
-            if (BaseUrl.Contains("business", StringComparison.InvariantCultureIgnoreCase))
-            {
-                yield return "FMV";
-                yield break;
-            }
-
             if (securityType == SecurityType.Index)
             {
                 if (tickType != TickType.Trade || resolution == Resolution.Tick)
@@ -268,6 +268,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             if (tickType == TickType.Trade)
             {
+                if (IsBusinessUrl)
+                {
+                    yield return "FMV";
+                    yield break;
+                }
+
                 yield return "T";
                 // Only use aggregates if resolution is not tick
                 if (resolution > Resolution.Tick)
