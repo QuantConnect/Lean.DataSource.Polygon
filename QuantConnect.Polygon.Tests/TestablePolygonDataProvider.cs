@@ -32,8 +32,8 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         {
         }
 
-        public TestablePolygonDataProvider(string apiKey, bool streamingEnabled = true)
-            : base(apiKey, streamingEnabled)
+        public TestablePolygonDataProvider(string apiKey, string licenseType, bool streamingEnabled = true)
+            : base(apiKey, streamingEnabled, licenseType)
         {
         }
     }

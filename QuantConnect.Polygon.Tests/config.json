@@ -7,7 +7,7 @@
   "job-organization-id": "",
 
   "polygon-api-key": "",
-  "polygon-subscription-plan": "Advanced",
+  "polygon-license-type": "Individual",
   "polygon-api-url": "https://api.polygon.io",
   "polygon-ws-url": "wss://socket.polygon.io",
   // For launchpad:

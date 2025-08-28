@@ -89,9 +89,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
         /// <summary>
         /// Creates and initializes a new instance of the <see cref="PolygonDataProvider"/> class
+        /// using configuration values for the API key, maximum subscriptions per WebSocket, 
+        /// and license type.
         /// </summary>
         public PolygonDataProvider()
-            : this(Config.Get("polygon-api-key"), Config.GetInt("polygon-max-subscriptions-per-websocket", -1))
+            : this(Config.Get("polygon-api-key"), Config.GetInt("polygon-max-subscriptions-per-websocket", -1), licenseTypeFromConfig: Config.Get("polygon-license-type"))
         {
         }
 
@@ -103,8 +105,9 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// Whether this handle will be used for streaming data.
         /// If false, the handler is supposed to be used as a history provider only.
         /// </param>
-        public PolygonDataProvider(string apiKey, bool streamingEnabled = true)
-            : this(apiKey, Config.GetInt("polygon-max-subscriptions-per-websocket", -1), streamingEnabled)
+        /// <param name="licenseTypeFromConfig">The license type string from configuration (optional).</param>
+        public PolygonDataProvider(string apiKey, bool streamingEnabled = true, string licenseTypeFromConfig = "")
+            : this(apiKey, Config.GetInt("polygon-max-subscriptions-per-websocket", -1), streamingEnabled, licenseTypeFromConfig)
         {
         }
 
@@ -117,7 +120,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// Whether this handle will be used for streaming data.
         /// If false, the handler is supposed to be used as a history provider only.
         /// </param>
-        public PolygonDataProvider(string apiKey, int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
+        /// <param name="licenseTypeFromConfig">The license type string from configuration (optional).</param>
+        public PolygonDataProvider(string apiKey, int maxSubscriptionsPerWebSocket, bool streamingEnabled = true, string licenseTypeFromConfig = "")
         {
             if (string.IsNullOrWhiteSpace(apiKey))
             {
@@ -126,13 +130,25 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 return;
             }
 
-            Initialize(apiKey, maxSubscriptionsPerWebSocket, streamingEnabled);
+            Initialize(apiKey, maxSubscriptionsPerWebSocket, licenseTypeFromConfig, streamingEnabled);
         }
 
         /// <summary>
-        /// Initializes the data queue handler and validates the product subscription
+        /// Initializes the <see cref="PolygonDataProvider"/> instance with the specified API key,
+        /// maximum subscriptions per WebSocket, license type, and streaming behavior.
         /// </summary>
-        private void Initialize(string apiKey, int maxSubscriptionsPerWebSocket, bool streamingEnabled = true)
+        /// <param name="apiKey">The Polygon.io API key used for authentication.</param>
+        /// <param name="maxSubscriptionsPerWebSocket">
+        /// The maximum number of subscriptions allowed per WebSocket connection.
+        /// </param>
+        /// <param name="licenseTypeFromConfig">
+        /// The license type string retrieved from configuration (e.g., "Individual" or "Business").
+        /// </param>
+        /// <param name="streamingEnabled">
+        /// Determines whether this instance is used for streaming data. 
+        /// If <c>false</c>, the provider is expected to be used for historical data only. Defaults to <c>true</c>.
+        /// </param>
+        private void Initialize(string apiKey, int maxSubscriptionsPerWebSocket, string licenseTypeFromConfig, bool streamingEnabled = true)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
             {
@@ -149,6 +165,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             // Initialize the exchange mappings
             _exchangeMappings = FetchExchangeMappings();
+            var licenseType = ParseLicenseType(licenseTypeFromConfig);
 
             // Initialize the subscription manager if this instance is going to be used as a data queue handler
             if (streamingEnabled)
@@ -156,7 +173,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 _subscriptionManager = new PolygonSubscriptionManager(
                     _supportedSecurityTypes,
                     maxSubscriptionsPerWebSocket,
-                    (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage));
+                    (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage, licenseType));
             }
             var openInterestManager = new PolygonOpenInterestProcessorManager(TimeProvider, RestApiClient, _symbolMapper, _subscriptionManager, _dataAggregator, GetTickTime);
             openInterestManager.ScheduleNextRun();
@@ -192,7 +209,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 maxSubscriptionsPerWebSocket = -1;
             }
 
-            Initialize(apiKey, maxSubscriptionsPerWebSocket);
+            Initialize(apiKey, maxSubscriptionsPerWebSocket, job.BrokerageData.TryGetValue("polygon-license-type", out var licenseType) ? licenseType : string.Empty);
         }
 
         /// <summary>
@@ -215,18 +232,16 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 return null;
             }
 
-            // For business endpoints, only trade tick data is supported.
-            if (PolygonWebSocketClientWrapper.IsBusinessUrl && dataConfig.TickType == TickType.Quote)
-            {
-                return null;
-            }
-
             var eventType = default(EventType);
             try
             {
                 eventType = _subscriptionManager.Subscribe(dataConfig);
             }
             catch (PolygonAuthenticationException)
+            {
+                return null;
+            }
+            catch (UnsupportedTickTypeForLicenseException)
             {
                 return null;
             }
@@ -511,6 +526,29 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private static bool IsSecurityTypeSupported(SecurityType securityType)
         {
             return _supportedSecurityTypes.Contains(securityType);
+        }
+
+        /// <summary>
+        /// Attempts to parse a <see cref="LicenseType"/> value from the provided configuration string.
+        /// </summary>
+        /// <param name="licenseTypeFromConfig">The license type string retrieved from configuration (e.g., "Individual" or "Business").</param>
+        /// <returns>
+        /// A valid <see cref="LicenseType"/>. Returns <see cref="LicenseType.Individual"/> if the input is null, empty, or cannot be parsed.
+        /// </returns>
+        private LicenseType ParseLicenseType(string licenseTypeFromConfig)
+        {
+            var licenseType = default(LicenseType);
+            if (!string.IsNullOrWhiteSpace(licenseTypeFromConfig))
+            {
+                if (!Enum.TryParse(licenseTypeFromConfig, true, out licenseType) || !Enum.IsDefined(licenseType))
+                {
+                    Log.Error($"{nameof(PolygonDataProvider)}.{nameof(ParseLicenseType)}: An error occurred while parsing the license type '{licenseTypeFromConfig}', use default = {LicenseType.Individual}");
+                }
+            }
+
+            Log.Trace($"{nameof(PolygonDataProvider)}.{nameof(ParseLicenseType)}: Using license type = '{licenseType}' (from input = '{licenseTypeFromConfig ?? "null"}').");
+
+            return licenseType;
         }
 
         private class ModulesReadLicenseRead : Api.RestResponse

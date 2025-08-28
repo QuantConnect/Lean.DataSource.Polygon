@@ -53,10 +53,9 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
         [TestCase(Resolution.Minute, 1)]
         public void StreamDataOnDifferentSecuritiesTypes(Resolution resolution, int expectedReceiveAmountData)
         {
-            Config.Set("polygon-ws-url", "wss://business.polygon.io");
             var mockDateTimeAfterOpenExchange = DateTime.UtcNow.Date.AddHours(9).AddMinutes(30).AddSeconds(59).ConvertToUtc(TimeZones.NewYork);
             TestablePolygonDataProvider.TimeProviderInstance = new ManualTimeProvider(mockDateTimeAfterOpenExchange);
-            using var polygon = new TestablePolygonDataProvider(Config.Get("polygon-api-key"));
+            using var polygon = new TestablePolygonDataProvider(Config.Get("polygon-api-key"), Config.Get("polygon-license-type"));
 
             var configs = GetConfigs(resolution);
 
@@ -153,8 +152,9 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
                             Assert.Greater(tb.Close, 0m);
                             if (resolution >= Resolution.Minute)
                             {
-                                // For aggregated data (minute or higher), volume should always be present
-                                Assert.Greater(tb.Volume, 0m);
+                                // For 1-minute or higher aggregates, volume is expected (may be zero).
+                                // Example: {"ev":"AM","sym":"O:MSFT250829C00502500","v":0,"av":358,...}
+                                Assert.GreaterOrEqual(tb.Volume, 0m);
                             }
                             else
                             {

@@ -142,6 +142,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     return false;
                 }
 
+                if (webSocket.licenseType == LicenseType.Business && tickType == TickType.Quote)
+                {
+                    // For business endpoints, only trade tick data is supported.
+                    throw new UnsupportedTickTypeForLicenseException(tickType.ToString(), webSocket.licenseType);
+                }
+
                 if (IsWebSocketFull(webSocket))
                 {
                     throw new NotSupportedException("Maximum symbol count reached for the current configuration " +

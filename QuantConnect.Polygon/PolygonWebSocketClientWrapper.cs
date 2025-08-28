@@ -29,13 +29,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
     /// </summary>
     public class PolygonWebSocketClientWrapper : WebSocketClientWrapper
     {
-        private static string BaseUrl = Config.Get("polygon-ws-url", "wss://socket.polygon.io");
-
         /// <summary>
-        /// Indicates whether the <see cref="BaseUrl"/> targets a business-related endpoint,
-        /// determined by checking if it contains the keyword "business" (case-insensitive).
+        /// The license type for the current Polygon subscription (Individual or Business).
         /// </summary>
-        public static bool IsBusinessUrl => BaseUrl.Contains("business", StringComparison.InvariantCultureIgnoreCase);
+        public readonly LicenseType licenseType;
 
         private readonly string _apiKey;
         private readonly ISymbolMapper _symbolMapper;
@@ -84,10 +81,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <param name="symbolMapper">The symbol mapper</param>
         /// <param name="securityType">The security type</param>
         /// <param name="messageHandler">The message handler</param>
+        /// <param name="licenseType">The subscription license type, used to determine the base WebSocket URL.</param>
         public PolygonWebSocketClientWrapper(string apiKey,
             ISymbolMapper symbolMapper,
             SecurityType securityType,
-            Action<string> messageHandler)
+            Action<string> messageHandler,
+            LicenseType licenseType)
         {
             _apiKey = apiKey;
             _symbolMapper = symbolMapper;
@@ -95,8 +94,15 @@ namespace QuantConnect.Lean.DataSource.Polygon
             _messageHandler = messageHandler;
             _subscriptions = new();
 
-            var url = GetWebSocketUrl(securityType);
-            Initialize(url);
+            this.licenseType = licenseType;
+            var baseUrl = licenseType switch
+            {
+                LicenseType.Individual => Config.Get("polygon-ws-url", "wss://socket.polygon.io"),
+                LicenseType.Business => Config.Get("polygon-ws-url", "wss://business.polygon.io"),
+                _ => throw new NotSupportedException($"{nameof(PolygonWebSocketClientWrapper)}: Unsupported license type '{licenseType}'. Expected either 'Individual' or 'Business'.")
+            };
+
+            Initialize(GetWebSocketUrl(baseUrl, securityType));
 
             Open += OnOpen;
             Closed += OnClosed;
@@ -285,7 +291,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             if (securityType == SecurityType.Index)
             {
-                if (IsBusinessUrl)
+                if (licenseType == LicenseType.Business)
                 {
                     yield return EventType.V;
                     yield break;
@@ -302,7 +308,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             if (tickType == TickType.Trade)
             {
-                if (IsBusinessUrl)
+                if (licenseType == LicenseType.Business)
                 {
                     yield return EventType.FMV;
                     yield break;
@@ -399,19 +405,19 @@ namespace QuantConnect.Lean.DataSource.Polygon
             }
         }
 
-        public static string GetWebSocketUrl(SecurityType securityType)
+        private string GetWebSocketUrl(string baseUrl, SecurityType securityType)
         {
             switch (securityType)
             {
                 case SecurityType.Equity:
-                    return BaseUrl + "/stocks";
+                    return baseUrl + "/stocks";
 
                 case SecurityType.Option:
                 case SecurityType.IndexOption:
-                    return BaseUrl + "/options";
+                    return baseUrl + "/options";
 
                 case SecurityType.Index:
-                    return BaseUrl + "/indices";
+                    return baseUrl + "/indices";
 
                 default:
                     throw new Exception($"Unsupported security type: {securityType}");
