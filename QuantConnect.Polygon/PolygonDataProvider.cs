@@ -230,7 +230,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 return null;
             }
 
-            _dataAggregator.SetUsingAggregates(_subscriptionManager.UsingAggregates);
+            _dataAggregator.SetUsingAggregates(_subscriptionManager.UsingEventType);
             var enumerator = _dataAggregator.Add(dataConfig, newDataAvailableHandler);
 
             return enumerator;

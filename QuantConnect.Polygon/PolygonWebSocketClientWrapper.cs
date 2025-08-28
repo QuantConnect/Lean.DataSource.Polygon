@@ -47,7 +47,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
         private readonly List<string> _subscriptions;
 
-        private Dictionary<(SecurityType, TickType), string> _prefixes;
+        /// <summary>
+        /// Maps a combination of <see cref="SecurityType"/> and <see cref="TickType"/> 
+        /// to the corresponding <see cref="EventType"/> used in WebSocket subscriptions.
+        /// </summary>
+        private Dictionary<(SecurityType, TickType), EventType> _eventTypes = [];
 
         /// <summary>
         /// On Authenticated event
@@ -90,7 +94,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
             _supportedSecurityTypes = GetSupportedSecurityTypes(securityType);
             _messageHandler = messageHandler;
             _subscriptions = new();
-            _prefixes = new();
 
             var url = GetWebSocketUrl(securityType);
             Initialize(url);
@@ -107,33 +110,32 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         /// <param name="symbol">The symbol</param>
         /// <param name="tickType">Type of tick data</param>
-        public void Subscribe(SubscriptionDataConfig config, out bool usingAggregates)
+        public void Subscribe(SubscriptionDataConfig config, out EventType subscribeOnEventType)
         {
             var ticker = _symbolMapper.GetBrokerageSymbol(config.Symbol);
 
-            // If prefix is already known, use it
-            if (_prefixes.TryGetValue((config.SecurityType, config.TickType), out var prefix))
+            // If eventType is already known, use it
+            if (_eventTypes.TryGetValue((config.SecurityType, config.TickType), out var eventType))
             {
-                var subscriptionTicker = MakeSubscriptionTicker(prefix, ticker);
+                var subscriptionTicker = MakeSubscriptionTicker(eventType, ticker);
                 Subscribe(subscriptionTicker, true);
                 AddSubscription(subscriptionTicker);
-                usingAggregates = prefix is "A" or "AM";
+                subscribeOnEventType = eventType;
 
                 Log.Trace($"PolygonWebSocketClientWrapper.Subscribe(): Subscribed to {subscriptionTicker}");
             }
             else
             {
-                TrySubscribe(ticker, config, out usingAggregates);
+                TrySubscribe(ticker, config, out subscribeOnEventType);
             }
         }
 
         /// <summary>
-        /// Tries to subscribe to the given symbol and tick type by trying all possible prefixes
+        /// Tries to subscribe to the given symbol and tick type by trying all possible eventTypes
         /// </summary>
-        private void TrySubscribe(string ticker, SubscriptionDataConfig config, out bool usingAggregates)
+        private void TrySubscribe(string ticker, SubscriptionDataConfig config, out EventType subscribeOnEventType)
         {
-            usingAggregates = false;
-
+            subscribeOnEventType = EventType.None;
             // We'll try subscribing assuming the highest subscription plan and work our way down if we get an error
             using var subscribedEvent = new ManualResetEventSlim(false);
             using var errorEvent = new ManualResetEventSlim(false);
@@ -171,19 +173,19 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var subscribed = false;
             var triedSubscription = false;
 
-            foreach (var protentialPrefix in GetSubscriptionPefixes(config.SecurityType, config.TickType, config.Resolution))
+            foreach (var protentialEventType in GetSubscriptionEventType(config.SecurityType, config.TickType, config.Resolution))
             {
                 triedSubscription = true;
                 subscribedEvent.Reset();
                 errorEvent.Reset();
 
-                var subscriptionTicker = MakeSubscriptionTicker(protentialPrefix, ticker);
+                var subscriptionTicker = MakeSubscriptionTicker(protentialEventType, ticker);
                 Subscribe(subscriptionTicker, true);
 
                 // Wait for the subscribed event or error event
                 var index = WaitHandle.WaitAny(waitHandles, TimeSpan.FromSeconds(30));
 
-                // Quickly try the next prefix if we get an error or timeout
+                // Quickly try the next eventType if we get an error or timeout
                 if (index != 0)
                 {
                     continue;
@@ -192,8 +194,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 Log.Trace($"PolygonWebSocketClientWrapper.Subscribe(): Subscribed to {subscriptionTicker}");
                 // Subscription was successful
                 AddSubscription(subscriptionTicker);
-                _prefixes[(config.SecurityType, config.TickType)] = protentialPrefix;
-                usingAggregates = protentialPrefix is "A" or "AM";
+                _eventTypes[(config.SecurityType, config.TickType)] = protentialEventType;
+                subscribeOnEventType = protentialEventType;
                 subscribed = true;
                 break;
             }
@@ -215,9 +217,9 @@ namespace QuantConnect.Lean.DataSource.Polygon
         public void Unsubscribe(Symbol symbol, TickType tickType)
         {
             var baseTicker = _symbolMapper.GetBrokerageSymbol(symbol);
-            foreach (var prefix in GetSubscriptionPefixes(symbol.SecurityType, tickType))
+            foreach (var eventType in GetSubscriptionEventType(symbol.SecurityType, tickType))
             {
-                var ticker = MakeSubscriptionTicker(prefix, baseTicker);
+                var ticker = MakeSubscriptionTicker(eventType, baseTicker);
                 lock (_lock)
                 {
                     if (RemoveSubscription(ticker))
@@ -244,20 +246,20 @@ namespace QuantConnect.Lean.DataSource.Polygon
         }
 
         /// <summary>
-        /// Gets a list of Polygon WebSocket prefixes supported for the given tick type and resolution
+        /// Gets a list of Polygon WebSocket eventTypes supported for the given tick type and resolution
         /// </summary>
-        private IEnumerable<string> GetSubscriptionPefixes(SecurityType securityType ,TickType tickType, Resolution resolution = Resolution.Minute)
+        private IEnumerable<EventType> GetSubscriptionEventType(SecurityType securityType ,TickType tickType, Resolution resolution = Resolution.Minute)
         {
-            // If we already know the prefix, return it and don't try any others
-            if (_prefixes.TryGetValue((securityType, tickType), out var prefix))
+            // If we already know the eventType, return it and don't try any others
+            if (_eventTypes.TryGetValue((securityType, tickType), out var eventType))
             {
-                yield return prefix;
+                yield return eventType;
                 yield break;
             }
 
             if (tickType == TickType.Trade && resolution >= Resolution.Minute)
             {
-                yield return "AM";
+                yield return EventType.AM;
                 yield break;
             }
 
@@ -265,7 +267,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 if (IsBusinessUrl)
                 {
-                    yield return "V";
+                    yield return EventType.V;
                     yield break;
                 }
 
@@ -274,7 +276,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     yield break;
                 }
 
-                yield return "A";
+                yield return EventType.A;
                 yield break;
             }
 
@@ -282,27 +284,27 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 if (IsBusinessUrl)
                 {
-                    yield return "FMV";
+                    yield return EventType.FMV;
                     yield break;
                 }
 
-                yield return "T";
+                yield return EventType.T;
                 // Only use aggregates if resolution is not tick
                 if (resolution > Resolution.Tick)
                 {
-                    yield return "A";
+                    yield return EventType.A;
                 }
             }
             else
             {
-                yield return "Q";
+                yield return EventType.Q;
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static string MakeSubscriptionTicker(string prefix, string ticker)
+        private static string MakeSubscriptionTicker(EventType eventType, string ticker)
         {
-            return $"{prefix}.{ticker}";
+            return $"{eventType}.{ticker}";
         }
 
         private void AddSubscription(string ticker)

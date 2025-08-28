@@ -40,7 +40,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// <summary>
         /// Indicates whether data is being streamed using aggregates or ticks
         /// </summary>
-        internal bool UsingAggregates { get; private set; }
+        internal EventType UsingEventType { get; private set; }
 
         /// <summary>
         /// Whether or not there is at least one open socket
@@ -143,8 +143,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 }
 
                 var config = _subscriptionsDataConfigs.Single(x => x.Symbol == symbol && x.TickType == tickType);
-                webSocket.Subscribe(config, out var usingAggregates);
-                UsingAggregates = usingAggregates;
+                webSocket.Subscribe(config, out var usingEventType);
+                UsingEventType = usingEventType;
             }
 
             return true;
