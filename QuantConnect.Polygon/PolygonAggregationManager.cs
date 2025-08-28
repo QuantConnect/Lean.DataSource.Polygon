@@ -58,9 +58,14 @@ namespace QuantConnect.Lean.DataSource.Polygon
         public IEnumerator<BaseData> Add(SubscriptionDataConfig dataConfig, EventHandler newDataAvailableHandler, EventType eventType)
         {
             _usingEventType = eventType;
-            var enumerator = Add(dataConfig, newDataAvailableHandler);
-            _usingEventType = default;
-            return enumerator;
+            try
+            {
+                return Add(dataConfig, newDataAvailableHandler);
+            }
+            finally
+            {
+                _usingEventType = default;
+            }
         }
     }
 }
