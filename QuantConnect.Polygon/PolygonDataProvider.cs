@@ -537,11 +537,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </returns>
         private LicenseType ParseLicenseType(string licenseTypeFromConfig)
         {
-            var licenseType = default(LicenseType);
+            var licenseType = LicenseType.Individual;
             if (!string.IsNullOrWhiteSpace(licenseTypeFromConfig))
             {
-                if (!Enum.TryParse(licenseTypeFromConfig, true, out licenseType) || !Enum.IsDefined(licenseType))
+                if (!Enum.TryParse(licenseTypeFromConfig, true, out licenseType))
                 {
+                    licenseType = LicenseType.Individual;
                     Log.Error($"{nameof(PolygonDataProvider)}.{nameof(ParseLicenseType)}: An error occurred while parsing the license type '{licenseTypeFromConfig}', use default = {LicenseType.Individual}");
                 }
             }
