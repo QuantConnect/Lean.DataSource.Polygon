@@ -38,9 +38,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private List<SubscriptionDataConfig> _subscriptionsDataConfigs = new();
 
         /// <summary>
-        /// Indicates whether data is being streamed using aggregates or ticks
+        /// Stores the <see cref="EventType"/> associated with the most recent subscription.
+        /// This value is used to determine the type of consolidator or data handling logic
+        /// that should be applied for the last subscribed data feed.
         /// </summary>
-        internal EventType UsingEventType { get; private set; }
+        private EventType _lastSubscribedEventType;
 
         /// <summary>
         /// Whether or not there is at least one open socket
@@ -95,16 +97,25 @@ namespace QuantConnect.Lean.DataSource.Polygon
         }
 
         /// <summary>
-        /// Subscribes the specified configuration to the data feed
+        /// Subscribes to a data feed using the specified <see cref="SubscriptionDataConfig"/>.
         /// </summary>
-        /// <param name="config">The subscription data configuration to subscribe</param>
-        public new void Subscribe(SubscriptionDataConfig config)
+        /// <param name="config">
+        /// The subscription configuration that defines the parameters of the data feed, 
+        /// such as the symbol, resolution, and tick type.
+        /// </param>
+        /// <returns>
+        /// The <see cref="EventType"/> that was assigned to the subscription during the process.
+        /// If no event type was determined, the default value (<see cref="EventType.None"/>) is returned.
+        /// </returns>
+        public EventType Subscribe(SubscriptionDataConfig config)
         {
+            _lastSubscribedEventType = default;
             // We only store the subscription data config here to make it available
             // for the Subscribe(IEnumerable<Symbol> symbols, TickType tickType) method
             _subscriptionsDataConfigs.Add(config);
             base.Subscribe(config);
             _subscriptionsDataConfigs.Remove(config);
+            return _lastSubscribedEventType;
         }
 
         /// <summary>
@@ -143,8 +154,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 }
 
                 var config = _subscriptionsDataConfigs.Single(x => x.Symbol == symbol && x.TickType == tickType);
-                webSocket.Subscribe(config, out var usingEventType);
-                UsingEventType = usingEventType;
+                _lastSubscribedEventType = webSocket.Subscribe(config);
             }
 
             return true;

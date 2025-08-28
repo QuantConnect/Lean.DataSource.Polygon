@@ -221,16 +221,17 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 return null;
             }
 
+            var eventType = default(EventType);
             try
             {
-                _subscriptionManager.Subscribe(dataConfig);
+                eventType = _subscriptionManager.Subscribe(dataConfig);
             }
             catch (PolygonAuthenticationException)
             {
                 return null;
             }
 
-            var enumerator = _dataAggregator.Add(dataConfig, newDataAvailableHandler, _subscriptionManager.UsingEventType);
+            var enumerator = _dataAggregator.Add(dataConfig, newDataAvailableHandler, eventType);
 
             return enumerator;
         }

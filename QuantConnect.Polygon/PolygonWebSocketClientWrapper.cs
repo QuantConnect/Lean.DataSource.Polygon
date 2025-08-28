@@ -51,7 +51,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// Maps a combination of <see cref="SecurityType"/> and <see cref="TickType"/> 
         /// to the corresponding <see cref="EventType"/> used in WebSocket subscriptions.
         /// </summary>
-        private Dictionary<(SecurityType, TickType), EventType> _eventTypes = [];
+        private readonly Dictionary<(SecurityType, TickType), EventType> _eventTypes = [];
 
         /// <summary>
         /// On Authenticated event
@@ -106,11 +106,19 @@ namespace QuantConnect.Lean.DataSource.Polygon
         }
 
         /// <summary>
-        /// Subscribes the given symbol
+        /// Subscribes to a data feed using the specified <see cref="SubscriptionDataConfig"/>.
         /// </summary>
-        /// <param name="symbol">The symbol</param>
-        /// <param name="tickType">Type of tick data</param>
-        public void Subscribe(SubscriptionDataConfig config, out EventType subscribeOnEventType)
+        /// <param name="config">
+        /// The subscription configuration that defines the parameters of the data feed, 
+        /// including the symbol, security type, resolution, and tick type.
+        /// </param>
+        /// <returns>
+        /// The <see cref="EventType"/> associated with the subscription. 
+        /// If the event type is already known, it is resolved from the internal lookup; 
+        /// otherwise, the method falls back to <see cref="TrySubscribe(string, SubscriptionDataConfig)"/> 
+        /// to determine and establish the subscription dynamically.
+        /// </returns>
+        public EventType Subscribe(SubscriptionDataConfig config)
         {
             var ticker = _symbolMapper.GetBrokerageSymbol(config.Symbol);
 
@@ -120,22 +128,31 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 var subscriptionTicker = MakeSubscriptionTicker(eventType, ticker);
                 Subscribe(subscriptionTicker, true);
                 AddSubscription(subscriptionTicker);
-                subscribeOnEventType = eventType;
-
                 Log.Trace($"PolygonWebSocketClientWrapper.Subscribe(): Subscribed to {subscriptionTicker}");
+
+                return eventType;
             }
             else
             {
-                TrySubscribe(ticker, config, out subscribeOnEventType);
+                return TrySubscribe(ticker, config);
             }
         }
 
         /// <summary>
-        /// Tries to subscribe to the given symbol and tick type by trying all possible eventTypes
+        /// Attempts to subscribe to a data feed for the specified ticker when the 
+        /// corresponding <see cref="EventType"/> is not already known.
         /// </summary>
-        private void TrySubscribe(string ticker, SubscriptionDataConfig config, out EventType subscribeOnEventType)
+        /// <param name="ticker">The brokerage-specific ticker symbol to subscribe to.</param>
+        /// <param name="config">
+        /// The subscription configuration that defines the parameters of the data feed, 
+        /// such as the symbol, resolution, and tick type.
+        /// </param>
+        /// <returns>
+        /// The resolved <see cref="EventType"/> assigned to the subscription. 
+        /// If the subscription cannot be established, <see cref="EventType.None"/> may be returned.
+        /// </returns>
+        private EventType TrySubscribe(string ticker, SubscriptionDataConfig config)
         {
-            subscribeOnEventType = EventType.None;
             // We'll try subscribing assuming the highest subscription plan and work our way down if we get an error
             using var subscribedEvent = new ManualResetEventSlim(false);
             using var errorEvent = new ManualResetEventSlim(false);
@@ -173,6 +190,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var subscribed = false;
             var triedSubscription = false;
 
+            var subscribeOnEventType = default(EventType);
             foreach (var protentialEventType in GetSubscriptionEventType(config.SecurityType, config.TickType, config.Resolution))
             {
                 triedSubscription = true;
@@ -207,6 +225,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 throw new Exception($"PolygonWebSocketClientWrapper.Subscribe(): Failed to subscribe to {ticker}. " +
                     $"Make sure your subscription plan allows streaming {config.TickType.ToString().ToLowerInvariant()} data.");
             }
+
+            return subscribeOnEventType;
         }
 
         /// <summary>
