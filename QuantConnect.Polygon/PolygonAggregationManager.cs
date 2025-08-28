@@ -27,16 +27,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private EventType _usingEventType;
 
         /// <summary>
-        /// Signals whether aggregated bars are being streamed instead of ticks
-        /// so the consolidator to use can get trade bars as inputs instead of ticks.
-        /// </summary>
-        /// <param name="useEventType">Whether aggregated bars are being streamed instead of ticks</param>
-        public void SetUsingAggregates(EventType useEventType)
-        {
-            _usingEventType = useEventType;
-        }
-
-        /// <summary>
         /// Gets the consolidator to aggregate data for the given config
         /// </summary>
         protected override IDataConsolidator GetConsolidator(SubscriptionDataConfig config)
@@ -56,6 +46,19 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     // Use base's method, since we can fetch ticks with Developer and Advanced plans
                     return base.GetConsolidator(config);
             }
+        }
+
+        /// <summary>
+        /// Add new subscription to current <see cref="IDataAggregator"/> instance
+        /// </summary>
+        /// <param name="dataConfig">defines the parameters to subscribe to a data feed</param>
+        /// <param name="newDataAvailableHandler">handler to be fired on new data available</param>
+        /// <param name="eventType">The <see cref="EventType"/> specifying the type of market data to subscribe to.</param>
+        /// <returns>The new enumerator for this subscription request</returns>
+        public IEnumerator<BaseData> Add(SubscriptionDataConfig dataConfig, EventHandler newDataAvailableHandler, EventType eventType)
+        {
+            _usingEventType = eventType;
+            return Add(dataConfig, newDataAvailableHandler);
         }
     }
 }
