@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -97,8 +97,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
             this.licenseType = licenseType;
             var baseUrl = licenseType switch
             {
-                LicenseType.Individual => Config.Get("polygon-ws-url", "wss://socket.polygon.io"),
-                LicenseType.Business => Config.Get("polygon-ws-url", "wss://business.polygon.io"),
+                LicenseType.Individual => "wss://socket.polygon.io",
+                LicenseType.Business =>"wss://business.polygon.io",
                 _ => throw new NotSupportedException($"{nameof(PolygonWebSocketClientWrapper)}: Unsupported license type '{licenseType}'. Expected either 'Individual' or 'Business'.")
             };
 
