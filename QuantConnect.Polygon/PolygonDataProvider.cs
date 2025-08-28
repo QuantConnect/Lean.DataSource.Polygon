@@ -232,10 +232,9 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 return null;
             }
 
-            var eventType = default(EventType);
             try
             {
-                eventType = _subscriptionManager.Subscribe(dataConfig);
+                _subscriptionManager.Subscribe(dataConfig);
             }
             catch (PolygonAuthenticationException)
             {
@@ -246,7 +245,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 return null;
             }
 
-            var enumerator = _dataAggregator.Add(dataConfig, newDataAvailableHandler, eventType);
+            var enumerator = _dataAggregator.Add(dataConfig, newDataAvailableHandler, _subscriptionManager.LastSubscribedEventType);
 
             return enumerator;
         }

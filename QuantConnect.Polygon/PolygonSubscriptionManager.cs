@@ -21,6 +21,7 @@ using QuantConnect.Data;
 using QuantConnect.Logging;
 using QuantConnect.Util;
 using static QuantConnect.Brokerages.WebSocketClientWrapper;
+using System.Collections.Concurrent;
 
 namespace QuantConnect.Lean.DataSource.Polygon
 {
@@ -35,14 +36,14 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private List<PolygonWebSocketClientWrapper> _webSockets;
         private object _lock = new();
 
-        private List<SubscriptionDataConfig> _subscriptionsDataConfigs = new();
+        private readonly ConcurrentDictionary<(TickType, Symbol), SubscriptionDataConfig> _subscriptionsDataConfigs = [];
 
         /// <summary>
         /// Stores the <see cref="EventType"/> associated with the most recent subscription.
         /// This value is used to determine the type of consolidator or data handling logic
         /// that should be applied for the last subscribed data feed.
         /// </summary>
-        private EventType _lastSubscribedEventType;
+        public EventType LastSubscribedEventType { get; private set; }
 
         /// <summary>
         /// Whether or not there is at least one open socket
@@ -103,19 +104,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// The subscription configuration that defines the parameters of the data feed, 
         /// such as the symbol, resolution, and tick type.
         /// </param>
-        /// <returns>
-        /// The <see cref="EventType"/> that was assigned to the subscription during the process.
-        /// If no event type was determined, the default value (<see cref="EventType.None"/>) is returned.
-        /// </returns>
-        public EventType Subscribe(SubscriptionDataConfig config)
+        public override void Subscribe(SubscriptionDataConfig config)
         {
-            _lastSubscribedEventType = default;
-            // We only store the subscription data config here to make it available
-            // for the Subscribe(IEnumerable<Symbol> symbols, TickType tickType) method
-            _subscriptionsDataConfigs.Add(config);
+            LastSubscribedEventType = default;
+            _subscriptionsDataConfigs[(config.TickType, config.Symbol)] = config;
             base.Subscribe(config);
-            _subscriptionsDataConfigs.Remove(config);
-            return _lastSubscribedEventType;
         }
 
         /// <summary>
@@ -135,32 +128,38 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             foreach (var symbol in symbols)
             {
-                var webSocket = GetWebSocket(symbol.SecurityType);
-
-                if (webSocket == null)
+                try
                 {
-                    return false;
-                }
+                    var webSocket = GetWebSocket(symbol.SecurityType);
 
-                if (webSocket.licenseType == LicenseType.Business && tickType == TickType.Quote)
+                    if (webSocket == null)
+                    {
+                        return false;
+                    }
+
+                    if (webSocket.licenseType == LicenseType.Business && tickType == TickType.Quote)
+                    {
+                        // For business endpoints, only trade tick data is supported.
+                        throw new UnsupportedTickTypeForLicenseException(tickType.ToString(), webSocket.licenseType);
+                    }
+
+                    if (IsWebSocketFull(webSocket))
+                    {
+                        throw new NotSupportedException("Maximum symbol count reached for the current configuration " +
+                            $"[MaxSymbolsPerWebSocket={_maxSubscriptionsPerWebSocket}");
+                    }
+
+                    if (!webSocket.IsOpen)
+                    {
+                        ConnectWebSocket(webSocket);
+                    }
+
+                    LastSubscribedEventType = webSocket.Subscribe(_subscriptionsDataConfigs[(tickType, symbol)]);
+                }
+                finally
                 {
-                    // For business endpoints, only trade tick data is supported.
-                    throw new UnsupportedTickTypeForLicenseException(tickType.ToString(), webSocket.licenseType);
+                    _subscriptionsDataConfigs.TryRemove((tickType, symbol), out _);
                 }
-
-                if (IsWebSocketFull(webSocket))
-                {
-                    throw new NotSupportedException("Maximum symbol count reached for the current configuration " +
-                        $"[MaxSymbolsPerWebSocket={_maxSubscriptionsPerWebSocket}");
-                }
-
-                if (!webSocket.IsOpen)
-                {
-                    ConnectWebSocket(webSocket);
-                }
-
-                var config = _subscriptionsDataConfigs.Single(x => x.Symbol == symbol && x.TickType == tickType);
-                _lastSubscribedEventType = webSocket.Subscribe(config);
             }
 
             return true;
