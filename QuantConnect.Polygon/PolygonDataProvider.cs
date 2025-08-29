@@ -236,7 +236,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 _subscriptionManager.Subscribe(dataConfig);
             }
-            catch (PolygonAuthenticationException)
+            catch (PolygonAuthenticationException ex) when (!ex.Message.Contains("404"))
             {
                 return null;
             }
