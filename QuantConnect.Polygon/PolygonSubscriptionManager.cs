@@ -231,11 +231,25 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 }
             };
 
+            // Handle fatal handshake errors (e.g. 404 instead of 101). 
+            // If this happens, the socket can’t connect - signal failure 
+            // so we skip waiting for a subscription on a dead connection.
+            EventHandler<WebSocketError> errorCallback = (sender, webSocketError) =>
+            {
+                if (webSocketError.Message.Contains("404"))
+                {
+                    error.AppendLine(webSocketError.Message);
+                    failedAuthenticationEvent.Set();
+                }
+            };
+
+            webSocket.Error += errorCallback;
             webSocket.Message += callback;
             webSocket.Connect();
 
             var result = WaitHandle.WaitAny(new[] { failedAuthenticationEvent, authenticatedEvent }, TimeSpan.FromSeconds(60));
             webSocket.Message -= callback;
+            webSocket.Error -= errorCallback;
 
             if (result == WaitHandle.WaitTimeout)
             {
