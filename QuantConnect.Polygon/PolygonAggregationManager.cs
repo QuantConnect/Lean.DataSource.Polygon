@@ -14,6 +14,7 @@
 */
 
 using QuantConnect.Data;
+using QuantConnect.Logging;
 using QuantConnect.Data.Consolidators;
 using QuantConnect.Lean.Engine.DataFeeds;
 
@@ -24,14 +25,25 @@ namespace QuantConnect.Lean.DataSource.Polygon
     /// </summary>
     public class PolygonAggregationManager : AggregationManager
     {
-        private EventType _usingEventType;
+        private PolygonSubscriptionManager _subscriptionManager;
+
+        public PolygonAggregationManager(PolygonSubscriptionManager subscriptionManager)
+        {
+            _subscriptionManager = subscriptionManager;
+        }
 
         /// <summary>
         /// Gets the consolidator to aggregate data for the given config
         /// </summary>
         protected override IDataConsolidator GetConsolidator(SubscriptionDataConfig config)
         {
-            switch (_usingEventType)
+            if (!_subscriptionManager._subscriptionsDataConfigs.TryRemove((config.TickType, config.Symbol), out var usingEventType))
+            {
+                Log.Error($"{nameof(PolygonAggregationManager)}.{nameof(GetConsolidator)}: Failed to remove subscription for Symbol={config.Symbol}, TickType={config.TickType}. " +
+                    $"The subscription may not exist or was already removed.");
+            }
+
+            switch (usingEventType.SubscribedEventType)
             {
                 case EventType.A when config.Resolution == Resolution.Second && config.TickType == TickType.Trade:
                 case EventType.AM when config.Resolution == Resolution.Minute && config.TickType == TickType.Trade:
@@ -45,26 +57,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 default:
                     // Use base's method, since we can fetch ticks with Developer and Advanced plans
                     return base.GetConsolidator(config);
-            }
-        }
-
-        /// <summary>
-        /// Add new subscription to current <see cref="IDataAggregator"/> instance
-        /// </summary>
-        /// <param name="dataConfig">defines the parameters to subscribe to a data feed</param>
-        /// <param name="newDataAvailableHandler">handler to be fired on new data available</param>
-        /// <param name="eventType">The <see cref="EventType"/> specifying the type of market data to subscribe to.</param>
-        /// <returns>The new enumerator for this subscription request</returns>
-        public IEnumerator<BaseData> Add(SubscriptionDataConfig dataConfig, EventHandler newDataAvailableHandler, EventType eventType)
-        {
-            _usingEventType = eventType;
-            try
-            {
-                return Add(dataConfig, newDataAvailableHandler);
-            }
-            finally
-            {
-                _usingEventType = default;
             }
         }
     }

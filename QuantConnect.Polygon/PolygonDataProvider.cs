@@ -157,7 +157,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
             _apiKey = apiKey;
 
             _initialized = true;
-            _dataAggregator = new PolygonAggregationManager();
             RestApiClient = new PolygonRestApiClient(_apiKey);
             _optionChainProvider = new CachingOptionChainProvider(new PolygonOptionChainProvider(RestApiClient, _symbolMapper));
 
@@ -174,9 +173,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     _supportedSecurityTypes,
                     maxSubscriptionsPerWebSocket,
                     (securityType) => new PolygonWebSocketClientWrapper(_apiKey, _symbolMapper, securityType, OnMessage, licenseType));
+                _dataAggregator = new PolygonAggregationManager(_subscriptionManager);
+                var openInterestManager = new PolygonOpenInterestProcessorManager(TimeProvider, RestApiClient, _symbolMapper, _subscriptionManager, _dataAggregator, GetTickTime);
+                openInterestManager.ScheduleNextRun();
             }
-            var openInterestManager = new PolygonOpenInterestProcessorManager(TimeProvider, RestApiClient, _symbolMapper, _subscriptionManager, _dataAggregator, GetTickTime);
-            openInterestManager.ScheduleNextRun();
         }
 
         #region IDataQueueHandler implementation
@@ -245,7 +245,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 return null;
             }
 
-            var enumerator = _dataAggregator.Add(dataConfig, newDataAvailableHandler, _subscriptionManager.LastSubscribedEventType);
+            var enumerator = _dataAggregator.Add(dataConfig, newDataAvailableHandler);
 
             return enumerator;
         }

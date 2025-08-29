@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -36,14 +36,21 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private List<PolygonWebSocketClientWrapper> _webSockets;
         private object _lock = new();
 
-        private readonly ConcurrentDictionary<(TickType, Symbol), SubscriptionDataConfig> _subscriptionsDataConfigs = [];
-
         /// <summary>
-        /// Stores the <see cref="EventType"/> associated with the most recent subscription.
-        /// This value is used to determine the type of consolidator or data handling logic
-        /// that should be applied for the last subscribed data feed.
+        /// Holds the active subscription configurations for Polygon data streams.
+        /// The dictionary key is a tuple of <see cref="TickType"/> and <see cref="Symbol"/> 
+        /// identifying a unique subscription.
+        /// The value is a tuple containing:
+        /// <list type="bullet">
+        ///   <item>
+        ///     <description><see cref="Resolution"/> - The resolution of the subscription (e.g., Tick, Minute).</description>
+        ///   </item>
+        ///   <item>
+        ///     <description><see cref="EventType"/> - The associated Polygon event type used for the subscription.</description>
+        ///   </item>
+        /// </list>
         /// </summary>
-        public EventType LastSubscribedEventType { get; private set; }
+        public readonly ConcurrentDictionary<(TickType, Symbol), (Resolution Resolution, EventType SubscribedEventType)> _subscriptionsDataConfigs = [];
 
         /// <summary>
         /// Whether or not there is at least one open socket
@@ -106,8 +113,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </param>
         public override void Subscribe(SubscriptionDataConfig config)
         {
-            LastSubscribedEventType = default;
-            _subscriptionsDataConfigs[(config.TickType, config.Symbol)] = config;
+            // Store the subscription config: we already know the Resolution when requesting the subscription,
+            // but we don’t have the actual EventType until the subscription is confirmed.
+            // For now, initialize EventType with default until it’s assigned after a successful subscribe.
+            _subscriptionsDataConfigs[(config.TickType, config.Symbol)] = (config.Resolution, default);
             base.Subscribe(config);
         }
 
@@ -128,38 +137,35 @@ namespace QuantConnect.Lean.DataSource.Polygon
 
             foreach (var symbol in symbols)
             {
-                try
+                var webSocket = GetWebSocket(symbol.SecurityType);
+
+                if (webSocket == null)
                 {
-                    var webSocket = GetWebSocket(symbol.SecurityType);
-
-                    if (webSocket == null)
-                    {
-                        return false;
-                    }
-
-                    if (webSocket.licenseType == LicenseType.Business && tickType == TickType.Quote)
-                    {
-                        // For business endpoints, only trade tick data is supported.
-                        throw new UnsupportedTickTypeForLicenseException(tickType.ToString(), webSocket.licenseType);
-                    }
-
-                    if (IsWebSocketFull(webSocket))
-                    {
-                        throw new NotSupportedException("Maximum symbol count reached for the current configuration " +
-                            $"[MaxSymbolsPerWebSocket={_maxSubscriptionsPerWebSocket}");
-                    }
-
-                    if (!webSocket.IsOpen)
-                    {
-                        ConnectWebSocket(webSocket);
-                    }
-
-                    LastSubscribedEventType = webSocket.Subscribe(_subscriptionsDataConfigs[(tickType, symbol)]);
+                    return false;
                 }
-                finally
+
+                if (webSocket.licenseType == LicenseType.Business && tickType == TickType.Quote)
                 {
-                    _subscriptionsDataConfigs.TryRemove((tickType, symbol), out _);
+                    // For business endpoints, only trade tick data is supported.
+                    throw new UnsupportedTickTypeForLicenseException(tickType.ToString(), webSocket.licenseType);
                 }
+
+                if (IsWebSocketFull(webSocket))
+                {
+                    throw new NotSupportedException("Maximum symbol count reached for the current configuration " +
+                        $"[MaxSymbolsPerWebSocket={_maxSubscriptionsPerWebSocket}");
+                }
+
+                if (!webSocket.IsOpen)
+                {
+                    ConnectWebSocket(webSocket);
+                }
+
+                var resolution = _subscriptionsDataConfigs[(tickType, symbol)].Resolution;
+
+                var subscribedEventType = webSocket.Subscribe(symbol, tickType, resolution);
+
+                _subscriptionsDataConfigs[(tickType, symbol)] = (resolution, subscribedEventType);
             }
 
             return true;
