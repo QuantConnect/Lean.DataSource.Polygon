@@ -14,6 +14,7 @@
 */
 
 using QuantConnect.Data;
+using QuantConnect.Logging;
 using QuantConnect.Data.Consolidators;
 using QuantConnect.Lean.Engine.DataFeeds;
 
@@ -24,16 +25,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
     /// </summary>
     public class PolygonAggregationManager : AggregationManager
     {
-        private bool _usingAggregates;
+        private PolygonSubscriptionManager _subscriptionManager;
 
-        /// <summary>
-        /// Signals whether aggregated bars are being streamed instead of ticks
-        /// so the consolidator to use can get trade bars as inputs instead of ticks.
-        /// </summary>
-        /// <param name="useAggregates">Whether aggregated bars are being streamed instead of ticks</param>
-        public void SetUsingAggregates(bool useAggregates)
+        public PolygonAggregationManager(PolygonSubscriptionManager subscriptionManager)
         {
-            _usingAggregates = useAggregates;
+            _subscriptionManager = subscriptionManager;
         }
 
         /// <summary>
@@ -41,16 +37,27 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// </summary>
         protected override IDataConsolidator GetConsolidator(SubscriptionDataConfig config)
         {
-            if (_usingAggregates)
+            if (!_subscriptionManager._subscriptionsDataConfigs.TryRemove((config.TickType, config.Symbol), out var usingEventType))
             {
-                // Starter plan only supports streaming aggregated data.
-                // We use the TradeBarConsolidator for TradeBar data given that we are aggregating trade bars
-                // (that are already aggregated by Polygon) instead of ticks.
-                return new TradeBarConsolidator(config.Resolution.ToTimeSpan());
+                Log.Error($"{nameof(PolygonAggregationManager)}.{nameof(GetConsolidator)}: Failed to remove subscription for Symbol={config.Symbol}, TickType={config.TickType}. " +
+                    $"The subscription may not exist or was already removed.");
             }
 
-            // Use base's method, since we can fetch ticks with Developer and Advanced plans
-            return base.GetConsolidator(config);
+            switch (usingEventType.SubscribedEventType)
+            {
+                case EventType.A when config.Resolution == Resolution.Second && config.TickType == TickType.Trade:
+                case EventType.AM when config.Resolution == Resolution.Minute && config.TickType == TickType.Trade:
+                    return new FilteredIdentityDataConsolidator<BaseData>(data => data.GetType() == config.Type);
+                case EventType.A when config.Resolution >= Resolution.Minute && config.TickType == TickType.Trade:
+                case EventType.AM when config.Resolution >= Resolution.Minute && config.TickType == TickType.Trade:
+                    // Starter plan only supports streaming aggregated data.
+                    // We use the TradeBarConsolidator for TradeBar data given that we are aggregating trade bars
+                    // (that are already aggregated by Polygon) instead of ticks.
+                    return new TradeBarConsolidator(config.Resolution.ToTimeSpan());
+                default:
+                    // Use base's method, since we can fetch ticks with Developer and Advanced plans
+                    return base.GetConsolidator(config);
+            }
         }
     }
 }

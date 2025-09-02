@@ -33,11 +33,9 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
         private readonly PolygonSymbolMapper symbolMapper = new();
 
-        private readonly PolygonAggregationManager dataAggregator = new();
-
         private readonly ManualTimeProvider _timeProviderInstance = new();
 
-        private readonly EventBasedDataQueueHandlerSubscriptionManager _subscriptionManager = new()
+        private readonly PolygonSubscriptionManager _subscriptionManager = new([], 0, null)
         {
             SubscribeImpl = (symbols, _) => { return true; },
             UnsubscribeImpl = (symbols, _) => { return true; }
@@ -53,6 +51,7 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             var resetEvent = new AutoResetEvent(false);
             var cancellationTokenSource = new CancellationTokenSource();
             var _activeEnumerators = new ConcurrentDictionary<Symbol, IEnumerator<BaseData>>();
+            var dataAggregator = new PolygonAggregationManager(_subscriptionManager);
 
             using var polygon = new PolygonDataProvider(ApiKey);
 

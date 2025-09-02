@@ -13,31 +13,20 @@
  * limitations under the License.
 */
 
-using Newtonsoft.Json;
+namespace QuantConnect.Lean.DataSource.Polygon;
 
-namespace QuantConnect.Lean.DataSource.Polygon
+/// <summary>
+/// Defines the available license types for a Polygon subscription.
+/// </summary>
+public enum LicenseType
 {
     /// <summary>
-    /// Base Polygon.io WebSocket response message properties
+    /// Represents an individual subscription plan, intended for single users.
     /// </summary>
-    public class BaseMessage
-    {
-        /// <summary>
-        /// The type of event this message represents (e.g. "A"/"AM" for second/minute aggregates)
-        /// </summary>
-        [JsonProperty("ev")]
-        public string EventType { get; set; }
+    Individual = 0,
 
-        /// <summary>
-        /// The symbol these aggregates are for
-        /// </summary>
-        [JsonProperty("sym")]
-        public string Symbol { get; set; }
-
-        /// <summary>
-        /// The message timestamp in milliseconds since Unix Epoch
-        /// </summary>
-        [JsonProperty("t")]
-        public long Timestamp { get; set; }
-    }
+    /// <summary>
+    /// Represents a business subscription plan, intended for organizations or commercial use.
+    /// </summary>
+    Business = 1
 }

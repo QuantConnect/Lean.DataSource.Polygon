@@ -15,29 +15,31 @@
 
 using Newtonsoft.Json;
 
-namespace QuantConnect.Lean.DataSource.Polygon
+namespace QuantConnect.Lean.DataSource.Polygon;
+
+public class ValueIndexMessage
 {
     /// <summary>
-    /// Base Polygon.io WebSocket response message properties
+    /// The type of event this message represents (e.g. "A"/"AM" for second/minute aggregates)
     /// </summary>
-    public class BaseMessage
-    {
-        /// <summary>
-        /// The type of event this message represents (e.g. "A"/"AM" for second/minute aggregates)
-        /// </summary>
-        [JsonProperty("ev")]
-        public string EventType { get; set; }
+    [JsonProperty("ev")]
+    public required string EventType { get; set; }
 
-        /// <summary>
-        /// The symbol these aggregates are for
-        /// </summary>
-        [JsonProperty("sym")]
-        public string Symbol { get; set; }
+    /// <summary>
+    /// The value of the index.
+    /// </summary>
+    [JsonProperty("val")]
+    public decimal Value { get; set; }
 
-        /// <summary>
-        /// The message timestamp in milliseconds since Unix Epoch
-        /// </summary>
-        [JsonProperty("t")]
-        public long Timestamp { get; set; }
-    }
+    /// <summary>
+    /// The assigned ticker of the index.
+    /// </summary>
+    [JsonProperty("T")]
+    public required string Symbol { get; set; }
+
+    /// <summary>
+    /// The message timestamp in milliseconds since Unix Epoch
+    /// </summary>
+    [JsonProperty("t")]
+    public long Timestamp { get; set; }
 }

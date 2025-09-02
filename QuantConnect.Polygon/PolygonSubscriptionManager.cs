@@ -1,4 +1,4 @@
-﻿/*
+/*
  * QUANTCONNECT.COM - Democratizing Finance, Empowering Individuals.
  * Lean Algorithmic Trading Engine v2.0. Copyright 2014 QuantConnect Corporation.
  *
@@ -21,6 +21,7 @@ using QuantConnect.Data;
 using QuantConnect.Logging;
 using QuantConnect.Util;
 using static QuantConnect.Brokerages.WebSocketClientWrapper;
+using System.Collections.Concurrent;
 
 namespace QuantConnect.Lean.DataSource.Polygon
 {
@@ -35,12 +36,21 @@ namespace QuantConnect.Lean.DataSource.Polygon
         private List<PolygonWebSocketClientWrapper> _webSockets;
         private object _lock = new();
 
-        private List<SubscriptionDataConfig> _subscriptionsDataConfigs = new();
-
         /// <summary>
-        /// Indicates whether data is being streamed using aggregates or ticks
+        /// Holds the active subscription configurations for Polygon data streams.
+        /// The dictionary key is a tuple of <see cref="TickType"/> and <see cref="Symbol"/> 
+        /// identifying a unique subscription.
+        /// The value is a tuple containing:
+        /// <list type="bullet">
+        ///   <item>
+        ///     <description><see cref="Resolution"/> - The resolution of the subscription (e.g., Tick, Minute).</description>
+        ///   </item>
+        ///   <item>
+        ///     <description><see cref="EventType"/> - The associated Polygon event type used for the subscription.</description>
+        ///   </item>
+        /// </list>
         /// </summary>
-        internal bool UsingAggregates { get; private set; }
+        public readonly ConcurrentDictionary<(TickType, Symbol), (Resolution Resolution, EventType SubscribedEventType)> _subscriptionsDataConfigs = [];
 
         /// <summary>
         /// Whether or not there is at least one open socket
@@ -95,16 +105,19 @@ namespace QuantConnect.Lean.DataSource.Polygon
         }
 
         /// <summary>
-        /// Subscribes the specified configuration to the data feed
+        /// Subscribes to a data feed using the specified <see cref="SubscriptionDataConfig"/>.
         /// </summary>
-        /// <param name="config">The subscription data configuration to subscribe</param>
-        public new void Subscribe(SubscriptionDataConfig config)
+        /// <param name="config">
+        /// The subscription configuration that defines the parameters of the data feed, 
+        /// such as the symbol, resolution, and tick type.
+        /// </param>
+        public override void Subscribe(SubscriptionDataConfig config)
         {
-            // We only store the subscription data config here to make it available
-            // for the Subscribe(IEnumerable<Symbol> symbols, TickType tickType) method
-            _subscriptionsDataConfigs.Add(config);
+            // Store the subscription config: we already know the Resolution when requesting the subscription,
+            // but we don’t have the actual EventType until the subscription is confirmed.
+            // For now, initialize EventType with default until it’s assigned after a successful subscribe.
+            _subscriptionsDataConfigs[(config.TickType, config.Symbol)] = (config.Resolution, default);
             base.Subscribe(config);
-            _subscriptionsDataConfigs.Remove(config);
         }
 
         /// <summary>
@@ -131,6 +144,12 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     return false;
                 }
 
+                if (webSocket.licenseType == LicenseType.Business && tickType == TickType.Quote)
+                {
+                    // For business endpoints, only trade tick data is supported.
+                    throw new UnsupportedTickTypeForLicenseException(tickType.ToString(), webSocket.licenseType);
+                }
+
                 if (IsWebSocketFull(webSocket))
                 {
                     throw new NotSupportedException("Maximum symbol count reached for the current configuration " +
@@ -142,9 +161,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     ConnectWebSocket(webSocket);
                 }
 
-                var config = _subscriptionsDataConfigs.Single(x => x.Symbol == symbol && x.TickType == tickType);
-                webSocket.Subscribe(config, out var usingAggregates);
-                UsingAggregates = usingAggregates;
+                var resolution = _subscriptionsDataConfigs[(tickType, symbol)].Resolution;
+
+                var subscribedEventType = webSocket.Subscribe(symbol, tickType, resolution);
+
+                _subscriptionsDataConfigs[(tickType, symbol)] = (resolution, subscribedEventType);
             }
 
             return true;
@@ -210,11 +231,25 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 }
             };
 
+            // Handle fatal handshake errors (e.g. 404 instead of 101). 
+            // If this happens, the socket can’t connect - signal failure 
+            // so we skip waiting for a subscription on a dead connection.
+            EventHandler<WebSocketError> errorCallback = (sender, webSocketError) =>
+            {
+                if (webSocketError.Message.Contains("404"))
+                {
+                    error.AppendLine(webSocketError.Message);
+                    failedAuthenticationEvent.Set();
+                }
+            };
+
+            webSocket.Error += errorCallback;
             webSocket.Message += callback;
             webSocket.Connect();
 
             var result = WaitHandle.WaitAny(new[] { failedAuthenticationEvent, authenticatedEvent }, TimeSpan.FromSeconds(60));
             webSocket.Message -= callback;
+            webSocket.Error -= errorCallback;
 
             if (result == WaitHandle.WaitTimeout)
             {

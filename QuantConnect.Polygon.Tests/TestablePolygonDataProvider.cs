@@ -14,14 +14,26 @@
  * limitations under the License.
 */
 
+using QuantConnect.Lean.Engine.DataFeeds;
+using System;
+
 namespace QuantConnect.Lean.DataSource.Polygon.Tests
 {
     public class TestablePolygonDataProvider : PolygonDataProvider
     {
+        public static ManualTimeProvider TimeProviderInstance = new(DateTime.UtcNow);
+
+        protected override ITimeProvider TimeProvider => TimeProviderInstance;
+
         public PolygonSubscriptionManager SubscriptionManager => _subscriptionManager;
 
         public TestablePolygonDataProvider(string apiKey, int maxSubscriptionsPerWebSocket)
             : base(apiKey, maxSubscriptionsPerWebSocket)
+        {
+        }
+
+        public TestablePolygonDataProvider(string apiKey, string licenseType, bool streamingEnabled = true)
+            : base(apiKey, streamingEnabled, licenseType)
         {
         }
     }

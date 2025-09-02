@@ -38,10 +38,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// Initializes a new instance of the <see cref="PolygonDataDownloader"/>
         /// </summary>
         /// <param name="apiKey">The Polygon.io API key</param>
-        /// <param name="subscriptionPlan">Polygon subscription plan</param>
-        public PolygonDataDownloader(string apiKey)
+        /// <param name="licenseType">The license type string retrieved from configuration (e.g., "Individual" or "Business").</param>
+        public PolygonDataDownloader(string apiKey, string licenseType)
         {
-            _historyProvider = new PolygonDataProvider(apiKey, false);
+            _historyProvider = new PolygonDataProvider(apiKey, false, licenseTypeFromConfig: licenseType);
             _marketHoursDatabase = MarketHoursDatabase.FromDataFolder();
         }
 
@@ -50,7 +50,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
         /// getting the Polygon.io API key from the configuration
         /// </summary>
         public PolygonDataDownloader()
-            : this(Config.Get("polygon-api-key"))
+            : this(Config.Get("polygon-api-key"), Config.Get("polygon-license-type"))
         {
         }
 
