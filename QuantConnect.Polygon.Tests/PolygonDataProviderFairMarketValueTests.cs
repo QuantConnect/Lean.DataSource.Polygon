@@ -24,6 +24,7 @@ using QuantConnect.Logging;
 using QuantConnect.Data.Market;
 using QuantConnect.Configuration;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 
@@ -59,14 +60,14 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
             var configs = GetConfigs(resolution);
 
-            var receivedData = new Dictionary<Symbol, List<BaseData>>();
+            var receivedData = new ConcurrentDictionary<Symbol, List<BaseData>>();
 
             var resetEvent = new AutoResetEvent(false);
             var receivedAllData = default(bool);
 
-            foreach (var config in configs)
+            foreach (var config in configs.OrderByDescending(x => x.TickType == TickType.OpenInterest))
             {
-                receivedData[config.Symbol] = [];
+                receivedData.TryAdd(config.Symbol, []);
 
                 polygon.Subscribe(config, (sender, args) =>
                 {
