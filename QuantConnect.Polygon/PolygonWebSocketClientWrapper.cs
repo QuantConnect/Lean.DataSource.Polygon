@@ -98,6 +98,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             var baseUrl = licenseType switch
             {
                 LicenseType.Individual => "wss://socket.polygon.io",
+                LicenseType.Business when securityType == SecurityType.Index => "wss://socket.polygon.io",
                 LicenseType.Business =>"wss://business.polygon.io",
                 _ => throw new NotSupportedException($"{nameof(PolygonWebSocketClientWrapper)}: Unsupported license type '{licenseType}'. Expected either 'Individual' or 'Business'.")
             };

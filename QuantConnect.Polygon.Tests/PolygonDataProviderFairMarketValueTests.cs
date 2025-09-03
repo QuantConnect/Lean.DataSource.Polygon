@@ -39,10 +39,10 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             {
                 Symbols.AAPL,
                 Symbols.MSFT,
-                Symbol.CreateOption(Symbols.AAPL, Symbols.AAPL.ID.Market, SecurityType.Option.DefaultOptionStyle(), OptionRight.Call, 227.5m, new(2025, 08, 29)),
-                Symbol.CreateOption(Symbols.MSFT, Symbols.MSFT.ID.Market, SecurityType.Option.DefaultOptionStyle(), OptionRight.Call, 502.5m, new(2025, 08, 29)),
-                //Symbols.SPX,
-                Symbol.CreateOption(Symbols.SPX, "SPXW", Symbols.SPX.ID.Market, SecurityType.IndexOption.DefaultOptionStyle(), OptionRight.Call, 6485m, new(2025, 08, 29))
+                Symbol.CreateOption(Symbols.AAPL, Symbols.AAPL.ID.Market, SecurityType.Option.DefaultOptionStyle(), OptionRight.Call, 227.5m, new(2025, 09, 05)),
+                Symbol.CreateOption(Symbols.MSFT, Symbols.MSFT.ID.Market, SecurityType.Option.DefaultOptionStyle(), OptionRight.Call, 502.5m, new(2025, 09, 05)),
+                Symbols.SPX,
+                Symbol.CreateOption(Symbols.SPX, "SPXW", Symbols.SPX.ID.Market, SecurityType.IndexOption.DefaultOptionStyle(), OptionRight.Call, 6470m, new(2025, 09, 05))
             };
 
             return [.. symbols.SelectMany(symbol => GetSubscriptionDataConfigs(symbol, resolution))];
