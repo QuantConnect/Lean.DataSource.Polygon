@@ -24,6 +24,7 @@ using QuantConnect.Logging;
 using QuantConnect.Data.Market;
 using QuantConnect.Configuration;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.DataFeeds.Enumerators;
 
@@ -39,10 +40,10 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
             {
                 Symbols.AAPL,
                 Symbols.MSFT,
-                Symbol.CreateOption(Symbols.AAPL, Symbols.AAPL.ID.Market, SecurityType.Option.DefaultOptionStyle(), OptionRight.Call, 227.5m, new(2025, 08, 29)),
-                Symbol.CreateOption(Symbols.MSFT, Symbols.MSFT.ID.Market, SecurityType.Option.DefaultOptionStyle(), OptionRight.Call, 502.5m, new(2025, 08, 29)),
-                //Symbols.SPX,
-                Symbol.CreateOption(Symbols.SPX, "SPXW", Symbols.SPX.ID.Market, SecurityType.IndexOption.DefaultOptionStyle(), OptionRight.Call, 6485m, new(2025, 08, 29))
+                Symbol.CreateOption(Symbols.AAPL, Symbols.AAPL.ID.Market, SecurityType.Option.DefaultOptionStyle(), OptionRight.Call, 227.5m, new(2025, 09, 05)),
+                Symbol.CreateOption(Symbols.MSFT, Symbols.MSFT.ID.Market, SecurityType.Option.DefaultOptionStyle(), OptionRight.Call, 502.5m, new(2025, 09, 05)),
+                Symbols.SPX,
+                Symbol.CreateOption(Symbols.SPX, "SPXW", Symbols.SPX.ID.Market, SecurityType.IndexOption.DefaultOptionStyle(), OptionRight.Call, 6470m, new(2025, 09, 05))
             };
 
             return [.. symbols.SelectMany(symbol => GetSubscriptionDataConfigs(symbol, resolution))];
@@ -59,14 +60,14 @@ namespace QuantConnect.Lean.DataSource.Polygon.Tests
 
             var configs = GetConfigs(resolution);
 
-            var receivedData = new Dictionary<Symbol, List<BaseData>>();
+            var receivedData = new ConcurrentDictionary<Symbol, List<BaseData>>();
 
             var resetEvent = new AutoResetEvent(false);
             var receivedAllData = default(bool);
 
-            foreach (var config in configs)
+            foreach (var config in configs.OrderByDescending(x => x.TickType == TickType.OpenInterest))
             {
-                receivedData[config.Symbol] = [];
+                receivedData.TryAdd(config.Symbol, []);
 
                 polygon.Subscribe(config, (sender, args) =>
                 {
