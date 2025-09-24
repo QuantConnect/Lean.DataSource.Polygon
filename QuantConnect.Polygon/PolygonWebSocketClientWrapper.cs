@@ -286,6 +286,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 if (licenseType == LicenseType.Business)
                 {
+                    // Tick-level data (Resolution.Tick)
                     yield return EventType.V;
                     yield break;
                 }
@@ -309,6 +310,7 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 if (licenseType == LicenseType.Business)
                 {
+                    // Tick-level data (Resolution.Tick)
                     yield return EventType.FMV;
                     yield break;
                 }
