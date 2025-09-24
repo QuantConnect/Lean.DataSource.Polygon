@@ -46,8 +46,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
             switch (usingEventType.SubscribedEventType)
             {
                 case EventType.A when config.Resolution == Resolution.Second && config.TickType == TickType.Trade:
+                case EventType.AM when config.Resolution == Resolution.Minute && config.TickType == TickType.Trade:
                     return new FilteredIdentityDataConsolidator<BaseData>(data => data.GetType() == config.Type);
                 case EventType.A when config.Resolution >= Resolution.Minute && config.TickType == TickType.Trade:
+                case EventType.AM when config.Resolution >= Resolution.Minute && config.TickType == TickType.Trade:
                     // Starter plan only supports streaming aggregated data.
                     // We use the TradeBarConsolidator for TradeBar data given that we are aggregating trade bars
                     // (that are already aggregated by Polygon) instead of ticks.
