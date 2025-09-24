@@ -295,7 +295,13 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     yield break;
                 }
 
-                yield return EventType.A;
+                yield return EventType.A; // docs: minimum Advanced plan
+
+                if (resolution >= Resolution.Minute)
+                {
+                    yield return EventType.AM; // docs: minimum Starter plan
+                }
+
                 yield break;
             }
 
@@ -311,11 +317,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 // Only use aggregates if subscription doesn't support more accurate data
                 if (resolution > Resolution.Tick)
                 {
-                    yield return EventType.A; // min. Developer plan
+                    yield return EventType.A; // docs: minimum Developer plan
 
-                    if (resolution > Resolution.Minute)
+                    if (resolution >= Resolution.Minute)
                     {
-                        yield return EventType.AM; // min. Starter plan
+                        yield return EventType.AM; // docs: minimum Starter plan
                     }
                 }
             }
