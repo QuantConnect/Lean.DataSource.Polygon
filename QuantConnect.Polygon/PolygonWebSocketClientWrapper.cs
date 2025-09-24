@@ -282,16 +282,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 yield break;
             }
 
-            if (tickType == TickType.Trade && resolution >= Resolution.Minute)
-            {
-                yield return EventType.AM;
-                yield break;
-            }
-
             if (securityType == SecurityType.Index)
             {
                 if (licenseType == LicenseType.Business)
                 {
+                    // Tick-level data (Resolution.Tick)
                     yield return EventType.V;
                     yield break;
                 }
@@ -301,7 +296,13 @@ namespace QuantConnect.Lean.DataSource.Polygon
                     yield break;
                 }
 
-                yield return EventType.A;
+                yield return EventType.A; // docs: minimum Advanced plan
+
+                if (resolution >= Resolution.Minute)
+                {
+                    yield return EventType.AM; // docs: minimum Starter plan
+                }
+
                 yield break;
             }
 
@@ -309,15 +310,21 @@ namespace QuantConnect.Lean.DataSource.Polygon
             {
                 if (licenseType == LicenseType.Business)
                 {
+                    // Tick-level data (Resolution.Tick)
                     yield return EventType.FMV;
                     yield break;
                 }
 
                 yield return EventType.T;
-                // Only use aggregates if resolution is not tick
+                // Only use aggregates if subscription doesn't support more accurate data
                 if (resolution > Resolution.Tick)
                 {
-                    yield return EventType.A;
+                    yield return EventType.A; // docs: minimum Developer plan
+
+                    if (resolution >= Resolution.Minute)
+                    {
+                        yield return EventType.AM; // docs: minimum Starter plan
+                    }
                 }
             }
             else
