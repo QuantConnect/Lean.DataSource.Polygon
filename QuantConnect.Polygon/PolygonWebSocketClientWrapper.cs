@@ -282,12 +282,6 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 yield break;
             }
 
-            if (tickType == TickType.Trade && resolution >= Resolution.Minute)
-            {
-                yield return EventType.AM;
-                yield break;
-            }
-
             if (securityType == SecurityType.Index)
             {
                 if (licenseType == LicenseType.Business)
@@ -383,11 +377,13 @@ namespace QuantConnect.Lean.DataSource.Polygon
         {
             Log.Trace($"PolygonWebSocketClientWrapper.OnOpen(): {string.Join(", ", _supportedSecurityTypes)} - connection open");
 
-            Send(JsonConvert.SerializeObject(new
+            var msg = JsonConvert.SerializeObject(new
             {
                 action = "auth",
                 @params = _apiKey
-            }));
+            });
+
+            Send(msg);
         }
 
         private void OnAuthenticated(object? sender, EventArgs e)
