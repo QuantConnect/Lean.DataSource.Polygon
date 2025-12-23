@@ -30,7 +30,6 @@ using QuantConnect.Logging;
 using QuantConnect.Packets;
 using QuantConnect.Securities;
 using QuantConnect.Util;
-using RestSharp;
 using QuantConnect.Lean.Engine.DataFeeds;
 
 namespace QuantConnect.Lean.DataSource.Polygon
@@ -620,8 +619,10 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 {
                     information.Add("organizationId", organizationId);
                 }
-                var request = new RestRequest("modules/license/read", Method.POST) { RequestFormat = DataFormat.Json };
-                request.AddParameter("application/json", JsonConvert.SerializeObject(information), ParameterType.RequestBody);
+
+                // Create HTTP request
+                using var request = ApiUtils.CreateJsonPostRequest("modules/license/read", information);
+
                 api.TryRequest(request, out ModulesReadLicenseRead result);
                 if (!result.Success)
                 {
