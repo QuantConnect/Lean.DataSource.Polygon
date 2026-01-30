@@ -13,10 +13,8 @@
  * limitations under the License.
 */
 
-using NodaTime;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
-using QuantConnect.Lean.Engine.DataFeeds;
 using QuantConnect.Lean.Engine.HistoricalData;
 using QuantConnect.Logging;
 using QuantConnect.Util;
@@ -24,7 +22,7 @@ using QuantConnect.Data.Consolidators;
 
 namespace QuantConnect.Lean.DataSource.Polygon
 {
-    public partial class PolygonDataProvider : SynchronizingHistoryProvider
+    public partial class PolygonDataProvider : MappedSynchronizingHistoryProvider
     {
         private int _dataPointCount;
 
@@ -52,40 +50,11 @@ namespace QuantConnect.Lean.DataSource.Polygon
         }
 
         /// <summary>
-        /// Gets the history for the requested securities
-        /// </summary>
-        /// <param name="requests">The historical data requests</param>
-        /// <param name="sliceTimeZone">The time zone used when time stamping the slice instances</param>
-        /// <returns>An enumerable of the slices of data covering the span specified in each request</returns>
-        public override IEnumerable<Slice>? GetHistory(IEnumerable<HistoryRequest> requests, DateTimeZone sliceTimeZone)
-        {
-            var subscriptions = new List<Subscription>();
-            foreach (var request in requests)
-            {
-                var history = request.SplitHistoryRequestWithUpdatedMappedSymbol(_mapFileProvider).SelectMany(x => GetHistory(x) ?? Enumerable.Empty<BaseData>());
-
-                var subscription = CreateSubscription(request, history);
-                if (!subscription.MoveNext())
-                {
-                    continue;
-                }
-
-                subscriptions.Add(subscription);
-            }
-
-            if (subscriptions.Count == 0)
-            {
-                return null;
-            }
-            return CreateSliceEnumerableFromSubscriptions(subscriptions, sliceTimeZone);
-        }
-
-        /// <summary>
         /// Gets the history for the requested security
         /// </summary>
         /// <param name="request">The historical data request</param>
         /// <returns>An enumerable of BaseData points</returns>
-        public IEnumerable<BaseData>? GetHistory(HistoryRequest request)
+        public override IEnumerable<BaseData>? GetHistory(HistoryRequest request)
         {
             if (request.Symbol.IsCanonical() ||
                 !IsSupported(request.Symbol.SecurityType, request.DataType, request.TickType, request.Resolution))
