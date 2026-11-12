@@ -127,15 +127,8 @@ namespace QuantConnect.Lean.DataSource.Polygon
                 }
             });
 
-            var options = blockingOptionCollection.GetConsumingEnumerable();
-
-            // Validate if the collection contains at least one successful response from history.
-            if (!options.Any())
-            {
-                return null;
-            }
-
-            return options;
+            // Null when no contract returned any history, otherwise every history point, the first one included.
+            return blockingOptionCollection.GetConsumingEnumerableOrNull();
         }
 
         protected virtual IEnumerable<Symbol> GetOptions(Symbol symbol, DateTime startUtc, DateTime endUtc)
